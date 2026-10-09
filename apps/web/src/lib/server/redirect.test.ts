@@ -16,7 +16,10 @@ describe('safeRedirect', () => {
 		['/\u0000evil.example', '/'],
 		['/\\\\evil.example', '/'],
 		['/%09/x', '/%09/x'],
-		['/a?b=1#c', '/a?b=1#c']
+		['/a?b=1#c', '/a?b=1#c'],
+		['/.//evil.example', '/'],
+		['/..//evil.example', '/'],
+		['/a/..//evil.example', '/']
 	])('%s → %s', (input, expected) => {
 		expect(safeRedirect(input)).toBe(expected);
 	});

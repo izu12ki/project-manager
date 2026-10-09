@@ -16,5 +16,8 @@ export function safeRedirect(target: string | null, fallback = '/'): string {
 		return fallback;
 	}
 	if (url.origin !== BASE) return fallback;
-	return url.pathname + url.search + url.hash;
+	const result = url.pathname + url.search + url.hash;
+	// 正規化後の値を検査する（例: "/.//evil.example" は "//evil.example" になる）
+	if (result.startsWith('//') || result.startsWith('/\\')) return fallback;
+	return result;
 }

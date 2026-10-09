@@ -1,4 +1,5 @@
 import { fail, redirect } from '@sveltejs/kit';
+import { APIError } from 'better-auth/api';
 import { handleAction } from '$lib/server/errors';
 import { consumeRateLimit, SIGNUP_LIMIT } from '$lib/server/ratelimit';
 import { createFirstAdmin, needsSetup } from '$lib/server/services/setup';
@@ -19,10 +20,15 @@ export const actions: Actions = {
 		const input = formObject(await request.formData());
 		return handleAction(async () => {
 			const { email } = await createFirstAdmin(locals.base, input);
-			await locals.auth.api.signInEmail({
-				body: { email, password: input.password },
-				headers: request.headers
-			});
+			try {
+				await locals.auth.api.signInEmail({
+					body: { email, password: input.password },
+					headers: request.headers
+				});
+			} catch (e) {
+				if (e instanceof APIError) redirect(303, '/login');
+				throw e;
+			}
 			redirect(303, '/');
 		});
 	}

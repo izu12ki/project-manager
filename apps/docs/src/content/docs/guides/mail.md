@@ -25,6 +25,10 @@ pnpm exec wrangler secret put MAIL_FROM       # 例: Project Manager <noreply@ex
 pnpm deploy
 ```
 
+## メール送信を設定しない場合
+
+`MAIL_PROVIDER=console`（既定）のままでは、招待メールとパスワードリセットのメールは実際には送信されず、Workers のログに出力されるだけです（`apps/web` で `pnpm exec wrangler tail`）。招待は画面に表示されるリンクを直接渡せますが、パスワードリセットのリンクはログから取り出す必要があります。
+
 ## メールが届かないとき
 
 - 送信に失敗してもアプリの操作自体は成功します。失敗は Workers のログ（ダッシュボードの Observability、または `pnpm exec wrangler tail`）に `invitation mail failed` として出ます。

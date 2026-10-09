@@ -1,7 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { APIError } from 'better-auth/api';
 import { ROLE_LABEL } from '$lib/labels';
-import { handleAction } from '$lib/server/errors';
+import { AppError, handleAction } from '$lib/server/errors';
 import { consumeRateLimit, SIGNUP_LIMIT } from '$lib/server/ratelimit';
 import { acceptInvitation, getInvitationByToken } from '$lib/server/services/invitations';
 import { formObject } from '$lib/server/validation';
@@ -22,7 +22,15 @@ export const actions: Actions = {
 		const form = formObject(await request.formData());
 		const input = { ...form, token: params.token };
 		return handleAction(async () => {
-			const { email } = await acceptInvitation(locals.base, input);
+			let email: string;
+			try {
+				({ email } = await acceptInvitation(locals.base, input));
+			} catch (e) {
+				if (e instanceof AppError && e.code === 'not_found') {
+					return fail(400, { message: e.message, fields: {} });
+				}
+				throw e;
+			}
 			try {
 				await locals.auth.api.signInEmail({
 					body: { email, password: form.password },

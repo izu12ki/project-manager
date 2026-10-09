@@ -2,11 +2,12 @@
 	import { Check, Copy } from '@lucide/svelte';
 
 	let { url }: { url: string } = $props();
-	let copied = $state(false);
+	let copiedUrl = $state<string | null>(null);
+	const copied = $derived(copiedUrl === url);
 
 	async function copy() {
 		await navigator.clipboard.writeText(url);
-		copied = true;
+		copiedUrl = url;
 	}
 </script>
 

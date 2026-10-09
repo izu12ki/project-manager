@@ -1,9 +1,10 @@
 <script lang="ts">
 	import './layout.css';
 	import favicon from '#lib/assets/favicon.svg';
-	import { FolderKanban, LogOut, UserRound, Users } from '@lucide/svelte';
 	import { ModeWatcher } from 'mode-watcher';
 	import { Toaster } from '$lib/components/ui/sonner';
+	import * as Sidebar from '$lib/components/ui/sidebar';
+	import AppSidebar from '$lib/components/AppSidebar.svelte';
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();
@@ -18,26 +19,21 @@
 <Toaster richColors position="top-right" />
 
 {#if data.user}
-	<header class="border-b border-gray-200 bg-white">
-		<nav class="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3 text-sm">
-			<a href="/" class="flex items-center gap-2 font-semibold">
-				<FolderKanban size={18} />Project Manager
-			</a>
-			<div class="ml-auto flex items-center gap-4">
-				{#if data.user.role === 'admin'}
-					<a href="/admin/users" class="flex items-center gap-1"><Users size={16} />ユーザー</a>
-				{/if}
-				<a href="/account" class="flex items-center gap-1"
-					><UserRound size={16} />{data.user.name}</a
-				>
-				<form method="POST" action="/logout">
-					<button class="flex items-center gap-1"><LogOut size={16} />ログアウト</button>
-				</form>
+	<Sidebar.Provider>
+		<AppSidebar user={data.user} projects={data.projects} />
+		<Sidebar.Inset>
+			<header class="flex h-12 items-center gap-2 border-b px-4">
+				<Sidebar.Trigger />
+			</header>
+			<div class="mx-auto w-full max-w-6xl p-6">
+				{@render children()}
 			</div>
-		</nav>
-	</header>
+		</Sidebar.Inset>
+	</Sidebar.Provider>
+{:else}
+	<div class="flex min-h-svh items-center justify-center bg-muted p-6">
+		<div class="w-full max-w-sm">
+			{@render children()}
+		</div>
+	</div>
 {/if}
-
-<main class="mx-auto max-w-6xl px-4 py-6">
-	{@render children()}
-</main>

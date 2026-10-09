@@ -71,7 +71,10 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 
 	// 5. ゲストが登録して起票
 	await acceptInvite(page, guestUrl, '顧客 太郎');
-	await page.getByRole('link', { name: /ACME サイト改修/ }).click();
+	await page
+		.getByRole('main')
+		.getByRole('link', { name: /ACME サイト改修/ })
+		.click();
 	await page.getByRole('link', { name: '新規課題' }).click();
 	await page.getByLabel('タイトル').fill('ログインできない');
 	await page.getByRole('button', { name: '起票する' }).click();

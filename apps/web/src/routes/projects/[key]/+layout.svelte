@@ -1,44 +1,86 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { Kanban, List, Settings } from '@lucide/svelte';
-	import * as Alert from '$lib/components/ui/alert';
-	import { cn } from '$lib/utils';
+	import { Archive, List, Plus, Settings, SquareKanban } from '@lucide/svelte';
+	import { colorFor } from '$lib/labels';
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();
 	const base = $derived(`/projects/${data.project.key}`);
 	const tabs = $derived([
 		{ href: base, label: '一覧', icon: List },
-		{ href: `${base}/board`, label: 'ボード', icon: Kanban },
+		{ href: `${base}/board`, label: 'ボード', icon: SquareKanban },
 		...(data.isAdmin ? [{ href: `${base}/settings`, label: '設定', icon: Settings }] : [])
 	]);
+	const current = $derived(tabs.find((t) => t.href === page.url.pathname));
+	const plain = (md: string) =>
+		md
+			.replace(/[#>*_`~[\]()-]/g, ' ')
+			.replace(/\s+/g, ' ')
+			.trim();
 </script>
 
-<div class="mb-6 flex flex-col gap-2">
-	<p class="text-xs text-muted-foreground">{data.project.key}</p>
-	<h1 class="text-2xl font-bold">{data.project.name}</h1>
-	{#if data.project.archivedAt}
-		<Alert.Root role="status">
-			<Alert.Description>このプロジェクトはアーカイブ済みです（閲覧のみ）。</Alert.Description>
-		</Alert.Root>
-	{/if}
-	<nav
-		class="mt-2 inline-flex h-9 w-fit items-center rounded-lg bg-muted p-1 text-muted-foreground"
-	>
-		{#each tabs as t (t.href)}
-			{@const isActive = page.url.pathname === t.href}
-			<a
-				href={t.href}
-				aria-current={isActive ? 'page' : undefined}
-				class={cn(
-					'inline-flex items-center gap-1 rounded-md px-3 py-1 text-sm',
-					isActive && 'bg-background text-foreground shadow-sm'
-				)}
-			>
-				<t.icon size={16} />{t.label}
-			</a>
-		{/each}
-	</nav>
-</div>
+{#if current}
+	<div class="grid gap-4">
+		<div class="flex flex-wrap items-end justify-between gap-4">
+			<div class="grid min-w-0 gap-1">
+				<div class="flex flex-wrap items-center gap-3">
+					<span
+						class="avatar avatar-square"
+						style="--size: 36px"
+						style:--c={colorFor(data.project.key)}>{data.project.key[0]}</span
+					>
+					<h1 class="page-title">{data.project.name}</h1>
+					<span class="mono text-xs font-medium text-muted-foreground">{data.project.key}</span>
+				</div>
+				{#if data.project.description}
+					<p class="page-desc">{plain(data.project.description)}</p>
+				{/if}
+			</div>
+			{#if !data.project.archivedAt && current.label !== '設定'}
+				<a href={`${base}/issues/new`} class="btn btn-primary"><Plus />新規課題</a>
+			{/if}
+		</div>
+		{#if data.project.archivedAt}
+			<div role="status" class="alert">
+				<Archive />
+				<div>このプロジェクトはアーカイブ済みです（閲覧のみ）。</div>
+			</div>
+		{/if}
+		<nav aria-label="プロジェクト内タブ" class="tabs">
+			{#each tabs as t (t.href)}
+				<a href={t.href} class="tab" aria-current={t === current ? 'page' : undefined}>
+					<t.icon size={16} />{t.label}
+				</a>
+			{/each}
+		</nav>
+	</div>
+{/if}
 
 {@render children()}
+
+<style>
+	.tabs {
+		display: flex;
+		gap: 4px;
+		border-bottom: 1px solid var(--border);
+		overflow-x: auto;
+		overflow-y: hidden;
+	}
+	.tab {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		height: 42px;
+		padding: 0 12px;
+		color: var(--muted-foreground);
+		font-weight: 600;
+		white-space: nowrap;
+	}
+	.tab:hover {
+		color: var(--foreground);
+	}
+	.tab[aria-current='page'] {
+		color: var(--primary-ink);
+		box-shadow: inset 0 -2px 0 var(--primary);
+	}
+</style>

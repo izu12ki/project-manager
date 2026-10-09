@@ -1,52 +1,39 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import * as Card from '$lib/components/ui/card';
-	import * as Alert from '$lib/components/ui/alert';
-	import * as Field from '$lib/components/ui/field';
-	import * as Password from '$lib/components/ui/password';
-	import { Input } from '$lib/components/ui/input';
-	import { Button } from '$lib/components/ui/button';
+	import FormAlert from '$lib/components/FormAlert.svelte';
+	import PasswordInput from '$lib/components/PasswordInput.svelte';
 	import type { PageProps } from './$types';
 
 	let { form }: PageProps = $props();
 </script>
 
-<Card.Root>
-	<Card.Header>
-		<Card.Title><h1 class="text-xl font-semibold">ログイン</h1></Card.Title>
-	</Card.Header>
-	<Card.Content>
-		<form method="POST" use:enhance class="flex flex-col gap-6">
-			{#if form?.message}<Alert.Root variant="destructive"
-					><Alert.Description>{form.message}</Alert.Description></Alert.Root
-				>{/if}
-			<Field.Group>
-				<Field.Field>
-					<Field.Label for="email">メールアドレス</Field.Label>
-					<Input
-						id="email"
-						name="email"
-						type="email"
-						autocomplete="email"
-						required
-						value={form?.email ?? ''}
-					/>
-				</Field.Field>
-				<Field.Field>
-					<Field.Label for="password">パスワード</Field.Label>
-					<Password.Root>
-						<Password.Input id="password" name="password" autocomplete="current-password" required>
-							<Password.ToggleVisibility />
-						</Password.Input>
-					</Password.Root>
-				</Field.Field>
-			</Field.Group>
-			<Button type="submit" class="w-full">ログイン</Button>
-		</form>
-	</Card.Content>
-	<Card.Footer>
-		<a href="/forgot-password" class="text-sm text-muted-foreground underline"
-			>パスワードを忘れた場合</a
-		>
-	</Card.Footer>
-</Card.Root>
+<div class="card auth-card">
+	<div class="auth-head">
+		<h1>ログイン</h1>
+		<p>メールアドレスとパスワードを入力してください</p>
+	</div>
+	<form method="POST" use:enhance class="auth-form">
+		{#if form?.message}<FormAlert title="ログインできませんでした" message={form.message} />{/if}
+		<div class="field">
+			<label class="label" for="email">メールアドレス</label>
+			<input
+				class="input"
+				id="email"
+				name="email"
+				type="email"
+				autocomplete="email"
+				placeholder="you@example.com"
+				required
+				value={form?.email ?? ''}
+			/>
+		</div>
+		<div class="field">
+			<div class="flex items-center justify-between gap-2">
+				<label class="label" for="password">パスワード</label>
+				<a href="/forgot-password" class="link text-[13px]">パスワードをお忘れですか？</a>
+			</div>
+			<PasswordInput id="password" name="password" autocomplete="current-password" required />
+		</div>
+		<button type="submit" class="btn btn-primary">ログイン</button>
+	</form>
+</div>

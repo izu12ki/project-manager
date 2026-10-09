@@ -1,8 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { enhance } from '$app/forms';
-	import * as AlertDialog from '$lib/components/ui/alert-dialog';
-	import { Button, buttonVariants, type ButtonVariant } from '$lib/components/ui/button';
 
 	let {
 		action,
@@ -10,8 +8,9 @@
 		title,
 		description,
 		confirmLabel,
-		triggerVariant = 'outline',
-		confirmVariant = 'destructive',
+		destructive = true,
+		triggerClass = 'btn btn-outline btn-sm',
+		triggerLabel,
 		trigger
 	}: {
 		action: string;
@@ -19,49 +18,110 @@
 		title: string;
 		description?: string;
 		confirmLabel: string;
-		triggerVariant?: ButtonVariant;
-		confirmVariant?: ButtonVariant;
+		destructive?: boolean;
+		triggerClass?: string;
+		/** アイコンのみのトリガーに付けるアクセシブルネーム */
+		triggerLabel?: string;
 		trigger: Snippet;
 	} = $props();
 
-	const formId = $props.id();
-	let open = $state(false);
+	const titleId = $props.id();
+	let dialog = $state<HTMLDialogElement>();
+	let pending = $state(false);
 </script>
 
-<!-- AlertDialog の中身は body にポータルされるため、フォームは外に置き form 属性で送信する -->
 <form
-	id={formId}
-	class="contents"
 	method="POST"
 	{action}
-	use:enhance={() =>
-		async ({ update }) => {
-			open = false;
+	style="display: contents"
+	use:enhance={() => {
+		pending = true;
+		return async ({ update }) => {
+			dialog?.close();
+			pending = false;
 			await update();
-		}}
+		};
+	}}
 >
 	{#each Object.entries(fields) as [name, value] (name)}
 		<input type="hidden" {name} {value} />
 	{/each}
-	<noscript>
-		<Button type="submit" variant={triggerVariant} size="sm">{@render trigger()}</Button>
-	</noscript>
+	<button
+		type="button"
+		class={triggerClass}
+		aria-label={triggerLabel}
+		title={triggerLabel}
+		onclick={() => dialog?.showModal()}
+	>
+		{@render trigger()}
+	</button>
+	<noscript><button type="submit" class={triggerClass}>{@render trigger()}</button></noscript>
+
+	<dialog bind:this={dialog} role="alertdialog" aria-modal="true" aria-labelledby={titleId}>
+		<div class="body">
+			<h2 id={titleId}>{title}</h2>
+			{#if description}<p>{description}</p>{/if}
+		</div>
+		<div class="actions">
+			<button type="button" class="btn btn-outline" onclick={() => dialog?.close()}>
+				キャンセル
+			</button>
+			<button
+				type="submit"
+				class="btn {destructive ? 'btn-destructive' : 'btn-primary'}"
+				disabled={pending}
+			>
+				{confirmLabel}
+			</button>
+		</div>
+	</dialog>
 </form>
 
-<AlertDialog.Root bind:open>
-	<AlertDialog.Trigger class={buttonVariants({ variant: triggerVariant, size: 'sm' })}>
-		{@render trigger()}
-	</AlertDialog.Trigger>
-	<AlertDialog.Content>
-		<AlertDialog.Header>
-			<AlertDialog.Title>{title}</AlertDialog.Title>
-			{#if description}<AlertDialog.Description>{description}</AlertDialog.Description>{/if}
-		</AlertDialog.Header>
-		<AlertDialog.Footer>
-			<AlertDialog.Cancel>キャンセル</AlertDialog.Cancel>
-			<AlertDialog.Action type="submit" form={formId} variant={confirmVariant}>
-				{confirmLabel}
-			</AlertDialog.Action>
-		</AlertDialog.Footer>
-	</AlertDialog.Content>
-</AlertDialog.Root>
+<style>
+	dialog {
+		margin: auto;
+		width: calc(100% - 32px);
+		max-width: 480px;
+		padding: 24px;
+		border: 1px solid var(--border);
+		border-radius: 16px;
+		background: var(--background);
+		color: var(--foreground);
+		box-shadow: 0 16px 48px rgb(0 0 0 / 0.2);
+	}
+	dialog[open] {
+		display: grid;
+		gap: 16px;
+		animation: pop 0.15s ease;
+	}
+	dialog::backdrop {
+		background: var(--overlay);
+	}
+	.body {
+		display: grid;
+		gap: 8px;
+		text-align: left;
+	}
+	h2 {
+		margin: 0;
+		font-size: 18px;
+		font-weight: 600;
+	}
+	p {
+		margin: 0;
+		color: var(--muted-foreground);
+		text-wrap: pretty;
+	}
+	.actions {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		gap: 8px;
+	}
+	@keyframes pop {
+		from {
+			opacity: 0;
+			transform: scale(0.97);
+		}
+	}
+</style>

@@ -51,7 +51,7 @@
 			<select class="input" name="assigneeId" disabled={!perms.assign}>
 				<option value="">未割り当て</option>
 				{#each data.assignees as u (u.id)}<option value={u.id} selected={u.id === issue.assigneeId}
-						>{u.name}</option
+						>{u.disabled ? `${u.name}（無効）` : u.name}</option
 					>{/each}
 			</select>
 		</label>
@@ -104,7 +104,7 @@
 		{#each data.comments as c (c.id)}
 			<div class="card">
 				<p class="mb-1 text-xs text-gray-500">
-					{c.authorName} · {c.createdAt.toLocaleString('ja-JP')}
+					{c.authorName} · {c.createdAt.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
 				</p>
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -- markdown-it(html:false) で生成した HTML -->
 				<div class="markdown">{@html c.html}</div>

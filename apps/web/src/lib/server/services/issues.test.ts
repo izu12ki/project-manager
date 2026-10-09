@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
-import { issue as issueTable } from '../db/schema';
+import { eq } from 'drizzle-orm';
+import { issue as issueTable, user as userTable } from '../db/schema';
 import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
 import {
 	createIssue,
@@ -96,6 +97,21 @@ describe('issues', () => {
 			assigneeId: guest.id
 		});
 		expect((await getIssue(as(guest), 'ACME', 1)).issue.status).toBe('in_progress');
+	});
+
+	it('担当者が後から無効化されても、同じ担当者のままステータスを変更できる', async () => {
+		await createIssue(as(member), 'ACME', { title: 'A', assigneeId: guest.id });
+		await db.update(userTable).set({ disabledAt: new Date() }).where(eq(userTable.id, guest.id));
+		await updateIssue(as(member), 'ACME', 1, { status: 'done', assigneeId: guest.id });
+		const { issue } = await getIssue(as(member), 'ACME', 1);
+		expect(issue).toMatchObject({ status: 'done', assigneeId: guest.id });
+		await expect(
+			updateIssue(as(member), 'ACME', 1, { assigneeId: guest2.id })
+		).resolves.not.toThrow();
+		await db.update(userTable).set({ disabledAt: new Date() }).where(eq(userTable.id, guest.id));
+		await expect(
+			updateIssue(as(member), 'ACME', 1, { assigneeId: guest.id })
+		).rejects.toMatchObject({ code: 'validation' });
 	});
 
 	it('ゲストは自分が担当の課題だけステータスを変えられ、担当者は変えられない', async () => {

@@ -1,4 +1,6 @@
 import { error, redirect } from '@sveltejs/kit';
+import { eq } from 'drizzle-orm';
+import { user } from '$lib/server/db/schema';
 import { can } from '$lib/server/authz';
 import { appContext } from '$lib/server/context';
 import { handleAction, handleLoad } from '$lib/server/errors';
@@ -29,6 +31,14 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			listComments(ctx, params.key, number),
 			listAssignableUsers(ctx.db, project.id)
 		]);
+		const assignable = [...assignees.map((u) => ({ ...u, disabled: false }))];
+		if (issue.assigneeId && !assignable.some((u) => u.id === issue.assigneeId)) {
+			const [cur] = await ctx.db
+				.select({ id: user.id, name: user.name, role: user.role })
+				.from(user)
+				.where(eq(user.id, issue.assigneeId));
+			if (cur) assignable.push({ ...cur, disabled: true });
+		}
 		const res = { reporterId: issue.reporterId, assigneeId: issue.assigneeId };
 		const writable = !project.archivedAt;
 		return {
@@ -38,7 +48,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 				html: renderMarkdown(c.body),
 				canModify: writable && can(ctx.actor, 'comment:modify', { authorId: c.authorId })
 			})),
-			assignees,
+			assignees: assignable,
 			perms: {
 				writable,
 				edit: writable && can(ctx.actor, 'issue:edit', res),

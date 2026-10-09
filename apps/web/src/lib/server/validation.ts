@@ -5,10 +5,12 @@ export function parse<S extends v.GenericSchema>(schema: S, input: unknown): v.I
 	const r = v.safeParse(schema, input);
 	if (r.success) return r.output;
 	const flat = v.flatten<S>(r.issues);
+	const nested = (flat.nested ?? {}) as Record<string, string[]>;
+	const firstFieldMessage = Object.values(nested)[0]?.[0];
 	throw new AppError(
 		'validation',
-		flat.root?.[0] ?? '入力内容を確認してください',
-		(flat.nested ?? {}) as Record<string, string[]>
+		flat.root?.[0] ?? firstFieldMessage ?? '入力内容を確認してください',
+		nested
 	);
 }
 

@@ -18,6 +18,16 @@ describe('validation', () => {
 			expect(Object.keys((e as AppError).fields ?? {})).toEqual(['email', 'password']);
 		}
 	});
+	it('フィールドエラーのみの場合は最初のフィールドのメッセージを AppError.message にする', () => {
+		const S = v.object({ password: PasswordSchema });
+		try {
+			parse(S, { password: 'short' });
+			expect.unreachable();
+		} catch (e) {
+			expect(e).toBeInstanceOf(AppError);
+			expect((e as AppError).message).toBe('パスワードは10文字以上にしてください');
+		}
+	});
 	it('formObject は文字列の値だけを取り出す', () => {
 		const fd = new FormData();
 		fd.set('a', 'x');

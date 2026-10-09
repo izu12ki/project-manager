@@ -2,6 +2,8 @@
 	import './layout.css';
 	import favicon from '#lib/assets/favicon.svg';
 	import { FolderKanban, LogOut, UserRound, Users } from '@lucide/svelte';
+	import { ModeWatcher } from 'mode-watcher';
+	import { Toaster } from '$lib/components/ui/sonner';
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();
@@ -11,6 +13,9 @@
 	<link rel="icon" href={favicon} />
 	<title>Project Manager</title>
 </svelte:head>
+
+<ModeWatcher />
+<Toaster richColors position="top-right" />
 
 {#if data.user}
 	<header class="border-b border-gray-200 bg-white">

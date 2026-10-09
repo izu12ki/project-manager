@@ -31,6 +31,7 @@
 <!-- AlertDialog の中身は body にポータルされるため、フォームは外に置き form 属性で送信する -->
 <form
 	id={formId}
+	class="contents"
 	method="POST"
 	{action}
 	use:enhance={() =>

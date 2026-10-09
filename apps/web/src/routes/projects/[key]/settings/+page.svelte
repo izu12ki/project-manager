@@ -171,15 +171,17 @@
 						<Button type="submit" variant="outline">アーカイブを解除</Button>
 					</form>
 				{:else}
-					<ConfirmAction
-						action="?/archive"
-						fields={{ archived: 'true' }}
-						title="このプロジェクトをアーカイブしますか？"
-						description="アーカイブ中は閲覧のみになります。"
-						confirmLabel="アーカイブする"
-					>
-						{#snippet trigger()}アーカイブする{/snippet}
-					</ConfirmAction>
+					<div>
+						<ConfirmAction
+							action="?/archive"
+							fields={{ archived: 'true' }}
+							title="このプロジェクトをアーカイブしますか？"
+							description="アーカイブ中は閲覧のみになります。"
+							confirmLabel="アーカイブする"
+						>
+							{#snippet trigger()}アーカイブする{/snippet}
+						</ConfirmAction>
+					</div>
 				{/if}
 			</Card.Content>
 		</Card.Root>

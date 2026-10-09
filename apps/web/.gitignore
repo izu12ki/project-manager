@@ -27,3 +27,4 @@ worker-configuration.d.ts
 .dev.vars
 local.db*
 e2e.db*
+.e2e.vars

@@ -2,6 +2,8 @@
 	import { deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { dndzone, type DndEvent } from 'svelte-dnd-action';
+	import * as Alert from '$lib/components/ui/alert';
+	import { Badge } from '$lib/components/ui/badge';
 	import { PRIORITY_LABEL, STATUSES, STATUS_LABEL, type Status } from '$lib/labels';
 	import type { PageProps } from './$types';
 
@@ -69,20 +71,25 @@
 	}
 </script>
 
-{#if message}<p role="alert" class="mb-4 text-sm text-red-600">{message}</p>{/if}
+{#if message}
+	<Alert.Root variant="destructive" class="mb-4">
+		<Alert.Description>{message}</Alert.Description>
+	</Alert.Root>
+{/if}
 
 <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
 	{#each STATUSES as status (status)}
 		<section
-			class="rounded bg-gray-100 p-2"
+			class="flex flex-col gap-2 rounded-lg bg-muted p-2"
 			data-testid={`column-${status}`}
 			aria-label={STATUS_LABEL[status]}
 		>
-			<h3 class="mb-2 px-1 text-sm font-semibold">
-				{STATUS_LABEL[status]} <span class="text-gray-500">{columns[status].length}</span>
+			<h3 class="flex items-center gap-2 px-1 text-sm font-semibold">
+				{STATUS_LABEL[status]}
+				<Badge variant="secondary">{columns[status].length}</Badge>
 			</h3>
 			<ul
-				class="min-h-24 space-y-2"
+				class="flex min-h-24 flex-col gap-2"
 				use:dndzone={{
 					items: columns[status],
 					flipDurationMs: 150,
@@ -93,20 +100,24 @@
 				onfinalize={(e) => finalize(status, e)}
 			>
 				{#each columns[status] as card (card.id)}
-					<li class="card cursor-grab p-3 text-sm" data-testid={`card-${card.number}`}>
+					<li
+						class="cursor-grab rounded-lg border bg-card p-3 text-sm text-card-foreground shadow-xs"
+						data-testid={`card-${card.number}`}
+					>
 						<a
 							href={`/projects/${data.project.key}/issues/${card.number}`}
-							class="text-xs text-gray-500 hover:underline"
+							class="text-xs text-muted-foreground hover:underline"
 						>
 							{data.project.key}-{card.number}
 						</a>
 						<p class="font-medium">{card.title}</p>
-						<p class="mt-1 flex gap-2 text-xs text-gray-500">
+						<div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
 							<span>{card.assigneeName ?? '未割り当て'}</span>
-							{#if card.priority !== 'none'}<span>優先度: {PRIORITY_LABEL[card.priority]}</span
-								>{/if}
+							{#if card.priority !== 'none'}
+								<Badge variant="outline">優先度: {PRIORITY_LABEL[card.priority]}</Badge>
+							{/if}
 							{#if card.dueDate}<span>期限: {card.dueDate}</span>{/if}
-						</p>
+						</div>
 					</li>
 				{/each}
 			</ul>

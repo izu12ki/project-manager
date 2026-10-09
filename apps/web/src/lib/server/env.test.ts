@@ -14,4 +14,9 @@ describe('readEnv', () => {
 	it('必須値が無いと、名前が分かるエラーを投げる', () => {
 		expect(() => readEnv({ ...ok, BETTER_AUTH_SECRET: undefined })).toThrow('BETTER_AUTH_SECRET');
 	});
+	it('BETTER_AUTH_URL 末尾のスラッシュは取り除く', () => {
+		expect(readEnv({ ...ok, BETTER_AUTH_URL: 'https://pm.example.com//' }).BETTER_AUTH_URL).toBe(
+			'https://pm.example.com'
+		);
+	});
 });

@@ -32,6 +32,16 @@ export async function disableUser(ctx: AppContext, userId: string): Promise<void
 	await ctx.db.delete(session).where(eq(session.userId, userId));
 }
 
+export async function enableUser(ctx: AppContext, userId: string): Promise<void> {
+	authorize(ctx.actor, 'user:manage');
+	const updated = await ctx.db
+		.update(user)
+		.set({ disabledAt: null })
+		.where(eq(user.id, userId))
+		.returning({ id: user.id });
+	if (updated.length === 0) throw new AppError('not_found', 'ユーザーが見つかりません');
+}
+
 export async function isDisabledEmail(db: DB, email: string): Promise<boolean> {
 	const [row] = await db
 		.select({ disabledAt: user.disabledAt })

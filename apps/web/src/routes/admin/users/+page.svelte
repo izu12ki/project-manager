@@ -81,7 +81,11 @@
 					<td class="p-2">{ROLE_LABEL[u.role]}</td>
 					<td class="p-2 text-right">
 						{#if u.disabledAt}
-							<span class="text-gray-500">無効</span>
+							<span class="mr-2 text-gray-500">無効</span>
+							<form method="POST" action="?/enable" use:enhance class="inline">
+								<input type="hidden" name="id" value={u.id} />
+								<button class="btn">有効化</button>
+							</form>
 						{:else if u.id !== data.user?.id}
 							<form
 								method="POST"

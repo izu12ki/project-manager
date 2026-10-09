@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { session } from '../db/schema';
 import { createTestBase, createTestDb, ctxOf, seedUser } from '../test-utils';
-import { disableUser, isDisabledEmail, listUsers } from './users';
+import { disableUser, enableUser, isDisabledEmail, listUsers } from './users';
 
 describe('users', () => {
 	it('無効化するとセッションが消え、ログイン拒否の判定が true になる', async () => {
@@ -37,5 +37,21 @@ describe('users', () => {
 		});
 		await expect(listUsers(ctxOf(base, member))).rejects.toMatchObject({ code: 'forbidden' });
 		expect(await listUsers(ctxOf(base, admin))).toHaveLength(2);
+	});
+
+	it('無効化したユーザーを有効化できる（admin のみ・未知の ID は not_found）', async () => {
+		const db = await createTestDb();
+		const base = createTestBase(db);
+		const admin = await seedUser(db, 'admin');
+		const member = await seedUser(db, 'member');
+		await disableUser(ctxOf(base, admin), member.id);
+		await expect(enableUser(ctxOf(base, member), member.id)).rejects.toMatchObject({
+			code: 'forbidden'
+		});
+		await expect(enableUser(ctxOf(base, admin), 'nope')).rejects.toMatchObject({
+			code: 'not_found'
+		});
+		await enableUser(ctxOf(base, admin), member.id);
+		expect(await isDisabledEmail(db, member.email)).toBe(false);
 	});
 });

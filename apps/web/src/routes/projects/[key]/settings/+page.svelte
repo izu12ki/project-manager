@@ -1,109 +1,187 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { toast } from 'svelte-sonner';
+	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
 	import InviteLinkBox from '$lib/components/InviteLinkBox.svelte';
+	import * as Alert from '$lib/components/ui/alert';
+	import { Badge } from '$lib/components/ui/badge';
+	import { Button } from '$lib/components/ui/button';
+	import * as Card from '$lib/components/ui/card';
+	import * as Field from '$lib/components/ui/field';
+	import { Input } from '$lib/components/ui/input';
+	import * as NativeSelect from '$lib/components/ui/native-select';
+	import * as Table from '$lib/components/ui/table';
+	import { Textarea } from '$lib/components/ui/textarea';
 	import { ROLE_LABEL } from '$lib/labels';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
+
+	$effect(() => {
+		if (form?.saved) toast.success('保存しました');
+	});
 </script>
 
-{#if form?.message}<p role="alert" class="mb-4 text-sm text-red-600">{form.message}</p>{/if}
+<div class="flex flex-col gap-6">
+	{#if form?.message}
+		<Alert.Root variant="destructive">
+			<Alert.Description>{form.message}</Alert.Description>
+		</Alert.Root>
+	{/if}
 
-<div class="grid gap-6 md:grid-cols-2">
-	<form
-		method="POST"
-		action="?/update"
-		use:enhance={() =>
-			async ({ update }) =>
-				update({ reset: false })}
-		class="card space-y-4"
-	>
-		<h2 class="font-semibold">プロジェクト情報</h2>
-		<label class="block text-sm">
-			<span>プロジェクト名</span>
-			<input class="input" name="name" required maxlength="100" value={data.project.name} />
-		</label>
-		<label class="block text-sm">
-			<span>説明（Markdown）</span>
-			<textarea class="input" name="description" rows="4" value={data.project.description}
-			></textarea>
-		</label>
-		<button class="btn-primary">保存</button>
-		{#if form?.saved}<span class="text-sm text-green-700">保存しました</span>{/if}
-	</form>
-
-	<section class="card space-y-4">
-		<h2 class="font-semibold">ゲストを招待</h2>
-		<form method="POST" action="?/inviteGuest" use:enhance class="flex items-end gap-2">
-			<label class="block flex-1 text-sm">
-				<span>ゲストのメールアドレス</span>
-				<input class="input" name="email" type="email" required />
-			</label>
-			<button class="btn-primary">ゲストを招待</button>
-		</form>
-		{#if form?.inviteUrl}<InviteLinkBox url={form.inviteUrl} />{/if}
-		{#each data.invitations as inv (inv.id)}
-			<div class="flex flex-wrap items-center gap-2 border-t border-gray-200 pt-2 text-sm">
-				<span>{inv.email}</span>
-				{#if inv.expired}<span class="text-red-600">期限切れ</span>{/if}
-				<form method="POST" action="?/reissue" use:enhance class="ml-auto flex items-center gap-2">
-					<input type="hidden" name="id" value={inv.id} />
-					<span class="text-xs text-gray-600"
-						>コピーすると招待を再発行し、以前のリンクは無効になります</span
-					>
-					<button class="btn">リンクをコピー</button>
+	<div class="grid gap-6 md:grid-cols-2">
+		<Card.Root>
+			<Card.Header>
+				<Card.Title>プロジェクト情報</Card.Title>
+			</Card.Header>
+			<Card.Content>
+				<form
+					method="POST"
+					action="?/update"
+					use:enhance={() =>
+						async ({ update }) =>
+							update({ reset: false })}
+				>
+					<Field.Group>
+						<Field.Field>
+							<Field.Label for="project-name">プロジェクト名</Field.Label>
+							<Input
+								id="project-name"
+								name="name"
+								required
+								maxlength={100}
+								value={data.project.name}
+							/>
+						</Field.Field>
+						<Field.Field>
+							<Field.Label for="project-description">説明（Markdown）</Field.Label>
+							<Textarea
+								id="project-description"
+								name="description"
+								rows={4}
+								value={data.project.description}
+							/>
+						</Field.Field>
+						<div><Button type="submit">保存</Button></div>
+					</Field.Group>
 				</form>
-				<form method="POST" action="?/revoke" use:enhance>
-					<input type="hidden" name="id" value={inv.id} />
-					<button class="btn">取り消し</button>
-				</form>
-			</div>
-		{/each}
-	</section>
+			</Card.Content>
+		</Card.Root>
 
-	<section class="card space-y-4 md:col-span-2">
-		<h2 class="font-semibold">参加者</h2>
-		<p class="text-xs text-gray-600">管理者は全プロジェクトに参加しています。</p>
-		<ul class="space-y-1 text-sm">
-			{#each data.members as m (m.id)}
-				<li class="flex items-center gap-2">
-					<span>{m.name}</span><span class="text-gray-500">{ROLE_LABEL[m.role]}</span>
-					<form
-						method="POST"
-						action="?/removeMember"
-						use:enhance={({ cancel }) => {
-							if (
-								!confirm(
-									`${m.name} をプロジェクトから外しますか？ 担当している課題は未割り当てになります`
-								)
-							)
-								cancel();
-						}}
-						class="ml-auto"
-					>
-						<input type="hidden" name="id" value={m.id} />
-						<button class="text-xs text-red-600">外す</button>
+		<Card.Root>
+			<Card.Header>
+				<Card.Title>ゲストを招待</Card.Title>
+			</Card.Header>
+			<Card.Content class="flex flex-col gap-4">
+				<form method="POST" action="?/inviteGuest" use:enhance class="flex items-end gap-2">
+					<Field.Field class="flex-1">
+						<Field.Label for="guest-email">ゲストのメールアドレス</Field.Label>
+						<Input id="guest-email" name="email" type="email" required />
+					</Field.Field>
+					<Button type="submit">ゲストを招待</Button>
+				</form>
+				{#if form?.inviteUrl}<InviteLinkBox url={form.inviteUrl} />{/if}
+				{#each data.invitations as inv (inv.id)}
+					<div class="flex flex-wrap items-center gap-2 border-t pt-3 text-sm">
+						<span>{inv.email}</span>
+						{#if inv.expired}<Badge variant="destructive">期限切れ</Badge>{/if}
+						<div class="ml-auto flex flex-wrap items-center gap-2">
+							<form method="POST" action="?/reissue" use:enhance class="flex items-center gap-2">
+								<input type="hidden" name="id" value={inv.id} />
+								<Button type="submit" variant="outline" size="sm">リンクをコピー</Button>
+								<span class="text-xs text-muted-foreground"
+									>コピーすると招待を再発行し、以前のリンクは無効になります</span
+								>
+							</form>
+							<ConfirmAction
+								action="?/revoke"
+								fields={{ id: inv.id }}
+								title="この招待を取り消しますか？"
+								confirmLabel="取り消す"
+							>
+								{#snippet trigger()}取り消し{/snippet}
+							</ConfirmAction>
+						</div>
+					</div>
+				{/each}
+			</Card.Content>
+		</Card.Root>
+
+		<Card.Root class="md:col-span-2">
+			<Card.Header>
+				<Card.Title>参加者</Card.Title>
+				<Card.Description>管理者は全プロジェクトに参加しています。</Card.Description>
+			</Card.Header>
+			<Card.Content class="flex flex-col gap-4">
+				<Table.Root>
+					<Table.Header>
+						<Table.Row>
+							<Table.Head>名前</Table.Head>
+							<Table.Head>ロール</Table.Head>
+							<Table.Head>操作</Table.Head>
+						</Table.Row>
+					</Table.Header>
+					<Table.Body>
+						{#each data.members as m (m.id)}
+							<Table.Row>
+								<Table.Cell>{m.name}</Table.Cell>
+								<Table.Cell><Badge variant="outline">{ROLE_LABEL[m.role]}</Badge></Table.Cell>
+								<Table.Cell>
+									<ConfirmAction
+										action="?/removeMember"
+										fields={{ id: m.id }}
+										title={`${m.name} をプロジェクトから外しますか？`}
+										description="担当している課題は未割り当てになります。"
+										confirmLabel="外す"
+										triggerVariant="ghost"
+									>
+										{#snippet trigger()}外す{/snippet}
+									</ConfirmAction>
+								</Table.Cell>
+							</Table.Row>
+						{/each}
+					</Table.Body>
+				</Table.Root>
+				{#if data.candidates.length > 0}
+					<form method="POST" action="?/addMember" use:enhance class="flex items-end gap-2">
+						<Field.Field class="flex-1">
+							<Field.Label for="add-member">追加するユーザー</Field.Label>
+							<NativeSelect.Root id="add-member" name="id">
+								{#each data.candidates as u (u.id)}
+									<NativeSelect.Option value={u.id}>
+										{u.name}（{ROLE_LABEL[u.role]}）
+									</NativeSelect.Option>
+								{/each}
+							</NativeSelect.Root>
+						</Field.Field>
+						<Button type="submit" variant="outline">追加</Button>
 					</form>
-				</li>
-			{/each}
-		</ul>
-		{#if data.candidates.length > 0}
-			<form method="POST" action="?/addMember" use:enhance class="flex items-end gap-2">
-				<label class="block flex-1 text-sm">
-					<span>追加するユーザー</span>
-					<select class="input" name="id">
-						{#each data.candidates as u (u.id)}<option value={u.id}
-								>{u.name}（{ROLE_LABEL[u.role]}）</option
-							>{/each}
-					</select>
-				</label>
-				<button class="btn">追加</button>
-			</form>
-		{/if}
-	</section>
+				{/if}
+			</Card.Content>
+		</Card.Root>
 
-	<form method="POST" action="?/archive" use:enhance class="card md:col-span-2">
-		<input type="hidden" name="archived" value={data.project.archivedAt ? 'false' : 'true'} />
-		<button class="btn">{data.project.archivedAt ? 'アーカイブを解除' : 'アーカイブする'}</button>
-	</form>
+		<Card.Root class="md:col-span-2">
+			<Card.Header>
+				<Card.Title>アーカイブ</Card.Title>
+			</Card.Header>
+			<Card.Content>
+				{#if data.project.archivedAt}
+					<form method="POST" action="?/archive" use:enhance>
+						<input type="hidden" name="archived" value="false" />
+						<Button type="submit" variant="outline">アーカイブを解除</Button>
+					</form>
+				{:else}
+					<ConfirmAction
+						action="?/archive"
+						fields={{ archived: 'true' }}
+						title="このプロジェクトをアーカイブしますか？"
+						description="アーカイブ中は閲覧のみになります。"
+						confirmLabel="アーカイブする"
+					>
+						{#snippet trigger()}アーカイブする{/snippet}
+					</ConfirmAction>
+				{/if}
+			</Card.Content>
+		</Card.Root>
+	</div>
 </div>

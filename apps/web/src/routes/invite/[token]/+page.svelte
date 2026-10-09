@@ -1,62 +1,51 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import * as Card from '$lib/components/ui/card';
-	import * as Alert from '$lib/components/ui/alert';
-	import * as Field from '$lib/components/ui/field';
-	import * as Password from '$lib/components/ui/password';
-	import { Input } from '$lib/components/ui/input';
-	import { Button } from '$lib/components/ui/button';
+	import FormAlert from '$lib/components/FormAlert.svelte';
+	import PasswordInput from '$lib/components/PasswordInput.svelte';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
 </script>
 
 {#if !data.invitation}
-	<Card.Root>
-		<Card.Header>
-			<Card.Title><h1 class="text-xl font-semibold">招待リンクが無効です</h1></Card.Title>
-			<Card.Description>
-				招待リンクが無効か、期限切れです。管理者に再発行を依頼してください。
-			</Card.Description>
-		</Card.Header>
-	</Card.Root>
+	<div class="card auth-card">
+		<div class="auth-head">
+			<h1>招待リンクが無効です</h1>
+			<p>招待リンクが無効か、期限切れです。管理者に再発行を依頼してください。</p>
+		</div>
+	</div>
 {:else}
-	<Card.Root>
-		<Card.Header>
-			<Card.Title><h1 class="text-xl font-semibold">アカウント登録</h1></Card.Title>
-			<Card.Description>
-				{data.invitation.email} を{data.invitation
-					.roleLabel}として登録します{#if data.invitation.projectName}（プロジェクト: {data
-						.invitation.projectName}）{/if}。
-			</Card.Description>
-		</Card.Header>
-		<Card.Content>
-			<form method="POST" use:enhance class="flex flex-col gap-6">
-				{#if form?.message}<Alert.Root variant="destructive"
-						><Alert.Description>{form.message}</Alert.Description></Alert.Root
-					>{/if}
-				<Field.Group>
-					<Field.Field>
-						<Field.Label for="name">名前</Field.Label>
-						<Input id="name" name="name" required maxlength={50} />
-					</Field.Field>
-					<Field.Field>
-						<Field.Label for="password">パスワード（10文字以上）</Field.Label>
-						<Password.Root>
-							<Password.Input
-								id="password"
-								name="password"
-								autocomplete="new-password"
-								required
-								minlength={10}
-							>
-								<Password.ToggleVisibility />
-							</Password.Input>
-						</Password.Root>
-					</Field.Field>
-				</Field.Group>
-				<Button type="submit" class="w-full">登録する</Button>
-			</form>
-		</Card.Content>
-	</Card.Root>
+	<div class="card auth-card">
+		<div class="auth-head">
+			<h1>招待を受ける</h1>
+			<p>
+				{#if data.invitation.projectName}「{data.invitation.projectName}」に{/if}{data.invitation
+					.roleLabel}として招待されています
+			</p>
+		</div>
+		<form method="POST" use:enhance class="auth-form">
+			{#if form?.message}<FormAlert message={form.message} />{/if}
+			<div class="field">
+				<label class="label" for="email">メールアドレス</label>
+				<input class="input" id="email" type="email" readonly value={data.invitation.email} />
+			</div>
+			<div class="field">
+				<label class="label" for="name">名前</label>
+				<input class="input" id="name" name="name" required maxlength={50} />
+			</div>
+			<div class="field">
+				<label class="label" for="password">パスワード</label>
+				<PasswordInput
+					id="password"
+					name="password"
+					autocomplete="new-password"
+					required
+					minlength={10}
+					aria-describedby="password-hint"
+				/>
+				<p class="hint" id="password-hint">10文字以上</p>
+			</div>
+			<button type="submit" class="btn btn-primary">登録する</button>
+		</form>
+	</div>
 {/if}

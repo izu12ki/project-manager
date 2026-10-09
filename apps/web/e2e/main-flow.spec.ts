@@ -4,6 +4,7 @@ const PW = 'password-1234';
 const HOME = /localhost:4173\/$/;
 
 async function logout(page: Page) {
+	await page.getByTestId('user-menu-trigger').click();
 	await page.getByRole('button', { name: 'ログアウト' }).click();
 	await expect(page).toHaveURL(/\/login/);
 }
@@ -22,7 +23,7 @@ async function acceptInvite(page: Page, url: string, name: string) {
 	await page.getByLabel('パスワード').fill(PW);
 	await page.getByRole('button', { name: '登録する' }).click();
 	await expect(page).toHaveURL(HOME);
-	await expect(page.getByRole('link', { name })).toBeVisible();
+	await expect(page.getByTestId('user-menu-trigger')).toContainText(name);
 }
 
 async function dragTo(page: Page, source: Locator, target: Locator) {
@@ -55,7 +56,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 
 	// 3. メンバー招待
 	await page.goto('/admin/users');
-	await expect(page.getByRole('heading', { name: '招待', exact: true })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'ユーザーを招待' })).toBeVisible();
 	await page.getByLabel('メールアドレス').fill('member@example.com');
 	await page.getByLabel('ロール').selectOption('member');
 	await page.getByLabel('参加プロジェクト').selectOption({ label: 'ACME サイト改修' });
@@ -80,7 +81,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.getByLabel('タイトル').fill('ログインできない');
 	await page.getByRole('button', { name: '起票する' }).click();
 	await expect(page.getByRole('heading', { name: 'ログインできない' })).toBeVisible();
-	await expect(page.getByText('ACME-1')).toBeVisible();
+	await expect(page.getByRole('main').getByText('ACME-1')).toBeVisible();
 	await logout(page);
 
 	// 6. メンバーが登録し、ゲストを担当者にする

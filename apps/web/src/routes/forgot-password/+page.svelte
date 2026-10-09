@@ -1,42 +1,35 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import * as Card from '$lib/components/ui/card';
-	import * as Alert from '$lib/components/ui/alert';
-	import * as Field from '$lib/components/ui/field';
-	import { Input } from '$lib/components/ui/input';
-	import { Button } from '$lib/components/ui/button';
+	import { CircleCheck } from '@lucide/svelte';
+	import FormAlert from '$lib/components/FormAlert.svelte';
 	import type { PageProps } from './$types';
 
 	let { form }: PageProps = $props();
 </script>
 
-<Card.Root>
-	<Card.Header>
-		<Card.Title><h1 class="text-xl font-semibold">パスワードの再設定</h1></Card.Title>
-	</Card.Header>
-	<Card.Content>
+<div class="card auth-card">
+	<div class="auth-head">
+		<h1>パスワードの再設定</h1>
+		<p>登録済みのメールアドレスに再設定用のリンクを送ります</p>
+	</div>
+	<div class="auth-form">
 		{#if form?.sent}
-			<Alert.Root role="status">
-				<Alert.Description>
+			<div role="status" class="alert">
+				<CircleCheck color="var(--c-green)" />
+				<div>
 					登録されているメールアドレスであれば、再設定用のリンクを送信しました。メールを確認してください。
-				</Alert.Description>
-			</Alert.Root>
+				</div>
+			</div>
 		{:else}
-			<form method="POST" use:enhance class="flex flex-col gap-6">
-				{#if form?.message}<Alert.Root variant="destructive"
-						><Alert.Description>{form.message}</Alert.Description></Alert.Root
-					>{/if}
-				<Field.Group>
-					<Field.Field>
-						<Field.Label for="email">メールアドレス</Field.Label>
-						<Input id="email" name="email" type="email" autocomplete="email" required />
-					</Field.Field>
-				</Field.Group>
-				<Button type="submit" class="w-full">再設定リンクを送る</Button>
+			<form method="POST" use:enhance class="auth-form">
+				{#if form?.message}<FormAlert message={form.message} />{/if}
+				<div class="field">
+					<label class="label" for="email">メールアドレス</label>
+					<input class="input" id="email" name="email" type="email" autocomplete="email" required />
+				</div>
+				<button type="submit" class="btn btn-primary">再設定メールを送信</button>
 			</form>
 		{/if}
-	</Card.Content>
-	<Card.Footer>
-		<a href="/login" class="text-sm text-muted-foreground underline">ログインに戻る</a>
-	</Card.Footer>
-</Card.Root>
+		<a href="/login" class="link text-center">ログインに戻る</a>
+	</div>
+</div>

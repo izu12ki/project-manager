@@ -1,102 +1,142 @@
 <script lang="ts">
-	import { Plus } from '@lucide/svelte';
-	import { Badge } from '$lib/components/ui/badge';
-	import { Button } from '$lib/components/ui/button';
-	import * as Empty from '$lib/components/ui/empty';
-	import * as Field from '$lib/components/ui/field';
-	import * as NativeSelect from '$lib/components/ui/native-select';
-	import * as Table from '$lib/components/ui/table';
-	import { PRIORITIES, PRIORITY_LABEL, STATUSES, STATUS_LABEL } from '$lib/labels';
+	import { Inbox, SearchX } from '@lucide/svelte';
+	import PriorityPill from '$lib/components/PriorityPill.svelte';
+	import StatusPill from '$lib/components/StatusPill.svelte';
+	import {
+		PRIORITIES,
+		PRIORITY_LABEL,
+		STATUSES,
+		STATUS_LABEL,
+		formatDue,
+		isDueAlert
+	} from '$lib/labels';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
-
-	const priorityVariant = (p: string) =>
-		p === 'urgent' ? 'destructive' : p === 'high' ? 'default' : 'outline';
+	const base = $derived(`/projects/${data.project.key}`);
+	const filtering = $derived(
+		!!(data.filters.status || data.filters.priority || data.filters.assigneeId)
+	);
 </script>
 
-<div class="mb-4 flex flex-wrap items-end gap-2">
-	<form method="GET" class="flex flex-wrap items-end gap-2">
-		<Field.Field class="w-auto">
-			<Field.Label for="filter-status">ステータス</Field.Label>
-			<NativeSelect.Root id="filter-status" name="status">
-				<NativeSelect.Option value="">すべて</NativeSelect.Option>
+<section class="grid gap-4">
+	<form
+		method="GET"
+		class="flex flex-wrap items-end gap-3"
+		onchange={(e) => e.currentTarget.requestSubmit()}
+	>
+		<div class="field w-40 gap-1.5">
+			<label class="label text-[13px]" for="filter-status">ステータス</label>
+			<select class="select" id="filter-status" name="status">
+				<option value="">すべて</option>
 				{#each STATUSES as s (s)}
-					<NativeSelect.Option value={s} selected={data.filters.status === s}
-						>{STATUS_LABEL[s]}</NativeSelect.Option
-					>
+					<option value={s} selected={data.filters.status === s}>{STATUS_LABEL[s]}</option>
 				{/each}
-			</NativeSelect.Root>
-		</Field.Field>
-		<Field.Field class="w-auto">
-			<Field.Label for="filter-assignee">担当者</Field.Label>
-			<NativeSelect.Root id="filter-assignee" name="assignee">
-				<NativeSelect.Option value="">すべて</NativeSelect.Option>
-				<NativeSelect.Option value="none" selected={data.filters.assigneeId === 'none'}
-					>未割り当て</NativeSelect.Option
-				>
-				{#each data.assignees as u (u.id)}
-					<NativeSelect.Option value={u.id} selected={data.filters.assigneeId === u.id}
-						>{u.name}</NativeSelect.Option
-					>
-				{/each}
-			</NativeSelect.Root>
-		</Field.Field>
-		<Field.Field class="w-auto">
-			<Field.Label for="filter-priority">優先度</Field.Label>
-			<NativeSelect.Root id="filter-priority" name="priority">
-				<NativeSelect.Option value="">すべて</NativeSelect.Option>
+			</select>
+		</div>
+		<div class="field w-36 gap-1.5">
+			<label class="label text-[13px]" for="filter-priority">優先度</label>
+			<select class="select" id="filter-priority" name="priority">
+				<option value="">すべて</option>
 				{#each PRIORITIES as p (p)}
-					<NativeSelect.Option value={p} selected={data.filters.priority === p}
-						>{PRIORITY_LABEL[p]}</NativeSelect.Option
-					>
+					<option value={p} selected={data.filters.priority === p}>{PRIORITY_LABEL[p]}</option>
 				{/each}
-			</NativeSelect.Root>
-		</Field.Field>
-		<Button type="submit" variant="outline">絞り込み</Button>
+			</select>
+		</div>
+		<div class="field w-40 gap-1.5">
+			<label class="label text-[13px]" for="filter-assignee">担当者</label>
+			<select class="select" id="filter-assignee" name="assignee">
+				<option value="">すべて</option>
+				<option value="none" selected={data.filters.assigneeId === 'none'}>未割り当て</option>
+				{#each data.assignees as u (u.id)}
+					<option value={u.id} selected={data.filters.assigneeId === u.id}>{u.name}</option>
+				{/each}
+			</select>
+		</div>
+		<noscript><button type="submit" class="btn btn-outline">絞り込む</button></noscript>
+		<span class="ml-auto pb-2 text-[13px] text-muted-foreground">{data.issues.length} 件</span>
 	</form>
-	{#if !data.project.archivedAt}
-		<Button href={`/projects/${data.project.key}/issues/new`} class="ml-auto">
-			<Plus data-icon="inline-start" />新規課題
-		</Button>
-	{/if}
-</div>
 
-{#if data.issues.length === 0}
-	<Empty.Root>
-		<Empty.Header>
-			<Empty.Title>課題はありません</Empty.Title>
-		</Empty.Header>
-	</Empty.Root>
-{:else}
-	<Table.Root>
-		<Table.Header>
-			<Table.Row>
-				<Table.Head>番号</Table.Head>
-				<Table.Head>タイトル</Table.Head>
-				<Table.Head>ステータス</Table.Head>
-				<Table.Head>優先度</Table.Head>
-				<Table.Head>担当者</Table.Head>
-				<Table.Head>期限</Table.Head>
-			</Table.Row>
-		</Table.Header>
-		<Table.Body>
-			{#each data.issues as i (i.id)}
-				<Table.Row>
-					<Table.Cell class="text-muted-foreground">{data.project.key}-{i.number}</Table.Cell>
-					<Table.Cell>
-						<a href={`/projects/${data.project.key}/issues/${i.number}`} class="hover:underline"
-							>{i.title}</a
+	{#if data.issues.length === 0}
+		<div class="empty">
+			<span class="empty-icon"
+				>{#if filtering}<SearchX />{:else}<Inbox />{/if}</span
+			>
+			<div class="grid gap-1">
+				<div class="empty-title">
+					{filtering ? '条件に一致する課題はありません' : '課題はまだありません'}
+				</div>
+				<div class="text-muted-foreground">
+					{filtering
+						? '絞り込み条件を変更してください'
+						: data.project.archivedAt
+							? 'このプロジェクトはアーカイブ済みです'
+							: '右上の「新規課題」から起票できます'}
+				</div>
+			</div>
+			{#if filtering}<a href={base} class="btn btn-outline">絞り込みを解除</a>{/if}
+		</div>
+	{:else}
+		<div class="grid-table" style="--cols: 96px minmax(240px, 1fr) 120px 80px 140px 88px">
+			<div role="table" aria-label="課題一覧" style="min-width: 760px">
+				<div role="row" class="grid-table-head">
+					<span role="columnheader">キー</span>
+					<span role="columnheader">タイトル</span>
+					<span role="columnheader">ステータス</span>
+					<span role="columnheader">優先度</span>
+					<span role="columnheader">担当者</span>
+					<span role="columnheader">期限</span>
+				</div>
+				{#each data.issues as i (i.id)}
+					<div role="row" class="row">
+						<span role="cell" class="mono text-[13px] text-muted-foreground"
+							>{data.project.key}-{i.number}</span
 						>
-					</Table.Cell>
-					<Table.Cell><Badge variant="secondary">{STATUS_LABEL[i.status]}</Badge></Table.Cell>
-					<Table.Cell>
-						<Badge variant={priorityVariant(i.priority)}>{PRIORITY_LABEL[i.priority]}</Badge>
-					</Table.Cell>
-					<Table.Cell>{i.assigneeName ?? '—'}</Table.Cell>
-					<Table.Cell>{i.dueDate ?? '—'}</Table.Cell>
-				</Table.Row>
-			{/each}
-		</Table.Body>
-	</Table.Root>
-{/if}
+						<span role="cell">
+							<a href={`${base}/issues/${i.number}`} class="title">{i.title}</a>
+						</span>
+						<span role="cell"><StatusPill status={i.status} /></span>
+						<span role="cell"><PriorityPill priority={i.priority} /></span>
+						<span role="cell" class:text-muted-foreground={!i.assigneeName} class="truncate"
+							>{i.assigneeName ?? '未割り当て'}</span
+						>
+						<span
+							role="cell"
+							class="tabular-nums"
+							style:color={isDueAlert(i.dueDate, i.status)
+								? 'var(--destructive)'
+								: 'var(--muted-foreground)'}>{formatDue(i.dueDate)}</span
+						>
+					</div>
+				{/each}
+			</div>
+		</div>
+	{/if}
+</section>
+
+<style>
+	.row {
+		position: relative;
+		min-height: 48px;
+	}
+	.row:hover {
+		background: var(--muted);
+	}
+	.title {
+		font-weight: 500;
+	}
+	/* 行全体をクリック可能にする */
+	.title::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+	}
+	.title:focus-visible {
+		outline: none;
+	}
+	.title:focus-visible::after {
+		outline: 2px solid var(--ring);
+		outline-offset: -2px;
+		border-radius: 4px;
+	}
+</style>

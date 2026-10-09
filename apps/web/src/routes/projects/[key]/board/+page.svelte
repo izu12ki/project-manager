@@ -1,10 +1,18 @@
 <script lang="ts">
 	import { deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
+	import { Calendar, CircleAlert, X } from '@lucide/svelte';
 	import { dndzone, type DndEvent } from 'svelte-dnd-action';
-	import * as Alert from '$lib/components/ui/alert';
-	import { Badge } from '$lib/components/ui/badge';
-	import { PRIORITY_LABEL, STATUSES, STATUS_LABEL, type Status } from '$lib/labels';
+	import PriorityPill from '$lib/components/PriorityPill.svelte';
+	import {
+		STATUSES,
+		STATUS_COLOR,
+		STATUS_LABEL,
+		colorFor,
+		formatDue,
+		isDueAlert,
+		type Status
+	} from '$lib/labels';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -71,56 +79,150 @@
 	}
 </script>
 
-{#if message}
-	<Alert.Root variant="destructive" class="mb-4">
-		<Alert.Description>{message}</Alert.Description>
-	</Alert.Root>
-{/if}
+<section class="grid gap-4">
+	{#if message}
+		<div role="alert" class="alert alert-destructive" style="grid-template-columns: 16px 1fr auto">
+			<CircleAlert />
+			<div>
+				<div class="alert-title">ステータスを変更できませんでした</div>
+				<div style="opacity: 0.9">{message}</div>
+			</div>
+			<button type="button" class="icon-btn" aria-label="閉じる" onclick={() => (message = null)}>
+				<X />
+			</button>
+		</div>
+	{/if}
 
-<div class="grid grid-cols-1 gap-4 md:grid-cols-4">
-	{#each STATUSES as status (status)}
-		<section
-			class="flex flex-col gap-2 rounded-lg bg-muted p-2"
-			data-testid={`column-${status}`}
-			aria-label={STATUS_LABEL[status]}
-		>
-			<h3 class="flex items-center gap-2 px-1 text-sm font-semibold">
-				{STATUS_LABEL[status]}
-				<Badge variant="secondary">{columns[status].length}</Badge>
-			</h3>
-			<ul
-				class="flex min-h-24 flex-col gap-2"
-				use:dndzone={{
-					items: columns[status],
-					flipDurationMs: 150,
-					type: 'issue',
-					dragDisabled: !!data.project.archivedAt || pending
-				}}
-				onconsider={(e) => consider(status, e)}
-				onfinalize={(e) => finalize(status, e)}
+	<div class="board">
+		{#each STATUSES as status (status)}
+			<section
+				class="column"
+				style:--c={STATUS_COLOR[status]}
+				data-testid={`column-${status}`}
+				aria-label={STATUS_LABEL[status]}
 			>
-				{#each columns[status] as card (card.id)}
-					<li
-						class="cursor-grab rounded-lg border bg-card p-3 text-sm text-card-foreground shadow-xs"
-						data-testid={`card-${card.number}`}
-					>
-						<a
-							href={`/projects/${data.project.key}/issues/${card.number}`}
-							class="text-xs text-muted-foreground hover:underline"
-						>
-							{data.project.key}-{card.number}
-						</a>
-						<p class="font-medium">{card.title}</p>
-						<div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-							<span>{card.assigneeName ?? '未割り当て'}</span>
-							{#if card.priority !== 'none'}
-								<Badge variant="outline">優先度: {PRIORITY_LABEL[card.priority]}</Badge>
-							{/if}
-							{#if card.dueDate}<span>期限: {card.dueDate}</span>{/if}
-						</div>
-					</li>
-				{/each}
-			</ul>
-		</section>
-	{/each}
-</div>
+				<h2 class="column-head">
+					{STATUS_LABEL[status]}
+					<span class="count">{columns[status].length}</span>
+				</h2>
+				<ul
+					use:dndzone={{
+						items: columns[status],
+						flipDurationMs: 150,
+						type: 'issue',
+						dragDisabled: !!data.project.archivedAt || pending,
+						dropTargetStyle: { outline: '2px dashed var(--ring)', outlineOffset: '2px' }
+					}}
+					onconsider={(e) => consider(status, e)}
+					onfinalize={(e) => finalize(status, e)}
+				>
+					{#each columns[status] as card (card.id)}
+						<li class="card-item" data-testid={`card-${card.number}`}>
+							<div class="flex items-center justify-between gap-2">
+								<span class="mono text-xs text-muted-foreground"
+									>{data.project.key}-{card.number}</span
+								>
+								{#if card.priority !== 'none'}<PriorityPill priority={card.priority} small />{/if}
+							</div>
+							<a href={`/projects/${data.project.key}/issues/${card.number}`} class="title"
+								>{card.title}</a
+							>
+							<div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+								<span class="flex min-w-0 items-center gap-1.5">
+									<span class="avatar" style="--size: 20px" style:--c={colorFor(card.assigneeName)}
+										>{card.assigneeName?.[0] ?? '–'}</span
+									>
+									<span class="truncate">{card.assigneeName ?? '未割り当て'}</span>
+								</span>
+								{#if card.dueDate}
+									<span
+										class="flex shrink-0 items-center gap-1"
+										style:color={isDueAlert(card.dueDate, status)
+											? 'var(--destructive)'
+											: undefined}
+									>
+										<Calendar size={12} />{formatDue(card.dueDate)}
+									</span>
+								{/if}
+							</div>
+						</li>
+					{/each}
+				</ul>
+			</section>
+		{/each}
+	</div>
+</section>
+
+<style>
+	.board {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(264px, 1fr));
+		gap: 12px;
+		overflow-x: auto;
+		padding-bottom: 8px;
+	}
+	.column {
+		background: var(--col);
+		border: 1px solid var(--border);
+		border-top: 3px solid var(--c);
+		border-radius: 16px;
+		padding: 12px;
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		min-height: 480px;
+	}
+	.column-head {
+		margin: 0;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 0 4px;
+		height: 24px;
+		font-size: 14px;
+		font-weight: 700;
+	}
+	.count {
+		display: inline-flex;
+		align-items: center;
+		height: 20px;
+		padding: 0 8px;
+		border-radius: 999px;
+		background: color-mix(in oklch, var(--c) 12%, transparent);
+		color: color-mix(in oklch, var(--c) 70%, var(--foreground));
+		font-size: 12px;
+	}
+	ul {
+		flex: 1;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		min-height: 80px;
+		border-radius: 10px;
+	}
+	.card-item {
+		background: var(--card);
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		box-shadow: var(--shadow-card);
+		padding: 12px;
+		display: grid;
+		gap: 10px;
+		cursor: grab;
+		transition: box-shadow 0.15s ease;
+	}
+	.card-item:hover {
+		box-shadow: 0 14px 28px -14px oklch(0.35 0.12 268 / 0.4);
+	}
+	.title {
+		font-weight: 500;
+		line-height: 1.45;
+		text-wrap: pretty;
+	}
+	.title:hover {
+		text-decoration: underline;
+	}
+</style>

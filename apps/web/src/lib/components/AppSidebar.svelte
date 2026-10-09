@@ -1,95 +1,309 @@
 <script lang="ts">
-	import { afterNavigate } from '$app/navigation';
 	import { page } from '$app/state';
-	import { FolderKanban, LogOut, UserRound, Users } from '@lucide/svelte';
-	import * as Sidebar from '$lib/components/ui/sidebar';
-	import { useSidebar } from '$lib/components/ui/sidebar';
-	import { Button } from '$lib/components/ui/button';
-	import { LightSwitch } from '$lib/components/ui/light-switch';
+	import {
+		ChevronsUpDown,
+		CircleUser,
+		FolderKanban,
+		LayoutGrid,
+		LogOut,
+		Users
+	} from '@lucide/svelte';
+	import { ROLE_LABEL, colorFor } from '$lib/labels';
+	import ThemeToggle from './ThemeToggle.svelte';
 
 	let {
 		user,
-		projects
+		projects,
+		inert = false,
+		mobileOpen = false
 	}: {
-		user: { name: string; role: 'admin' | 'member' | 'guest' };
+		user: { name: string; email: string; role: 'admin' | 'member' | 'guest' };
 		projects: { key: string; name: string; archived: boolean }[];
+		inert?: boolean;
+		mobileOpen?: boolean;
 	} = $props();
 
-	const sidebar = useSidebar();
-	afterNavigate(() => sidebar.setOpenMobile(false));
+	let menuOpen = $state(false);
+	let footer = $state<HTMLElement>();
 
 	const active = $derived(projects.filter((p) => !p.archived));
-	const isCurrent = (key: string) => {
-		const base = `/projects/${key}`;
-		const pathname = page.url.pathname;
-		return pathname === base || pathname.startsWith(base + '/');
-	};
+	const path = $derived(page.url.pathname);
+	const isCurrent = (key: string) =>
+		path === `/projects/${key}` || path.startsWith(`/projects/${key}/`);
+
+	$effect(() => {
+		void path;
+		menuOpen = false;
+	});
 </script>
 
-<Sidebar.Root>
-	<Sidebar.Header>
-		<Sidebar.Menu>
-			<Sidebar.MenuItem>
-				<Sidebar.MenuButton size="lg">
-					{#snippet child({ props })}
-						<a href="/" {...props}><FolderKanban />Project Manager</a>
-					{/snippet}
-				</Sidebar.MenuButton>
-			</Sidebar.MenuItem>
-		</Sidebar.Menu>
-	</Sidebar.Header>
-	<Sidebar.Content>
-		<nav aria-label="メインメニュー" class="contents">
-			<Sidebar.Group>
-				<Sidebar.GroupLabel>参加プロジェクト一覧</Sidebar.GroupLabel>
-				<Sidebar.Menu>
-					{#each active as p (p.key)}
-						<Sidebar.MenuItem>
-							<Sidebar.MenuButton isActive={isCurrent(p.key)}>
-								{#snippet child({ props })}
-									<a href={`/projects/${p.key}`} {...props}>
-										<span class="text-muted-foreground">{p.key}</span>
-										<span class="truncate">{p.name}</span>
-									</a>
-								{/snippet}
-							</Sidebar.MenuButton>
-						</Sidebar.MenuItem>
-					{/each}
-				</Sidebar.Menu>
-			</Sidebar.Group>
-			{#if user.role === 'admin'}
-				<Sidebar.Group>
-					<Sidebar.GroupLabel>管理</Sidebar.GroupLabel>
-					<Sidebar.Menu>
-						<Sidebar.MenuItem>
-							<Sidebar.MenuButton isActive={page.url.pathname.startsWith('/admin/users')}>
-								{#snippet child({ props })}
-									<a href="/admin/users" {...props}><Users />ユーザー</a>
-								{/snippet}
-							</Sidebar.MenuButton>
-						</Sidebar.MenuItem>
-					</Sidebar.Menu>
-				</Sidebar.Group>
-			{/if}
-		</nav>
-	</Sidebar.Content>
-	<Sidebar.Footer>
-		<Sidebar.Menu>
-			<Sidebar.MenuItem>
-				<Sidebar.MenuButton isActive={page.url.pathname === '/account'}>
-					{#snippet child({ props })}
-						<a href="/account" {...props}><UserRound />{user.name}</a>
-					{/snippet}
-				</Sidebar.MenuButton>
-			</Sidebar.MenuItem>
-		</Sidebar.Menu>
-		<div class="flex items-center gap-2">
-			<form method="POST" action="/logout" class="flex-1">
-				<Button type="submit" variant="ghost" size="sm" class="w-full justify-start">
-					<LogOut data-icon="inline-start" />ログアウト
-				</Button>
-			</form>
-			<LightSwitch variant="ghost" size="sm" />
+<svelte:window
+	onclick={(e) => {
+		if (menuOpen && footer && !footer.contains(e.target as Node)) menuOpen = false;
+	}}
+	onkeydown={(e) => {
+		if (menuOpen && e.key === 'Escape') menuOpen = false;
+	}}
+/>
+
+<aside class="sidebar" data-sb data-mobile-open={mobileOpen || undefined} {inert}>
+	<div style="padding: 8px">
+		<a href="/" class="brand">
+			<span class="brand-icon"><FolderKanban size={16} /></span>
+			<span class="stack">
+				<span style="font-weight: 600">プロジェクト管理</span>
+				<span class="sub">ワークスペース</span>
+			</span>
+		</a>
+	</div>
+
+	<nav aria-label="メインメニュー" class="nav">
+		<div class="group">
+			<a href="/" class="item" aria-current={path === '/' ? 'page' : undefined}>
+				<LayoutGrid size={16} class="muted-icon" />すべてのプロジェクト
+			</a>
 		</div>
-	</Sidebar.Footer>
-</Sidebar.Root>
+		<div class="group">
+			<div class="group-label">参加プロジェクト</div>
+			{#each active as p (p.key)}
+				<a
+					href={`/projects/${p.key}`}
+					class="item"
+					aria-current={isCurrent(p.key) ? 'page' : undefined}
+				>
+					<span class="proj-icon" style:--c={colorFor(p.key)}>{p.key[0]}</span>
+					<span class="truncate">{p.name}</span>
+				</a>
+			{/each}
+		</div>
+		{#if user.role === 'admin'}
+			<div class="group">
+				<div class="group-label">管理</div>
+				<a
+					href="/admin/users"
+					class="item"
+					aria-current={path.startsWith('/admin/users') ? 'page' : undefined}
+				>
+					<Users size={16} class="muted-icon" />ユーザー
+				</a>
+			</div>
+		{/if}
+	</nav>
+
+	<div class="footer" bind:this={footer}>
+		{#if menuOpen}
+			<div id="user-menu" class="menu">
+				<div class="stack" style="padding: 6px 8px; line-height: 1.3">
+					<span style="font-weight: 500">{user.name}</span>
+					<span class="sub">{user.email}</span>
+				</div>
+				<div class="sep"></div>
+				<a href="/account" class="item"><CircleUser size={16} class="muted-icon" />アカウント</a>
+				<form method="POST" action="/logout" style="margin: 0">
+					<button type="submit" class="item"
+						><LogOut size={16} class="muted-icon" />ログアウト</button
+					>
+				</form>
+			</div>
+		{/if}
+		<button
+			type="button"
+			class="user"
+			data-testid="user-menu-trigger"
+			aria-expanded={menuOpen}
+			aria-controls="user-menu"
+			onclick={() => (menuOpen = !menuOpen)}
+		>
+			<span class="avatar" style:--c={colorFor(user.name)}>{user.name[0]}</span>
+			<span class="stack" style="flex: 1; min-width: 0">
+				<span style="font-weight: 500" class="truncate">{user.name}</span>
+				<span class="sub truncate">{ROLE_LABEL[user.role]} · {user.email}</span>
+			</span>
+			<ChevronsUpDown size={16} class="muted-icon" />
+		</button>
+		<ThemeToggle class="icon-btn icon-btn-bordered theme" />
+	</div>
+</aside>
+
+<style>
+	.sidebar {
+		width: 256px;
+		flex-shrink: 0;
+		position: sticky;
+		top: 10px;
+		height: calc(100vh - 20px);
+		margin: 10px 0 10px 10px;
+		display: flex;
+		flex-direction: column;
+		border-radius: 18px;
+		color: var(--foreground);
+		background: var(--sidebar);
+		background-image: radial-gradient(
+			120% 50% at 0% 0%,
+			oklch(0.75 0.1 268 / 0.14),
+			transparent 65%
+		);
+		box-shadow:
+			0 1px 2px oklch(0.3 0.04 268 / 0.05),
+			0 12px 32px -18px oklch(0.3 0.06 270 / 0.3);
+		z-index: 40;
+	}
+	:global([data-sidebar='closed']) .sidebar {
+		display: none;
+	}
+	@media (max-width: 767px) {
+		.sidebar,
+		:global([data-sidebar='closed']) .sidebar {
+			display: flex;
+			position: fixed;
+			left: 0;
+			top: 0;
+			width: 288px;
+			height: 100vh;
+			margin: 0;
+			border-radius: 0;
+			transform: translateX(-100%);
+			transition: transform 0.2s ease;
+			box-shadow: none;
+		}
+		.sidebar[data-mobile-open] {
+			transform: none;
+			box-shadow: 0 10px 40px rgb(0 0 0 / 0.25);
+		}
+	}
+	.stack {
+		display: grid;
+		line-height: 1.25;
+	}
+	.sub {
+		font-size: 12px;
+		color: var(--muted-foreground);
+	}
+	.truncate {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.sidebar :global(.muted-icon) {
+		color: var(--muted-foreground);
+		flex-shrink: 0;
+	}
+	.brand {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 8px;
+		border-radius: 10px;
+	}
+	.brand:hover,
+	.user:hover {
+		background: var(--sidebar-accent);
+	}
+	.brand-icon {
+		width: 32px;
+		height: 32px;
+		flex-shrink: 0;
+		border-radius: 10px;
+		background: var(--primary);
+		color: var(--primary-foreground);
+		display: grid;
+		place-items: center;
+	}
+	.nav {
+		flex: 1;
+		overflow-y: auto;
+		padding: 0 8px;
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+	}
+	.group {
+		display: grid;
+		gap: 2px;
+	}
+	.group-label {
+		height: 32px;
+		display: flex;
+		align-items: center;
+		padding: 0 8px;
+		font-size: 12px;
+		font-weight: 500;
+		color: var(--muted-foreground);
+	}
+	.item {
+		width: 100%;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		height: 32px;
+		padding: 0 8px;
+		border: none;
+		border-radius: 6px;
+		background: transparent;
+		text-align: left;
+		cursor: pointer;
+	}
+	.item:hover {
+		background: var(--sidebar-accent);
+	}
+	.item[aria-current='page'] {
+		background: var(--sb-active);
+		font-weight: 500;
+	}
+	.proj-icon {
+		width: 22px;
+		height: 22px;
+		flex-shrink: 0;
+		border-radius: 6px;
+		background: color-mix(in oklch, var(--c) 18%, var(--card));
+		color: color-mix(in oklch, var(--c) 60%, var(--foreground));
+		display: grid;
+		place-items: center;
+		font-size: 11px;
+		font-weight: 700;
+	}
+	.footer {
+		padding: 8px;
+		position: relative;
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+	.user {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 8px;
+		border: none;
+		border-radius: 10px;
+		background: transparent;
+		text-align: left;
+		cursor: pointer;
+	}
+	.footer :global(.theme) {
+		width: 32px;
+		height: 32px;
+	}
+	.menu {
+		position: absolute;
+		left: 8px;
+		right: 8px;
+		bottom: calc(100% - 4px);
+		padding: 4px;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--popover);
+		box-shadow: var(--shadow-pop);
+		z-index: 60;
+	}
+	.menu .item:hover {
+		background: var(--accent);
+	}
+	.sep {
+		height: 1px;
+		margin: 4px -4px;
+		background: var(--border);
+	}
+</style>

@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
-import { createTestDb } from '../test-utils';
+import { createTestDb } from '$lib/server/test-utils';
 import { comment, issue, project, user } from './schema';
 
 describe('schema', () => {

@@ -3,3 +3,5 @@ packages:
 allowBuilds:
   workerd: true
   esbuild: true
+minimumReleaseAgeExclude:
+  - '@astrojs/starlight@0.42.6'

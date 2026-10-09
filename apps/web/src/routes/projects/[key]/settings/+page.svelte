@@ -68,7 +68,19 @@
 			{#each data.members as m (m.id)}
 				<li class="flex items-center gap-2">
 					<span>{m.name}</span><span class="text-gray-500">{ROLE_LABEL[m.role]}</span>
-					<form method="POST" action="?/removeMember" use:enhance class="ml-auto">
+					<form
+						method="POST"
+						action="?/removeMember"
+						use:enhance={({ cancel }) => {
+							if (
+								!confirm(
+									`${m.name} をプロジェクトから外しますか？ 担当している課題は未割り当てになります`
+								)
+							)
+								cancel();
+						}}
+						class="ml-auto"
+					>
 						<input type="hidden" name="id" value={m.id} />
 						<button class="text-xs text-red-600">外す</button>
 					</form>

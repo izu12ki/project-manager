@@ -12,7 +12,7 @@
 
 <Card.Root>
 	<Card.Header>
-		<Card.Title>新しいパスワード</Card.Title>
+		<Card.Title><h1 class="text-xl font-semibold">新しいパスワード</h1></Card.Title>
 	</Card.Header>
 	<Card.Content>
 		{#if data.invalid || !data.token}

@@ -13,7 +13,7 @@
 
 <Card.Root>
 	<Card.Header>
-		<Card.Title>初期セットアップ</Card.Title>
+		<Card.Title><h1 class="text-xl font-semibold">初期セットアップ</h1></Card.Title>
 		<Card.Description>最初の管理者アカウントを作成します。</Card.Description>
 	</Card.Header>
 	<Card.Content>

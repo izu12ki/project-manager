@@ -14,7 +14,7 @@
 {#if !data.invitation}
 	<Card.Root>
 		<Card.Header>
-			<Card.Title>招待リンクが無効です</Card.Title>
+			<Card.Title><h1 class="text-xl font-semibold">招待リンクが無効です</h1></Card.Title>
 			<Card.Description>
 				招待リンクが無効か、期限切れです。管理者に再発行を依頼してください。
 			</Card.Description>
@@ -23,7 +23,7 @@
 {:else}
 	<Card.Root>
 		<Card.Header>
-			<Card.Title>アカウント登録</Card.Title>
+			<Card.Title><h1 class="text-xl font-semibold">アカウント登録</h1></Card.Title>
 			<Card.Description>
 				{data.invitation.email} を{data.invitation
 					.roleLabel}として登録します{#if data.invitation.projectName}（プロジェクト: {data

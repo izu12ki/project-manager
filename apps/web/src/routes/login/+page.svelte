@@ -13,7 +13,7 @@
 
 <Card.Root>
 	<Card.Header>
-		<Card.Title>ログイン</Card.Title>
+		<Card.Title><h1 class="text-xl font-semibold">ログイン</h1></Card.Title>
 	</Card.Header>
 	<Card.Content>
 		<form method="POST" use:enhance class="flex flex-col gap-6">

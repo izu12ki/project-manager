@@ -12,7 +12,7 @@
 
 <Card.Root>
 	<Card.Header>
-		<Card.Title>パスワードの再設定</Card.Title>
+		<Card.Title><h1 class="text-xl font-semibold">パスワードの再設定</h1></Card.Title>
 	</Card.Header>
 	<Card.Content>
 		{#if form?.sent}

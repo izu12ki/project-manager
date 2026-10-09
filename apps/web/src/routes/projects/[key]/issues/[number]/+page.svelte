@@ -186,7 +186,7 @@
 		>
 			<Card.Root>
 				<Card.Header>
-					<Card.Title>属性</Card.Title>
+					<Card.Title><h2 class="text-base font-medium">属性</h2></Card.Title>
 				</Card.Header>
 				<Card.Content>
 					<Field.Group>

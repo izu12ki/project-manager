@@ -27,7 +27,7 @@
 
 	<Card.Root>
 		<Card.Header>
-			<Card.Title>招待</Card.Title>
+			<Card.Title><h2 class="text-base font-medium">招待</h2></Card.Title>
 		</Card.Header>
 		<Card.Content class="flex flex-col gap-4">
 			<form method="POST" action="?/invite" use:enhance>
@@ -61,7 +61,7 @@
 
 	<Card.Root>
 		<Card.Header>
-			<Card.Title>未使用の招待</Card.Title>
+			<Card.Title><h2 class="text-base font-medium">未使用の招待</h2></Card.Title>
 		</Card.Header>
 		<Card.Content>
 			{#if data.invitations.length === 0}
@@ -130,7 +130,7 @@
 
 	<Card.Root>
 		<Card.Header>
-			<Card.Title>登録済みユーザー</Card.Title>
+			<Card.Title><h2 class="text-base font-medium">登録済みユーザー</h2></Card.Title>
 		</Card.Header>
 		<Card.Content>
 			<Table.Root>

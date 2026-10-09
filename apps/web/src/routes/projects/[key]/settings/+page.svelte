@@ -32,7 +32,7 @@
 	<div class="grid gap-6 md:grid-cols-2">
 		<Card.Root>
 			<Card.Header>
-				<Card.Title>プロジェクト情報</Card.Title>
+				<Card.Title><h2 class="text-base font-medium">プロジェクト情報</h2></Card.Title>
 			</Card.Header>
 			<Card.Content>
 				<form
@@ -70,7 +70,7 @@
 
 		<Card.Root>
 			<Card.Header>
-				<Card.Title>ゲストを招待</Card.Title>
+				<Card.Title><h2 class="text-base font-medium">ゲストを招待</h2></Card.Title>
 			</Card.Header>
 			<Card.Content class="flex flex-col gap-4">
 				<form method="POST" action="?/inviteGuest" use:enhance class="flex items-end gap-2">
@@ -109,7 +109,7 @@
 
 		<Card.Root class="md:col-span-2">
 			<Card.Header>
-				<Card.Title>参加者</Card.Title>
+				<Card.Title><h2 class="text-base font-medium">参加者</h2></Card.Title>
 				<Card.Description>管理者は全プロジェクトに参加しています。</Card.Description>
 			</Card.Header>
 			<Card.Content class="flex flex-col gap-4">
@@ -162,7 +162,7 @@
 
 		<Card.Root class="md:col-span-2">
 			<Card.Header>
-				<Card.Title>アーカイブ</Card.Title>
+				<Card.Title><h2 class="text-base font-medium">アーカイブ</h2></Card.Title>
 			</Card.Header>
 			<Card.Content>
 				{#if data.project.archivedAt}

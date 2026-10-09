@@ -55,6 +55,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 
 	// 3. メンバー招待
 	await page.goto('/admin/users');
+	await expect(page.getByRole('heading', { name: '招待', exact: true })).toBeVisible();
 	await page.getByLabel('メールアドレス').fill('member@example.com');
 	await page.getByLabel('ロール').selectOption('member');
 	await page.getByLabel('参加プロジェクト').selectOption({ label: 'ACME サイト改修' });

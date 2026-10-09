@@ -32,7 +32,7 @@
 	<div class="grid gap-6 md:grid-cols-2">
 		<Card.Root>
 			<Card.Header>
-				<Card.Title>表示名</Card.Title>
+				<Card.Title><h2 class="text-base font-medium">表示名</h2></Card.Title>
 			</Card.Header>
 			<Card.Content>
 				<form method="POST" action="?/updateName" use:enhance class="flex flex-col gap-6">
@@ -55,7 +55,7 @@
 
 		<Card.Root>
 			<Card.Header>
-				<Card.Title>パスワード変更</Card.Title>
+				<Card.Title><h2 class="text-base font-medium">パスワード変更</h2></Card.Title>
 			</Card.Header>
 			<Card.Content>
 				<form method="POST" action="?/changePassword" use:enhance class="flex flex-col gap-6">

@@ -15,7 +15,7 @@
 
 <Card.Root class="max-w-2xl">
 	<Card.Header>
-		<Card.Title>新規課題</Card.Title>
+		<Card.Title><h2 class="text-base font-medium">新規課題</h2></Card.Title>
 	</Card.Header>
 	<Card.Content>
 		<form method="POST" use:enhance>

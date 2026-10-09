@@ -74,12 +74,12 @@
 	{#if clipboard.status === 'success'}
 		<div in:scale={{ duration: animationDuration, start: 0.85 }}>
 			<CheckIcon tabindex={-1} />
-			<span class="sr-only">Copied</span>
+			<span class="sr-only">コピーしました</span>
 		</div>
 	{:else if clipboard.status === 'failure'}
 		<div in:scale={{ duration: animationDuration, start: 0.85 }}>
 			<XIcon tabindex={-1} />
-			<span class="sr-only">Failed to copy</span>
+			<span class="sr-only">コピーに失敗しました</span>
 		</div>
 	{:else}
 		<div in:scale={{ duration: animationDuration, start: 0.85 }}>
@@ -88,7 +88,7 @@
 			{:else}
 				<CopyIcon tabindex={-1} />
 			{/if}
-			<span class="sr-only">Copy</span>
+			<span class="sr-only">コピー</span>
 		</div>
 	{/if}
 	{@render children?.()}

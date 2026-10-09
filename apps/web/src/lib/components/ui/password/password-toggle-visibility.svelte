@@ -13,7 +13,7 @@
 
 <Toggle
 	bind:ref
-	aria-label={state.root.opts.hidden.current ? 'Show password' : 'Hide password'}
+	aria-label="表示を切り替え"
 	bind:pressed={state.root.opts.hidden.current}
 	class={cn(
 		'data-[state=off]:text-muted-foreground data-[state=on]:text-muted-foreground hover:data-[state=off]:text-accent-foreground hover:data-[state=on]:text-accent-foreground absolute top-1/2 right-0 size-9 min-w-0 -translate-y-1/2 p-0 hover:!bg-transparent data-[state=on]:bg-transparent',

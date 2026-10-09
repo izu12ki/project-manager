@@ -32,5 +32,5 @@
 	{...restProps}
 >
 	<PanelLeftIcon class="cn-rtl-flip" />
-	<span class="sr-only">Toggle Sidebar</span>
+	<span class="sr-only">サイドバーを切り替え</span>
 </Button>

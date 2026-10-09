@@ -109,4 +109,16 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.getByLabel('コメントを追加').fill('確認しました');
 	await page.getByRole('button', { name: 'コメントする' }).click();
 	await expect(page.locator('.markdown').getByText('確認しました')).toBeVisible();
+
+	// 9. 管理者がゲストを無効化（確認ダイアログ）
+	await logout(page);
+	await login(page, 'admin@example.com');
+	await page.goto('/admin/users');
+	const row = page.getByRole('row', { name: /顧客 太郎/ });
+	await row.getByRole('button', { name: '無効化' }).click();
+	await expect(page.getByRole('alertdialog')).toBeVisible();
+	await page.getByRole('button', { name: '無効化する' }).click();
+	await expect(page.getByRole('alertdialog')).toBeHidden();
+	await expect(row.getByText('無効', { exact: true })).toBeVisible();
+	await expect(row.getByRole('button', { name: '有効化' })).toBeVisible();
 });

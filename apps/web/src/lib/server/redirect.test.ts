@@ -9,7 +9,14 @@ describe('safeRedirect', () => {
 		['https://evil.example', '/'],
 		['//evil.example', '/'],
 		['/\\evil.example', '/'],
-		['javascript:alert(1)', '/']
+		['javascript:alert(1)', '/'],
+		['/\t/evil.example', '/'],
+		['/\n/evil.example', '/'],
+		['/\r/evil.example', '/'],
+		['/\u0000evil.example', '/'],
+		['/\\\\evil.example', '/'],
+		['/%09/x', '/%09/x'],
+		['/a?b=1#c', '/a?b=1#c']
 	])('%s → %s', (input, expected) => {
 		expect(safeRedirect(input)).toBe(expected);
 	});

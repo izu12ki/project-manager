@@ -105,7 +105,10 @@
 											size: 'sm'
 										})} list-none [&::-webkit-details-marker]:hidden"
 									>
-										<ChevronRight class="transition-transform group-open:rotate-90" />編集
+										<ChevronRight
+											data-icon="inline-start"
+											class="transition-transform group-open:rotate-90"
+										/>編集
 									</summary>
 									<div>
 										<form

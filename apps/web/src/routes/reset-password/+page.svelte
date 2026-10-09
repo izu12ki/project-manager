@@ -1,34 +1,52 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import * as Card from '$lib/components/ui/card';
+	import * as Alert from '$lib/components/ui/alert';
+	import * as Field from '$lib/components/ui/field';
+	import * as Password from '$lib/components/ui/password';
+	import { Button } from '$lib/components/ui/button';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
 </script>
 
-<div class="mx-auto mt-16 max-w-sm">
-	<h1 class="mb-6 text-2xl font-bold">新しいパスワード</h1>
-	{#if data.invalid || !data.token}
-		<p class="card text-sm">
-			リンクが無効か期限切れです。<a href="/forgot-password" class="text-blue-600 underline"
-				>もう一度やり直してください</a
-			>。
-		</p>
-	{:else}
-		<form method="POST" use:enhance class="card space-y-4">
-			{#if form?.message}<p role="alert" class="text-sm text-red-600">{form.message}</p>{/if}
-			<input type="hidden" name="token" value={data.token} />
-			<label class="block">
-				<span class="text-sm">新しいパスワード（10文字以上）</span>
-				<input
-					class="input"
-					name="password"
-					type="password"
-					autocomplete="new-password"
-					required
-					minlength="10"
-				/>
-			</label>
-			<button class="btn-primary w-full">パスワードを変更</button>
-		</form>
-	{/if}
-</div>
+<Card.Root>
+	<Card.Header>
+		<Card.Title>新しいパスワード</Card.Title>
+	</Card.Header>
+	<Card.Content>
+		{#if data.invalid || !data.token}
+			<Alert.Root variant="destructive">
+				<Alert.Description>
+					リンクが無効か期限切れです。<a href="/forgot-password" class="underline"
+						>もう一度やり直してください</a
+					>。
+				</Alert.Description>
+			</Alert.Root>
+		{:else}
+			<form method="POST" use:enhance class="flex flex-col gap-6">
+				{#if form?.message}<Alert.Root variant="destructive"
+						><Alert.Description>{form.message}</Alert.Description></Alert.Root
+					>{/if}
+				<input type="hidden" name="token" value={data.token} />
+				<Field.Group>
+					<Field.Field>
+						<Field.Label for="password">新しいパスワード（10文字以上）</Field.Label>
+						<Password.Root>
+							<Password.Input
+								id="password"
+								name="password"
+								autocomplete="new-password"
+								required
+								minlength={10}
+							>
+								<Password.ToggleVisibility />
+							</Password.Input>
+						</Password.Root>
+					</Field.Field>
+				</Field.Group>
+				<Button type="submit" class="w-full">パスワードを変更</Button>
+			</form>
+		{/if}
+	</Card.Content>
+</Card.Root>

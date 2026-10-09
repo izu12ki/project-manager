@@ -1,34 +1,51 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import * as Card from '$lib/components/ui/card';
+	import * as Alert from '$lib/components/ui/alert';
+	import * as Field from '$lib/components/ui/field';
+	import * as Password from '$lib/components/ui/password';
+	import { Input } from '$lib/components/ui/input';
+	import { Button } from '$lib/components/ui/button';
 	import type { PageProps } from './$types';
 
 	let { form }: PageProps = $props();
 </script>
 
-<div class="mx-auto mt-16 max-w-sm">
-	<h1 class="mb-2 text-2xl font-bold">初期セットアップ</h1>
-	<p class="mb-6 text-sm text-gray-600">最初の管理者アカウントを作成します。</p>
-	<form method="POST" use:enhance class="card space-y-4">
-		{#if form?.message}<p role="alert" class="text-sm text-red-600">{form.message}</p>{/if}
-		<label class="block">
-			<span class="text-sm">名前</span>
-			<input class="input" name="name" required maxlength="50" />
-		</label>
-		<label class="block">
-			<span class="text-sm">メールアドレス</span>
-			<input class="input" name="email" type="email" autocomplete="email" required />
-		</label>
-		<label class="block">
-			<span class="text-sm">パスワード（10文字以上）</span>
-			<input
-				class="input"
-				name="password"
-				type="password"
-				autocomplete="new-password"
-				required
-				minlength="10"
-			/>
-		</label>
-		<button class="btn-primary w-full">セットアップを完了</button>
-	</form>
-</div>
+<Card.Root>
+	<Card.Header>
+		<Card.Title>初期セットアップ</Card.Title>
+		<Card.Description>最初の管理者アカウントを作成します。</Card.Description>
+	</Card.Header>
+	<Card.Content>
+		<form method="POST" use:enhance class="flex flex-col gap-6">
+			{#if form?.message}<Alert.Root variant="destructive"
+					><Alert.Description>{form.message}</Alert.Description></Alert.Root
+				>{/if}
+			<Field.Group>
+				<Field.Field>
+					<Field.Label for="name">名前</Field.Label>
+					<Input id="name" name="name" required maxlength={50} />
+				</Field.Field>
+				<Field.Field>
+					<Field.Label for="email">メールアドレス</Field.Label>
+					<Input id="email" name="email" type="email" autocomplete="email" required />
+				</Field.Field>
+				<Field.Field>
+					<Field.Label for="password">パスワード（10文字以上）</Field.Label>
+					<Password.Root>
+						<Password.Input
+							id="password"
+							name="password"
+							autocomplete="new-password"
+							required
+							minlength={10}
+						>
+							<Password.ToggleVisibility />
+						</Password.Input>
+					</Password.Root>
+				</Field.Field>
+			</Field.Group>
+			<Button type="submit" class="w-full">セットアップを完了</Button>
+		</form>
+	</Card.Content>
+</Card.Root>

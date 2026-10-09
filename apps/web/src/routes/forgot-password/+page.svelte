@@ -1,27 +1,42 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import * as Card from '$lib/components/ui/card';
+	import * as Alert from '$lib/components/ui/alert';
+	import * as Field from '$lib/components/ui/field';
+	import { Input } from '$lib/components/ui/input';
+	import { Button } from '$lib/components/ui/button';
 	import type { PageProps } from './$types';
 
 	let { form }: PageProps = $props();
 </script>
 
-<div class="mx-auto mt-16 max-w-sm">
-	<h1 class="mb-6 text-2xl font-bold">パスワードの再設定</h1>
-	{#if form?.sent}
-		<p class="card text-sm">
-			登録されているメールアドレスであれば、再設定用のリンクを送信しました。メールを確認してください。
-		</p>
-	{:else}
-		<form method="POST" use:enhance class="card space-y-4">
-			{#if form?.message}<p role="alert" class="text-sm text-red-600">{form.message}</p>{/if}
-			<label class="block">
-				<span class="text-sm">メールアドレス</span>
-				<input class="input" name="email" type="email" autocomplete="email" required />
-			</label>
-			<button class="btn-primary w-full">再設定リンクを送る</button>
-		</form>
-	{/if}
-	<p class="mt-4 text-center text-sm">
-		<a href="/login" class="text-blue-600 underline">ログインに戻る</a>
-	</p>
-</div>
+<Card.Root>
+	<Card.Header>
+		<Card.Title>パスワードの再設定</Card.Title>
+	</Card.Header>
+	<Card.Content>
+		{#if form?.sent}
+			<Alert.Root>
+				<Alert.Description>
+					登録されているメールアドレスであれば、再設定用のリンクを送信しました。メールを確認してください。
+				</Alert.Description>
+			</Alert.Root>
+		{:else}
+			<form method="POST" use:enhance class="flex flex-col gap-6">
+				{#if form?.message}<Alert.Root variant="destructive"
+						><Alert.Description>{form.message}</Alert.Description></Alert.Root
+					>{/if}
+				<Field.Group>
+					<Field.Field>
+						<Field.Label for="email">メールアドレス</Field.Label>
+						<Input id="email" name="email" type="email" autocomplete="email" required />
+					</Field.Field>
+				</Field.Group>
+				<Button type="submit" class="w-full">再設定リンクを送る</Button>
+			</form>
+		{/if}
+	</Card.Content>
+	<Card.Footer>
+		<a href="/login" class="text-sm text-muted-foreground underline">ログインに戻る</a>
+	</Card.Footer>
+</Card.Root>

@@ -1,30 +1,30 @@
 <script lang="ts">
-	import { Check, Copy } from '@lucide/svelte';
+	import * as Alert from '$lib/components/ui/alert';
+	import * as Field from '$lib/components/ui/field';
+	import { Input } from '$lib/components/ui/input';
+	import { CopyButton } from '$lib/components/ui/copy-button';
 
 	let { url }: { url: string } = $props();
-	let copiedUrl = $state<string | null>(null);
-	const copied = $derived(copiedUrl === url);
-
-	async function copy() {
-		await navigator.clipboard.writeText(url);
-		copiedUrl = url;
-	}
+	const inputId = $props.id();
 </script>
 
-<div class="rounded border border-green-300 bg-green-50 p-3 text-sm">
-	<label class="block">
-		<span>招待リンク</span>
-		<input
-			class="input font-mono text-xs"
-			readonly
-			value={url}
-			onfocus={(e) => e.currentTarget.select()}
-		/>
-	</label>
-	<button type="button" class="btn mt-2" onclick={copy}>
-		{#if copied}<Check size={14} />コピーしました{:else}<Copy size={14} />コピー{/if}
-	</button>
-	<p class="mt-2 text-xs text-gray-600">
-		このリンクは 7 日間有効です。メールが届かない場合は直接相手に渡してください。
-	</p>
-</div>
+<Alert.Root>
+	<Alert.Description>
+		<Field.Field>
+			<Field.Label for={inputId}>招待リンク</Field.Label>
+			<div class="flex items-center gap-2">
+				<Input
+					id={inputId}
+					readonly
+					value={url}
+					class="font-mono text-xs"
+					onfocus={(e) => e.currentTarget.select()}
+				/>
+				<CopyButton text={url} variant="outline" />
+			</div>
+			<Field.Description
+				>このリンクは 7 日間有効です。メールが届かない場合は直接相手に渡してください。</Field.Description
+			>
+		</Field.Field>
+	</Alert.Description>
+</Alert.Root>

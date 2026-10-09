@@ -8,7 +8,7 @@
 	const inputId = $props.id();
 </script>
 
-<Alert.Root>
+<Alert.Root role="status">
 	<Alert.Description>
 		<Field.Field>
 			<Field.Label for={inputId}>招待リンク</Field.Label>

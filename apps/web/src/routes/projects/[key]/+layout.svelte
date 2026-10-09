@@ -18,7 +18,7 @@
 	<p class="text-xs text-muted-foreground">{data.project.key}</p>
 	<h1 class="text-2xl font-bold">{data.project.name}</h1>
 	{#if data.project.archivedAt}
-		<Alert.Root>
+		<Alert.Root role="status">
 			<Alert.Description>このプロジェクトはアーカイブ済みです（閲覧のみ）。</Alert.Description>
 		</Alert.Root>
 	{/if}

@@ -16,7 +16,7 @@
 	</Card.Header>
 	<Card.Content>
 		{#if form?.sent}
-			<Alert.Root>
+			<Alert.Root role="status">
 				<Alert.Description>
 					登録されているメールアドレスであれば、再設定用のリンクを送信しました。メールを確認してください。
 				</Alert.Description>

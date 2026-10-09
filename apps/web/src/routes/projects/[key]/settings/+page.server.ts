@@ -1,0 +1,90 @@
+import { error } from '@sveltejs/kit';
+import { appContext } from '$lib/server/context';
+import { handleAction, handleLoad } from '$lib/server/errors';
+import {
+	createInvitation,
+	listPendingInvitations,
+	reissueInvitation,
+	revokeInvitation
+} from '$lib/server/services/invitations';
+import {
+	addMember,
+	listMembers,
+	removeMember,
+	requireProject,
+	setProjectArchived,
+	updateProject
+} from '$lib/server/services/projects';
+import { listUsers } from '$lib/server/services/users';
+import { formObject } from '$lib/server/validation';
+import type { Actions, PageServerLoad } from './$types';
+
+export const load: PageServerLoad = async ({ locals, params }) => {
+	const ctx = appContext(locals);
+	if (ctx.actor.role !== 'admin') error(404, 'Not found');
+	return handleLoad(async () => {
+		const p = await requireProject(ctx, params.key);
+		const [members, users, invitations] = await Promise.all([
+			listMembers(ctx, params.key),
+			listUsers(ctx),
+			listPendingInvitations(ctx, { projectId: p.id })
+		]);
+		const memberIds = new Set(members.map((m) => m.id));
+		const candidates = users.filter(
+			(u) => !u.disabledAt && u.role !== 'admin' && !memberIds.has(u.id)
+		);
+		return { members, candidates, invitations };
+	});
+};
+
+const idOf = async (request: Request) => String((await request.formData()).get('id') ?? '');
+
+export const actions: Actions = {
+	update: async ({ request, locals, params }) => {
+		const input = formObject(await request.formData());
+		return handleAction(async () => {
+			await updateProject(appContext(locals), params.key, input);
+			return { saved: true };
+		});
+	},
+	archive: async ({ request, locals, params }) => {
+		const archived = (await request.formData()).get('archived') === 'true';
+		return handleAction(async () => {
+			await setProjectArchived(appContext(locals), params.key, archived);
+		});
+	},
+	addMember: async ({ request, locals, params }) => {
+		const id = await idOf(request);
+		return handleAction(async () => {
+			await addMember(appContext(locals), params.key, id);
+		});
+	},
+	removeMember: async ({ request, locals, params }) => {
+		const id = await idOf(request);
+		return handleAction(async () => {
+			await removeMember(appContext(locals), params.key, id);
+		});
+	},
+	inviteGuest: async ({ request, locals, params }) => {
+		const email = String((await request.formData()).get('email') ?? '');
+		return handleAction(async () => {
+			const ctx = appContext(locals);
+			const p = await requireProject(ctx, params.key);
+			const { url } = await createInvitation(ctx, { email, role: 'guest', projectId: p.id });
+			return { inviteUrl: url };
+		});
+	},
+	reissue: async ({ request, locals }) => {
+		const id = await idOf(request);
+		return handleAction(async () => {
+			const { url } = await reissueInvitation(appContext(locals), id);
+			return { inviteUrl: url };
+		});
+	},
+	revoke: async ({ request, locals }) => {
+		const id = await idOf(request);
+		return handleAction(async () => {
+			await revokeInvitation(appContext(locals), id);
+		});
+	}
+};

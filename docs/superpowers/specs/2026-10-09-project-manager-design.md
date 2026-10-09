@@ -276,3 +276,15 @@ Starlight で以下のページを用意する（MVP では日本語のみ）。
 
 - `apps/web`: `pnpm --filter web deploy` = `vite build && wrangler deploy`
 - マイグレーションは Worker から実行せず、`pnpm --filter web db:migrate`（drizzle-kit migrate、Turso に接続）を手動または CI で実行する。
+
+## 14. 実装時の技術的補足（2026-10-09 調査結果）
+
+設計の意図は変えず、最新バージョンに合わせて以下を読み替える。
+
+- **SvelteKit 3 / adapter-cloudflare 8**: `platform.env` / `platform.ctx` は存在しない。バインディングとシークレットは `import { env, waitUntil } from 'cloudflare:workers'` で取得する（6 章・8 章の `platform.env` / `ctx.waitUntil` はこれに読み替える）。`svelte.config.js` は廃止され設定は `vite.config.ts`。`building` は `$app/env` から import する。`cloudflare:workers` を import するのは `hooks.server.ts` だけにし、services は引数で受け取る（Vitest で動かすため）。
+- **wrangler 互換フラグ**: `nodejs_compat` を有効にする。better-auth 1.7 は使える場合にネイティブ `node:crypto` の scrypt を使う（PR #8685）。
+- **パスワードハッシュ**: better-auth 標準（scrypt）を使う。Workers 無料プランの CPU 10ms に収まるかは初回デプロイ後に実測し、ドキュメントに反映する。
+- **Drizzle v1 rc.4**: `drizzle({ client, relations })`（`schema` オプションは廃止）。better-auth のアダプタは `@better-auth/drizzle-adapter/relations-v2` を使う。マイグレーションはフォルダ単位（`drizzle/<timestamp>_<name>/migration.sql`）。
+- **ユーザー作成**: `disableSignUp: true` では `auth.api.signUpEmail` がサーバー内からも拒否される。`/setup` と招待受諾では、DB トランザクション内で `user` 行と `account` 行（`providerId = 'credential'`、パスワードは better-auth の `password.hash` でハッシュ化）を直接 insert し、その後 `auth.api.signInEmail` でログインさせる。
+- **レート制限**: better-auth のレート制限は HTTP エンドポイント経由の呼び出しにだけ効き、form action からの `auth.api.*` 直接呼び出しには効かない。そのため、ログイン、パスワードリセット要求、`/setup`、招待受諾は、アプリ側の簡易レート制限（`rate_limit` テーブルを `app:` 接頭辞のキーで共用）で保護する。
+- **無効化ユーザー**: better-auth は `disabledAt` を見ないので、hooks でセッションを削除してログアウト扱いにし、ログイン action でも事前に拒否する。

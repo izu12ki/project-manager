@@ -1,0 +1,100 @@
+<script lang="ts">
+	import { deserialize } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
+	import { dndzone, type DndEvent } from 'svelte-dnd-action';
+	import { PRIORITY_LABEL, STATUSES, STATUS_LABEL, type Status } from '$lib/labels';
+	import type { PageProps } from './$types';
+
+	let { data }: PageProps = $props();
+
+	type Columns = typeof data.columns;
+	type Card = Columns[Status][number];
+
+	const clone = (c: Columns): Columns =>
+		Object.fromEntries(STATUSES.map((s) => [s, [...c[s]]])) as Columns;
+
+	let columns = $derived(clone(data.columns));
+	let snapshot: Columns | null = null;
+	let message = $state<string | null>(null);
+
+	function consider(status: Status, e: CustomEvent<DndEvent<Card>>) {
+		snapshot ??= clone(columns);
+		columns = { ...columns, [status]: e.detail.items };
+	}
+
+	async function finalize(status: Status, e: CustomEvent<DndEvent<Card>>) {
+		const items = e.detail.items;
+		columns = { ...columns, [status]: items };
+		const idx = items.findIndex((i) => i.id === e.detail.info.id);
+		if (idx === -1) return; // 移動元の列。移動先の列の finalize で送信する
+		const before = snapshot;
+		snapshot = null;
+
+		const fd = new FormData();
+		fd.set('issueId', String(e.detail.info.id));
+		fd.set('status', status);
+		fd.set('beforeId', items[idx - 1]?.id ?? '');
+		fd.set('afterId', items[idx + 1]?.id ?? '');
+		const res = await fetch('?/move', {
+			method: 'POST',
+			body: fd,
+			headers: { accept: 'application/json', 'x-sveltekit-action': 'true' }
+		});
+		const result = deserialize(await res.text());
+		if (result.type === 'success') {
+			message = null;
+			await invalidateAll();
+			return;
+		}
+		if (before) columns = before;
+		message =
+			result.type === 'failure' && typeof result.data?.message === 'string'
+				? result.data.message
+				: 'この課題は移動できません';
+	}
+</script>
+
+{#if message}<p role="alert" class="mb-4 text-sm text-red-600">{message}</p>{/if}
+
+<div class="grid grid-cols-1 gap-4 md:grid-cols-4">
+	{#each STATUSES as status (status)}
+		<section
+			class="rounded bg-gray-100 p-2"
+			data-testid={`column-${status}`}
+			aria-label={STATUS_LABEL[status]}
+		>
+			<h3 class="mb-2 px-1 text-sm font-semibold">
+				{STATUS_LABEL[status]} <span class="text-gray-500">{columns[status].length}</span>
+			</h3>
+			<ul
+				class="min-h-24 space-y-2"
+				use:dndzone={{
+					items: columns[status],
+					flipDurationMs: 150,
+					type: 'issue',
+					dragDisabled: !!data.project.archivedAt
+				}}
+				onconsider={(e) => consider(status, e)}
+				onfinalize={(e) => finalize(status, e)}
+			>
+				{#each columns[status] as card (card.id)}
+					<li class="card cursor-grab p-3 text-sm" data-testid={`card-${card.number}`}>
+						<a
+							href={`/projects/${data.project.key}/issues/${card.number}`}
+							class="text-xs text-gray-500 hover:underline"
+						>
+							{data.project.key}-{card.number}
+						</a>
+						<p class="font-medium">{card.title}</p>
+						<p class="mt-1 flex gap-2 text-xs text-gray-500">
+							<span>{card.assigneeName ?? '未割り当て'}</span>
+							{#if card.priority !== 'none'}<span>優先度: {PRIORITY_LABEL[card.priority]}</span
+								>{/if}
+							{#if card.dueDate}<span>期限: {card.dueDate}</span>{/if}
+						</p>
+					</li>
+				{/each}
+			</ul>
+		</section>
+	{/each}
+</div>

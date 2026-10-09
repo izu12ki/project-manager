@@ -119,6 +119,50 @@ describe('invitations', () => {
 		expect(await listPendingInvitations(ctx)).toHaveLength(0);
 	});
 
+	it('再発行後、古いトークンでは受諾できない', async () => {
+		const ctx = ctxOf(base, admin);
+		const { url: oldUrl } = await createInvitation(ctx, { email: 'm@example.com', role: 'member' });
+		const [pending] = await listPendingInvitations(ctx);
+		await reissueInvitation(ctx, pending.id);
+
+		await expect(
+			acceptInvitation(base, { token: tokenOf(oldUrl), name: 'X', password: 'password-1234' })
+		).rejects.toMatchObject({ code: 'not_found' });
+		expect(await db.select().from(user)).toHaveLength(1);
+	});
+
+	it('取り消し後、そのトークンでは受諾できない', async () => {
+		const ctx = ctxOf(base, admin);
+		const { url } = await createInvitation(ctx, { email: 'm@example.com', role: 'member' });
+		const [pending] = await listPendingInvitations(ctx);
+		await revokeInvitation(ctx, pending.id);
+
+		await expect(
+			acceptInvitation(base, { token: tokenOf(url), name: 'X', password: 'password-1234' })
+		).rejects.toMatchObject({ code: 'not_found' });
+		expect(await db.select().from(user)).toHaveLength(1);
+	});
+
+	it('受諾時にメールが既に登録されていたら conflict で、招待は使用済みにならない', async () => {
+		const { url } = await createInvitation(ctxOf(base, admin), {
+			email: 'dup@example.com',
+			role: 'member'
+		});
+		await db.insert(user).values({
+			id: 'u-dup',
+			name: 'Dup',
+			email: 'dup@example.com',
+			role: 'member',
+			emailVerified: true
+		});
+
+		await expect(
+			acceptInvitation(base, { token: tokenOf(url), name: 'X', password: 'password-1234' })
+		).rejects.toMatchObject({ code: 'conflict' });
+		const [inv] = await db.select().from(invitation);
+		expect(inv.acceptedAt).toBeNull();
+	});
+
 	it('プロジェクトで絞り込める', async () => {
 		const ctx = ctxOf(base, admin);
 		await createInvitation(ctx, { email: 'g@example.com', role: 'guest', projectId });

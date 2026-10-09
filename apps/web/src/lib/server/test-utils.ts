@@ -42,7 +42,7 @@ export function createTestBase(
 
 export async function seedUser(db: DB, role: Role, name: string = role): Promise<Actor> {
 	const id = uuidv7();
-	const email = `${name}-${id.slice(-8)}@example.com`.toLowerCase();
+	const email = `${role}-${id.slice(-8)}@example.com`.toLowerCase();
 	await db.insert(user).values({ id, name, email, role, emailVerified: true });
 	return { id, name, email, role };
 }

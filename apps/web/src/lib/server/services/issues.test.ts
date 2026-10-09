@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
+import { issue as issueTable } from '../db/schema';
 import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
 import {
 	createIssue,
@@ -193,6 +194,56 @@ describe('issues', () => {
 		await seedProject(db, { key: 'OLD', members: [member], archived: true });
 		await expect(createIssue(as(member), 'OLD', { title: 'A' })).rejects.toMatchObject({
 			code: 'conflict'
+		});
+	});
+	it('カンバン移動: 同じ位置の課題が並んでいても間に入れられる（列を振り直す）', async () => {
+		await Promise.all(['A', 'B', 'C'].map((t) => createIssue(as(member), 'ACME', { title: t })));
+		// 同時起票で位置が衝突しうるので、確実に衝突した状態を作る
+		await db.update(issueTable).set({ position: 'a0' });
+		const byNumber = (await listBoard(as(member), 'ACME')).todo.sort((x, y) => x.number - y.number);
+		const [i1, i2, i3] = byNumber;
+		await moveIssue(as(member), 'ACME', {
+			issueId: i3.id,
+			status: 'todo',
+			beforeId: i1.id,
+			afterId: i2.id
+		});
+		expect((await listBoard(as(member), 'ACME')).todo.map((i) => i.number)).toEqual([
+			i1.number,
+			i3.number,
+			i2.number
+		]);
+	});
+
+	describe('カンバン移動: 不正な隣接 ID は validation で、何も変わらない', () => {
+		const cases: [
+			string,
+			(ids: { a: string; b: string; c: string; other: string; gone: string }) => {
+				issueId: string;
+				beforeId: string;
+				afterId: string;
+			}
+		][] = [
+			['前後が逆', (x) => ({ issueId: x.c, beforeId: x.b, afterId: x.a })],
+			['beforeId が自分自身', (x) => ({ issueId: x.c, beforeId: x.c, afterId: '' })],
+			['別プロジェクトの課題', (x) => ({ issueId: x.c, beforeId: x.other, afterId: '' })],
+			['削除済みの課題', (x) => ({ issueId: x.c, beforeId: x.gone, afterId: '' })]
+		];
+		it.each(cases)('%s', async (_name, build) => {
+			for (const t of ['A', 'B', 'C']) await createIssue(as(member), 'ACME', { title: t });
+			await seedProject(db, { key: 'OTHER' });
+			await createIssue(as(admin), 'OTHER', { title: 'o' });
+			await createIssue(as(member), 'ACME', { title: 'G' });
+			const todo = (await listBoard(as(member), 'ACME')).todo;
+			const id = (t: string) => todo.find((i) => i.title === t)!.id;
+			const other = (await listBoard(as(admin), 'OTHER')).todo[0].id;
+			const ids = { a: id('A'), b: id('B'), c: id('C'), other, gone: id('G') };
+			await deleteIssue(as(member), 'ACME', todo.find((i) => i.title === 'G')!.number);
+			const before = await listBoard(as(member), 'ACME');
+			await expect(
+				moveIssue(as(member), 'ACME', { status: 'todo', ...build(ids) })
+			).rejects.toMatchObject({ code: 'validation' });
+			expect(await listBoard(as(member), 'ACME')).toEqual(before);
 		});
 	});
 });

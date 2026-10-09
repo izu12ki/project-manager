@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
-import { generateKeyBetween } from 'fractional-indexing';
+import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
 import { PRIORITIES, STATUSES, type Priority, type Status } from '$lib/labels';
@@ -214,6 +214,21 @@ const MoveInput = v.object({
 });
 
 /** beforeId = 移動後に直前に来る課題、afterId = 直後に来る課題（同じ列のもの）。 */
+/** 列内の課題を listBoard と同じ順序（position, number）で振り直す。 */
+async function rebalanceColumn(db: DB, projectId: string, status: Status): Promise<void> {
+	const rows = await db
+		.select({ id: issue.id })
+		.from(issue)
+		.where(and(eq(issue.projectId, projectId), eq(issue.status, status)))
+		.orderBy(asc(issue.position), asc(issue.number));
+	if (rows.length === 0) return;
+	const keys = generateNKeysBetween(null, null, rows.length);
+	const [first, ...rest] = rows.map((r, i) =>
+		db.update(issue).set({ position: keys[i] }).where(eq(issue.id, r.id))
+	);
+	await db.batch([first, ...rest]);
+}
+
 export async function moveIssue(ctx: AppContext, key: string, input: unknown): Promise<void> {
 	const p = await requireProject(ctx, key);
 	assertWritable(p);
@@ -237,8 +252,20 @@ export async function moveIssue(ctx: AppContext, key: string, input: unknown): P
 		if (!n || n.status !== data.status || id === cur.id) throw new AppError('validation', STALE);
 		return n.position;
 	};
-	const lo = await neighbor(emptyToNull(data.beforeId));
-	const hi = await neighbor(emptyToNull(data.afterId));
+	const beforeId = emptyToNull(data.beforeId);
+	const afterId = emptyToNull(data.afterId);
+	let lo = await neighbor(beforeId);
+	let hi = await neighbor(afterId);
+	if (lo !== null && hi !== null) {
+		if (lo > hi) throw new AppError('validation', STALE);
+		if (lo === hi) {
+			// 同時起票などで位置が重複した列は、振り直してから間に入れる
+			await rebalanceColumn(ctx.db, p.id, data.status);
+			lo = await neighbor(beforeId);
+			hi = await neighbor(afterId);
+			if (lo === null || hi === null || lo >= hi) throw new AppError('validation', STALE);
+		}
+	}
 
 	let position: string;
 	try {

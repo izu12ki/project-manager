@@ -1,8 +1,7 @@
 <script lang="ts">
-	import { Plus } from '@lucide/svelte';
+	import { ChevronRight, Plus } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
-	import * as Collapsible from '$lib/components/ui/collapsible';
 	import * as Empty from '$lib/components/ui/empty';
 	import type { PageProps } from './$types';
 
@@ -42,16 +41,19 @@
 {/if}
 
 {#if data.archived.length > 0}
-	<Collapsible.Root class="mt-8">
-		<Collapsible.Trigger class="text-sm text-muted-foreground">
+	<details class="group mt-8">
+		<summary
+			class="flex cursor-pointer list-none items-center gap-1 text-sm text-muted-foreground [&::-webkit-details-marker]:hidden"
+		>
+			<ChevronRight class="size-4 transition-transform group-open:rotate-90" />
 			アーカイブ済み（{data.archived.length}）
-		</Collapsible.Trigger>
-		<Collapsible.Content>
+		</summary>
+		<div>
 			<ul class="mt-2 flex flex-col gap-1 text-sm">
 				{#each data.archived as p (p.id)}
 					<li><a href={`/projects/${p.key}`} class="underline">{p.key} {p.name}</a></li>
 				{/each}
 			</ul>
-		</Collapsible.Content>
-	</Collapsible.Root>
+		</div>
+	</details>
 {/if}

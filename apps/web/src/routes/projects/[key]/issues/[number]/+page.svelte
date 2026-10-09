@@ -1,11 +1,10 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { Pencil, Trash2 } from '@lucide/svelte';
+	import { ChevronRight, Pencil, Trash2 } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import * as Alert from '$lib/components/ui/alert';
 	import { Button, buttonVariants } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
-	import * as Collapsible from '$lib/components/ui/collapsible';
 	import * as Field from '$lib/components/ui/field';
 	import { Input } from '$lib/components/ui/input';
 	import * as NativeSelect from '$lib/components/ui/native-select';
@@ -99,11 +98,16 @@
 						<div class="markdown">{@html c.html}</div>
 						{#if c.canModify}
 							<div class="flex items-start gap-2">
-								<Collapsible.Root class="flex-1">
-									<Collapsible.Trigger class={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-										編集
-									</Collapsible.Trigger>
-									<Collapsible.Content>
+								<details class="group flex-1">
+									<summary
+										class="{buttonVariants({
+											variant: 'ghost',
+											size: 'sm'
+										})} list-none [&::-webkit-details-marker]:hidden"
+									>
+										<ChevronRight class="transition-transform group-open:rotate-90" />編集
+									</summary>
+									<div>
 										<form
 											method="POST"
 											action="?/editComment"
@@ -122,8 +126,8 @@
 												<Button type="submit" variant="outline" size="sm">更新</Button>
 											</div>
 										</form>
-									</Collapsible.Content>
-								</Collapsible.Root>
+									</div>
+								</details>
 								<ConfirmAction
 									action="?/deleteComment"
 									fields={{ commentId: c.id }}

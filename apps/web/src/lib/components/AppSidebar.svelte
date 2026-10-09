@@ -1,7 +1,9 @@
 <script lang="ts">
+	import { afterNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import { FolderKanban, LogOut, UserRound, Users } from '@lucide/svelte';
 	import * as Sidebar from '$lib/components/ui/sidebar';
+	import { useSidebar } from '$lib/components/ui/sidebar';
 	import { Button } from '$lib/components/ui/button';
 	import { LightSwitch } from '$lib/components/ui/light-switch';
 
@@ -12,6 +14,9 @@
 		user: { name: string; role: 'admin' | 'member' | 'guest' };
 		projects: { key: string; name: string; archived: boolean }[];
 	} = $props();
+
+	const sidebar = useSidebar();
+	afterNavigate(() => sidebar.setOpenMobile(false));
 
 	const active = $derived(projects.filter((p) => !p.archived));
 	const isCurrent = (key: string) => {
@@ -34,37 +39,39 @@
 		</Sidebar.Menu>
 	</Sidebar.Header>
 	<Sidebar.Content>
-		<Sidebar.Group>
-			<Sidebar.GroupLabel>参加プロジェクト一覧</Sidebar.GroupLabel>
-			<Sidebar.Menu>
-				{#each active as p (p.key)}
-					<Sidebar.MenuItem>
-						<Sidebar.MenuButton isActive={isCurrent(p.key)}>
-							{#snippet child({ props })}
-								<a href={`/projects/${p.key}`} {...props}>
-									<span class="text-muted-foreground">{p.key}</span>
-									<span class="truncate">{p.name}</span>
-								</a>
-							{/snippet}
-						</Sidebar.MenuButton>
-					</Sidebar.MenuItem>
-				{/each}
-			</Sidebar.Menu>
-		</Sidebar.Group>
-		{#if user.role === 'admin'}
+		<nav aria-label="メインメニュー" class="contents">
 			<Sidebar.Group>
-				<Sidebar.GroupLabel>管理</Sidebar.GroupLabel>
+				<Sidebar.GroupLabel>参加プロジェクト一覧</Sidebar.GroupLabel>
 				<Sidebar.Menu>
-					<Sidebar.MenuItem>
-						<Sidebar.MenuButton isActive={page.url.pathname.startsWith('/admin/users')}>
-							{#snippet child({ props })}
-								<a href="/admin/users" {...props}><Users />ユーザー</a>
-							{/snippet}
-						</Sidebar.MenuButton>
-					</Sidebar.MenuItem>
+					{#each active as p (p.key)}
+						<Sidebar.MenuItem>
+							<Sidebar.MenuButton isActive={isCurrent(p.key)}>
+								{#snippet child({ props })}
+									<a href={`/projects/${p.key}`} {...props}>
+										<span class="text-muted-foreground">{p.key}</span>
+										<span class="truncate">{p.name}</span>
+									</a>
+								{/snippet}
+							</Sidebar.MenuButton>
+						</Sidebar.MenuItem>
+					{/each}
 				</Sidebar.Menu>
 			</Sidebar.Group>
-		{/if}
+			{#if user.role === 'admin'}
+				<Sidebar.Group>
+					<Sidebar.GroupLabel>管理</Sidebar.GroupLabel>
+					<Sidebar.Menu>
+						<Sidebar.MenuItem>
+							<Sidebar.MenuButton isActive={page.url.pathname.startsWith('/admin/users')}>
+								{#snippet child({ props })}
+									<a href="/admin/users" {...props}><Users />ユーザー</a>
+								{/snippet}
+							</Sidebar.MenuButton>
+						</Sidebar.MenuItem>
+					</Sidebar.Menu>
+				</Sidebar.Group>
+			{/if}
+		</nav>
 	</Sidebar.Content>
 	<Sidebar.Footer>
 		<Sidebar.Menu>

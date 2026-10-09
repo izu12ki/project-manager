@@ -16,8 +16,10 @@
 	let columns = $derived(clone(data.columns));
 	let snapshot: Columns | null = null;
 	let message = $state<string | null>(null);
+	let pending = $state(false);
 
 	function consider(status: Status, e: CustomEvent<DndEvent<Card>>) {
+		message = null;
 		snapshot ??= clone(columns);
 		columns = { ...columns, [status]: e.detail.items };
 	}
@@ -29,28 +31,41 @@
 		if (idx === -1) return; // 移動元の列。移動先の列の finalize で送信する
 		const before = snapshot;
 		snapshot = null;
+		pending = true;
 
 		const fd = new FormData();
 		fd.set('issueId', String(e.detail.info.id));
 		fd.set('status', status);
 		fd.set('beforeId', items[idx - 1]?.id ?? '');
 		fd.set('afterId', items[idx + 1]?.id ?? '');
-		const res = await fetch('?/move', {
-			method: 'POST',
-			body: fd,
-			headers: { accept: 'application/json', 'x-sveltekit-action': 'true' }
-		});
-		const result = deserialize(await res.text());
-		if (result.type === 'success') {
-			message = null;
-			await invalidateAll();
-			return;
+		let failure: string | null = null;
+		try {
+			const res = await fetch('?/move', {
+				method: 'POST',
+				body: fd,
+				headers: { accept: 'application/json', 'x-sveltekit-action': 'true' }
+			});
+			const result = deserialize(await res.text());
+			if (result.type !== 'success') {
+				failure =
+					result.type === 'failure' && typeof result.data?.message === 'string'
+						? result.data.message
+						: 'この課題は移動できません';
+			}
+		} catch {
+			failure = 'この課題は移動できません';
 		}
-		if (before) columns = before;
-		message =
-			result.type === 'failure' && typeof result.data?.message === 'string'
-				? result.data.message
-				: 'この課題は移動できません';
+		try {
+			if (failure !== null) {
+				if (before) columns = before;
+				message = failure;
+			}
+			await invalidateAll();
+		} catch {
+			// 再取得に失敗しても楽観表示を残さない（失敗時は上で巻き戻し済み）
+		} finally {
+			pending = false;
+		}
 	}
 </script>
 
@@ -72,7 +87,7 @@
 					items: columns[status],
 					flipDurationMs: 150,
 					type: 'issue',
-					dragDisabled: !!data.project.archivedAt
+					dragDisabled: !!data.project.archivedAt || pending
 				}}
 				onconsider={(e) => consider(status, e)}
 				onfinalize={(e) => finalize(status, e)}

@@ -1,1 +1,41 @@
 @import 'tailwindcss';
+
+@layer components {
+	.input {
+		@apply mt-1 block w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500;
+	}
+	.btn {
+		@apply inline-flex items-center justify-center gap-1 rounded border border-gray-300 bg-white px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50;
+	}
+	.btn-primary {
+		@apply inline-flex items-center justify-center gap-1 rounded bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50;
+	}
+	.card {
+		@apply rounded border border-gray-200 bg-white p-4;
+	}
+	.markdown a {
+		@apply text-blue-600 underline;
+	}
+	.markdown p,
+	.markdown ul,
+	.markdown ol,
+	.markdown pre {
+		@apply my-2;
+	}
+	.markdown ul {
+		@apply list-disc pl-6;
+	}
+	.markdown ol {
+		@apply list-decimal pl-6;
+	}
+	.markdown code {
+		@apply rounded bg-gray-100 px-1 text-sm;
+	}
+	.markdown pre {
+		@apply overflow-x-auto rounded bg-gray-100 p-3;
+	}
+}
+
+body {
+	@apply bg-gray-50 text-gray-900;
+}

@@ -32,8 +32,8 @@
 	</Sidebar.Provider>
 {:else}
 	<div class="flex min-h-svh items-center justify-center bg-muted p-6">
-		<div class="w-full max-w-sm">
+		<main class="w-full max-w-sm">
 			{@render children()}
-		</div>
+		</main>
 	</div>
 {/if}

@@ -14,7 +14,11 @@
 	} = $props();
 
 	const active = $derived(projects.filter((p) => !p.archived));
-	const isCurrent = (key: string) => page.url.pathname.startsWith(`/projects/${key}`);
+	const isCurrent = (key: string) => {
+		const base = `/projects/${key}`;
+		const pathname = page.url.pathname;
+		return pathname === base || pathname.startsWith(base + '/');
+	};
 </script>
 
 <Sidebar.Root>

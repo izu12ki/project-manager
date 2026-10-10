@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { afterNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import {
 		ChevronsUpDown,
@@ -31,8 +32,7 @@
 	const isCurrent = (key: string) =>
 		path === `/projects/${key}` || path.startsWith(`/projects/${key}/`);
 
-	$effect(() => {
-		void path;
+	afterNavigate(() => {
 		menuOpen = false;
 	});
 </script>

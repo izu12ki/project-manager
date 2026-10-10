@@ -3,11 +3,11 @@ import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
 import { authorize } from '../authz';
 import type { AppContext } from '../context';
-import { comment, user } from '../db/schema';
+import { comment, issue as issueTable, user } from '../db/schema';
 import { AppError } from '../errors';
 import { parse } from '../validation';
 import { getIssue } from './issues';
-import { assertWritable } from './projects';
+import { assertWritable, requireProject } from './projects';
 
 const BodyInput = v.object({
 	body: v.pipe(
@@ -18,8 +18,9 @@ const BodyInput = v.object({
 	)
 });
 
+/** 課題が存在しない場合は空配列（課題の存在確認は getIssue で行う）。 */
 export async function listComments(ctx: AppContext, key: string, number: number) {
-	const { issue } = await getIssue(ctx, key, number);
+	const p = await requireProject(ctx, key);
 	return ctx.db
 		.select({
 			id: comment.id,
@@ -31,7 +32,8 @@ export async function listComments(ctx: AppContext, key: string, number: number)
 		})
 		.from(comment)
 		.innerJoin(user, eq(user.id, comment.authorId))
-		.where(eq(comment.issueId, issue.id))
+		.innerJoin(issueTable, eq(issueTable.id, comment.issueId))
+		.where(and(eq(issueTable.projectId, p.id), eq(issueTable.number, number)))
 		.orderBy(asc(comment.createdAt), asc(comment.id));
 }
 

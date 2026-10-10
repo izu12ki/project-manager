@@ -12,7 +12,7 @@ import {
 	listComments
 } from '$lib/server/services/comments';
 import { deleteIssue, getIssue, updateIssue } from '$lib/server/services/issues';
-import { listAssignableUsers } from '$lib/server/services/projects';
+import { listAssignableUsers, requireProject } from '$lib/server/services/projects';
 import { formObject } from '$lib/server/validation';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -26,10 +26,11 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 	const ctx = appContext(locals);
 	const number = issueNumber(params.number);
 	return handleLoad(async () => {
-		const { project, issue } = await getIssue(ctx, params.key, number);
-		const [comments, assignees] = await Promise.all([
+		const p = await requireProject(ctx, params.key);
+		const [{ project, issue }, comments, assignees] = await Promise.all([
+			getIssue(ctx, params.key, number),
 			listComments(ctx, params.key, number),
-			listAssignableUsers(ctx.db, project.id)
+			listAssignableUsers(ctx.db, p.id)
 		]);
 		const assignable = [...assignees.map((u) => ({ ...u, disabled: false }))];
 		if (issue.assigneeId && !assignable.some((u) => u.id === issue.assigneeId)) {

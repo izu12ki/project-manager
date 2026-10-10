@@ -9,6 +9,8 @@ export interface BaseContext {
 	waitUntil: (p: Promise<unknown>) => void;
 	baseUrl: string;
 	hashPassword: (password: string) => Promise<string>;
+	/** リクエスト内で読み取り結果を共有するキャッシュ。未指定ならキャッシュしない。 */
+	memo?: Map<string, Promise<unknown>>;
 }
 
 export interface AppContext extends BaseContext {

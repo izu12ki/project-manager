@@ -74,6 +74,16 @@ describe('projects', () => {
 		expect(() => assertWritable(fresh)).not.toThrow();
 	});
 
+	it('memo があればリクエスト内で共有し、更新後は取り直す', async () => {
+		await seedProject(db, { key: 'ACME', members: [member] });
+		const ctx = ctxOf({ ...base, memo: new Map() }, member);
+		expect(requireProject(ctx, 'ACME')).toBe(requireProject(ctx, 'ACME'));
+		const adminCtx = ctxOf({ ...base, memo: new Map() }, admin);
+		await requireProject(adminCtx, 'ACME');
+		await setProjectArchived(adminCtx, 'ACME', true);
+		expect((await requireProject(adminCtx, 'ACME')).archivedAt).not.toBeNull();
+	});
+
 	it('名前と説明を更新できる', async () => {
 		await seedProject(db, { key: 'ACME' });
 		await updateProject(ctxOf(base, admin), 'ACME', { name: '新名称', description: '説明' });

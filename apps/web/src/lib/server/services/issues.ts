@@ -10,7 +10,13 @@ import type { DB } from '../db';
 import { issue, project, user } from '../db/schema';
 import { AppError } from '../errors';
 import { emptyToNull, parse } from '../validation';
-import { assertAssignable, assertWritable, requireProject, type ProjectRow } from './projects';
+import {
+	assertAssignable,
+	assertWritable,
+	forgetProject,
+	requireProject,
+	type ProjectRow
+} from './projects';
 
 const STALE = '並び順が古くなっています。画面を再読み込みしてください';
 
@@ -155,6 +161,7 @@ export async function createIssue(
 			position
 		})
 	]);
+	forgetProject(ctx, key); // nextIssueNumber が変わった
 	const [row] = await ctx.db.select({ number: issue.number }).from(issue).where(eq(issue.id, id));
 	return { number: row.number };
 }

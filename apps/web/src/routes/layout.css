@@ -593,3 +593,29 @@
 		padding: 0;
 	}
 }
+
+/* ---------- page transitions ---------- */
+
+/* 本文だけを短くクロスフェードする（サイドバー・トップバーは固定） */
+::view-transition-old(root) {
+	animation: 90ms ease-out both vt-fade-out;
+}
+::view-transition-new(root) {
+	animation: 160ms ease-out both vt-fade-in;
+}
+@keyframes vt-fade-out {
+	to {
+		opacity: 0;
+	}
+}
+@keyframes vt-fade-in {
+	from {
+		opacity: 0;
+		transform: translateY(4px);
+	}
+}
+
+/* 押した瞬間の手応え */
+a:active {
+	opacity: 0.7;
+}

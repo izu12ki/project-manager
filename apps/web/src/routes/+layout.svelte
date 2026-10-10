@@ -1,11 +1,12 @@
 <script lang="ts">
 	import './layout.css';
 	import favicon from '#lib/assets/favicon.svg';
-	import { afterNavigate } from '$app/navigation';
+	import { afterNavigate, onNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import { MediaQuery } from 'svelte/reactivity';
 	import { ChevronRight, FolderKanban, PanelLeft } from '@lucide/svelte';
 	import AppSidebar from '$lib/components/AppSidebar.svelte';
+	import NavProgress from '$lib/components/NavProgress.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import Toaster from '$lib/components/Toaster.svelte';
 	import type { LayoutProps } from './$types';
@@ -16,6 +17,18 @@
 	let sidebarOpen = $state(true);
 	let mobileOpen = $state(false);
 	afterNavigate(() => (mobileOpen = false));
+
+	// データ取得後（DOM 更新直前）に呼ばれるので、待ち時間中に画面が固まることはない
+	onNavigate((navigation) => {
+		if (!document.startViewTransition) return;
+		if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+		return new Promise((resolve) => {
+			document.startViewTransition(async () => {
+				resolve();
+				await navigation.complete;
+			});
+		});
+	});
 
 	function toggleSidebar() {
 		if (isMobile.current) mobileOpen = !mobileOpen;
@@ -51,6 +64,7 @@
 </svelte:head>
 
 <Toaster />
+<NavProgress />
 
 {#if data.user}
 	<div class="shell" data-sidebar={sidebarOpen ? 'open' : 'closed'}>
@@ -143,6 +157,7 @@
 		z-index: 20;
 		background: color-mix(in oklch, var(--background) 75%, transparent);
 		backdrop-filter: blur(14px) saturate(1.4);
+		view-transition-name: topbar;
 	}
 	.divider {
 		width: 1px;

@@ -127,6 +127,7 @@
 
 <style>
 	.sidebar {
+		view-transition-name: sidebar;
 		width: 256px;
 		flex-shrink: 0;
 		position: sticky;

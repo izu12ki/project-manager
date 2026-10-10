@@ -8,3 +8,11 @@
 - push も確認不要。コミット後に適宜 push してよい（upstream 未設定なら `git push -u origin <branch>`）。
   - `--force` / `--force-with-lease` は禁止。必要になった場合は理由を説明して確認を取る。
   - `main` への直接 push はしない。作業はブランチで行う。
+
+## デプロイ（Cloudflare Workers）
+
+- 本番 Worker（`project-manager`）へのデプロイは確認不要。変更がまとまったら自己判断で適宜デプロイしてよい。
+- デプロイ前に `pnpm check` / `pnpm lint` / `pnpm test:unit` / `pnpm test:e2e` をすべて通すこと。1つでも失敗したらデプロイしない。
+- 手順: `apps/web` で `pnpm deploy`。完了後、デプロイしたバージョン ID と URL を報告する。
+- アカウント ID は環境変数 `CLOUDFLARE_ACCOUNT_ID` で渡す。設定ファイルにコミットしない。
+- 本番 DB（Turso）のマイグレーションを伴う場合は、実行前にその旨を一言伝える。

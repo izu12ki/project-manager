@@ -14,7 +14,7 @@
 		formatDateTime
 	} from '$lib/labels';
 	import { toast } from '$lib/toast.svelte';
-	import type { PageProps } from './$types';
+	import type { PageProps, SubmitFunction } from './$types';
 
 	let { data, form }: PageProps = $props();
 	const issue = $derived(data.issue);
@@ -27,9 +27,26 @@
 	$effect(() => {
 		if (form?.saved) toast.success('保存しました');
 	});
-	$effect(() => {
-		if (form?.commented) toast.success('コメントしました');
-	});
+
+	// 送信直後に自分のコメントを仮表示し、サーバーの結果で本物に置き換える
+	type PendingComment = { id: number; body: string };
+	let pendingComments = $state<PendingComment[]>([]);
+	let nextPendingId = 0;
+
+	const submitComment: SubmitFunction = ({ formData, formElement }) => {
+		const body = String(formData.get('body') ?? '').trim();
+		const pending = { id: ++nextPendingId, body };
+		pendingComments.push(pending);
+		formElement.reset();
+		return async ({ result, update }) => {
+			await update({ reset: false });
+			pendingComments = pendingComments.filter((c) => c.id !== pending.id);
+			if (result.type !== 'success' && result.type !== 'redirect') {
+				const textarea = formElement.elements.namedItem('body') as HTMLTextAreaElement;
+				if (!textarea.value) textarea.value = body;
+			}
+		};
+	};
 </script>
 
 <section class="detail">
@@ -94,9 +111,11 @@
 
 		<section class="grid gap-4">
 			<h2 class="m-0 text-base font-bold">
-				コメント <span class="font-medium text-muted-foreground">{data.comments.length}</span>
+				コメント <span class="font-medium text-muted-foreground"
+					>{data.comments.length + pendingComments.length}</span
+				>
 			</h2>
-			{#if data.comments.length === 0}
+			{#if data.comments.length + pendingComments.length === 0}
 				<p class="m-0 text-muted-foreground">まだコメントはありません</p>
 			{/if}
 			{#each data.comments as c (c.id)}
@@ -167,8 +186,22 @@
 					</div>
 				</article>
 			{/each}
+			{#each pendingComments as c (c.id)}
+				<article class="comment pending" aria-busy="true">
+					<span class="avatar" style:--c={colorFor(data.user?.name ?? '')}
+						>{data.user?.name[0]}</span
+					>
+					<div class="grid min-w-0 gap-1">
+						<div class="flex items-center gap-2">
+							<span class="font-medium">{data.user?.name}</span>
+							<span class="text-xs text-muted-foreground">送信中…</span>
+						</div>
+						<p class="pending-body">{c.body}</p>
+					</div>
+				</article>
+			{/each}
 			{#if perms.writable}
-				<form method="POST" action="?/comment" use:enhance class="new-comment">
+				<form method="POST" action="?/comment" use:enhance={submitComment} class="new-comment">
 					<label class="label" for="new-comment">コメントを追加</label>
 					<textarea class="textarea" id="new-comment" name="body" rows="3" required></textarea>
 					<div class="flex justify-end">
@@ -290,6 +323,14 @@
 	}
 	.comment :global(.danger-hover:hover) {
 		color: var(--destructive);
+	}
+	.comment.pending {
+		opacity: 0.6;
+	}
+	.pending-body {
+		margin: 0;
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
 	}
 	.new-comment {
 		display: grid;

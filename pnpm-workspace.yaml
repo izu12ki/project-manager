@@ -3,3 +3,4 @@ packages:
 allowBuilds:
   workerd: true
   esbuild: true
+  '@parcel/watcher': false

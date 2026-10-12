@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNull, ne, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
 import { uuidv7 } from 'uuidv7';
@@ -10,7 +10,14 @@ import type { DB } from '../db';
 import { issue, project, user } from '../db/schema';
 import { AppError } from '../errors';
 import { emptyToNull, parse } from '../validation';
-import { assertAssignable, assertWritable, requireProject, type ProjectRow } from './projects';
+import { assertCategoryOf, assertMilestoneOf } from './issue-fields';
+import {
+	assertAssignable,
+	assertWritable,
+	forgetProject,
+	requireProject,
+	type ProjectRow
+} from './projects';
 
 const STALE = '並び順が古くなっています。画面を再読み込みしてください';
 
@@ -73,6 +80,20 @@ export async function listIssues(ctx: AppContext, key: string, filters: IssueFil
 	return selectIssues(ctx.db, and(...conds), [desc(issue.number)]);
 }
 
+/** プロジェクトごとの未完了（完了以外）の課題数。projectIds は呼び出し側で閲覧可能なものに限ること。 */
+export async function countOpenIssues(
+	ctx: AppContext,
+	projectIds: string[]
+): Promise<Record<string, number>> {
+	if (projectIds.length === 0) return {};
+	const rows = await ctx.db
+		.select({ projectId: issue.projectId, n: count() })
+		.from(issue)
+		.where(and(inArray(issue.projectId, projectIds), ne(issue.status, 'done')))
+		.groupBy(issue.projectId);
+	return Object.fromEntries(rows.map((r) => [r.projectId, r.n]));
+}
+
 export async function listBoard(
 	ctx: AppContext,
 	key: string
@@ -116,10 +137,21 @@ async function nextPosition(db: DB, projectId: string, status: Status): Promise<
 const CreateInput = v.object({
 	title: TitleSchema,
 	description: v.optional(DescriptionSchema, ''),
+	status: v.optional(v.picklist(STATUSES), 'todo'),
 	priority: v.optional(v.picklist(PRIORITIES), 'none'),
+	startDate: v.optional(DateOrEmpty),
 	dueDate: v.optional(DateOrEmpty),
-	assigneeId: v.optional(v.string())
+	assigneeId: v.optional(v.string()),
+	categoryId: v.optional(v.string()),
+	milestoneId: v.optional(v.string())
 });
+
+function assertDateRange(start: string | null, due: string | null): void {
+	if (start && due && start > due) {
+		const msg = '開始日は期限日以前の日付にしてください';
+		throw new AppError('validation', msg, { startDate: [msg] });
+	}
+}
 
 export async function createIssue(
 	ctx: AppContext,
@@ -135,8 +167,16 @@ export async function createIssue(
 		authorize(ctx.actor, 'issue:assign');
 		await assertAssignable(ctx.db, p.id, assigneeId);
 	}
+	if (data.status !== 'todo') authorize(ctx.actor, 'issue:changeStatus', { assigneeId });
+	const startDate = emptyToNull(data.startDate) ?? null;
+	const dueDate = emptyToNull(data.dueDate) ?? null;
+	assertDateRange(startDate, dueDate);
+	const categoryId = emptyToNull(data.categoryId) ?? null;
+	if (categoryId) await assertCategoryOf(ctx.db, p.id, categoryId);
+	const milestoneId = emptyToNull(data.milestoneId) ?? null;
+	if (milestoneId) await assertMilestoneOf(ctx.db, p.id, milestoneId);
 	const id = uuidv7();
-	const position = await nextPosition(ctx.db, p.id, 'todo');
+	const position = await nextPosition(ctx.db, p.id, data.status);
 	await ctx.db.batch([
 		ctx.db
 			.update(project)
@@ -148,13 +188,18 @@ export async function createIssue(
 			number: sql`(select ${project.nextIssueNumber} - 1 from ${project} where ${project.id} = ${p.id})`,
 			title: data.title,
 			description: data.description,
+			status: data.status,
 			priority: data.priority,
-			dueDate: emptyToNull(data.dueDate) ?? null,
+			startDate,
+			dueDate,
 			assigneeId,
+			categoryId,
+			milestoneId,
 			reporterId: ctx.actor.id,
 			position
 		})
 	]);
+	forgetProject(ctx, key); // nextIssueNumber が変わった
 	const [row] = await ctx.db.select({ number: issue.number }).from(issue).where(eq(issue.id, id));
 	return { number: row.number };
 }
@@ -163,9 +208,12 @@ const UpdateInput = v.object({
 	title: v.optional(TitleSchema),
 	description: v.optional(DescriptionSchema),
 	priority: v.optional(v.picklist(PRIORITIES)),
+	startDate: v.optional(DateOrEmpty),
 	dueDate: v.optional(DateOrEmpty),
 	status: v.optional(v.picklist(STATUSES)),
-	assigneeId: v.optional(v.string())
+	assigneeId: v.optional(v.string()),
+	categoryId: v.optional(v.string()),
+	milestoneId: v.optional(v.string())
 });
 
 /** 未送信（undefined）の項目は変更しない。値が変わった項目だけ権限を確認する。 */
@@ -181,13 +229,27 @@ export async function updateIssue(
 	const res = { reporterId: cur.reporterId, assigneeId: cur.assigneeId };
 	const patch: Partial<typeof issue.$inferInsert> = {};
 
+	const startDate = emptyToNull(data.startDate);
 	const dueDate = emptyToNull(data.dueDate);
+	const categoryId = emptyToNull(data.categoryId);
+	const milestoneId = emptyToNull(data.milestoneId);
 	if (data.title !== undefined && data.title !== cur.title) patch.title = data.title;
 	if (data.description !== undefined && data.description !== cur.description)
 		patch.description = data.description;
 	if (data.priority !== undefined && data.priority !== cur.priority) patch.priority = data.priority;
+	if (startDate !== undefined && startDate !== cur.startDate) patch.startDate = startDate;
 	if (dueDate !== undefined && dueDate !== cur.dueDate) patch.dueDate = dueDate;
+	if (categoryId !== undefined && categoryId !== cur.categoryId) patch.categoryId = categoryId;
+	if (milestoneId !== undefined && milestoneId !== cur.milestoneId) patch.milestoneId = milestoneId;
 	if (Object.keys(patch).length > 0) authorize(ctx.actor, 'issue:edit', res);
+	if (patch.startDate !== undefined || patch.dueDate !== undefined) {
+		assertDateRange(
+			patch.startDate !== undefined ? patch.startDate : cur.startDate,
+			patch.dueDate !== undefined ? patch.dueDate : cur.dueDate
+		);
+	}
+	if (patch.categoryId) await assertCategoryOf(ctx.db, p.id, patch.categoryId);
+	if (patch.milestoneId) await assertMilestoneOf(ctx.db, p.id, patch.milestoneId);
 
 	if (data.status !== undefined && data.status !== cur.status) {
 		authorize(ctx.actor, 'issue:changeStatus', res);

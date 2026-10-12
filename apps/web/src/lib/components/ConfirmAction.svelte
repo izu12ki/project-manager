@@ -4,6 +4,7 @@
 
 	let {
 		action,
+		onconfirm,
 		fields = {},
 		title,
 		description,
@@ -13,7 +14,10 @@
 		triggerLabel,
 		trigger
 	}: {
-		action: string;
+		/** 送信先の form action（onconfirm を渡す場合は不要） */
+		action?: string;
+		/** 渡すと form action の代わりに確定時に呼ぶ（remote function の command 用） */
+		onconfirm?: () => Promise<void>;
 		fields?: Record<string, string>;
 		title: string;
 		description?: string;
@@ -30,19 +34,7 @@
 	let pending = $state(false);
 </script>
 
-<form
-	method="POST"
-	{action}
-	style="display: contents"
-	use:enhance={() => {
-		pending = true;
-		return async ({ update }) => {
-			dialog?.close();
-			pending = false;
-			await update();
-		};
-	}}
->
+{#snippet body()}
 	{#each Object.entries(fields) as [name, value] (name)}
 		<input type="hidden" {name} {value} />
 	{/each}
@@ -75,7 +67,41 @@
 			</button>
 		</div>
 	</dialog>
-</form>
+{/snippet}
+
+{#if onconfirm}
+	<form
+		style="display: contents"
+		onsubmit={async (e) => {
+			e.preventDefault();
+			pending = true;
+			try {
+				await onconfirm();
+			} finally {
+				dialog?.close();
+				pending = false;
+			}
+		}}
+	>
+		{@render body()}
+	</form>
+{:else}
+	<form
+		method="POST"
+		{action}
+		style="display: contents"
+		use:enhance={() => {
+			pending = true;
+			return async ({ update }) => {
+				dialog?.close();
+				pending = false;
+				await update();
+			};
+		}}
+	>
+		{@render body()}
+	</form>
+{/if}
 
 <style>
 	dialog {
@@ -84,7 +110,7 @@
 		max-width: 480px;
 		padding: 24px;
 		border: 1px solid var(--border);
-		border-radius: 16px;
+		border-radius: 6px;
 		background: var(--background);
 		color: var(--foreground);
 		box-shadow: 0 16px 48px rgb(0 0 0 / 0.2);

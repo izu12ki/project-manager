@@ -33,7 +33,7 @@
 		align-items: center;
 		gap: 10px;
 		padding: 14px 16px;
-		border-radius: 10px;
+		border-radius: 4px;
 		border: 1px solid var(--border);
 		background: var(--popover);
 		color: var(--foreground);

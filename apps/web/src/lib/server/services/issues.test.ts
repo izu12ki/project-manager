@@ -46,6 +46,33 @@ describe('issues', () => {
 		});
 	});
 
+	it('起票時にステータス・開始日を指定でき、開始日は期限日以前に限る', async () => {
+		await createIssue(as(member), 'ACME', {
+			title: 'A',
+			status: 'in_progress',
+			startDate: '2026-10-06',
+			dueDate: '2026-10-10'
+		});
+		const board = await listBoard(as(member), 'ACME');
+		expect(board.in_progress.map((i) => i.number)).toEqual([1]);
+		expect((await getIssue(as(member), 'ACME', 1)).issue).toMatchObject({
+			startDate: '2026-10-06'
+		});
+		await expect(
+			createIssue(as(member), 'ACME', {
+				title: 'B',
+				startDate: '2026-10-11',
+				dueDate: '2026-10-10'
+			})
+		).rejects.toMatchObject({ code: 'validation' });
+		await expect(
+			updateIssue(as(member), 'ACME', 1, { startDate: '2026-10-11' })
+		).rejects.toMatchObject({ code: 'validation' });
+		await expect(
+			createIssue(as(guest), 'ACME', { title: 'C', status: 'done' })
+		).rejects.toMatchObject({ code: 'forbidden' });
+	});
+
 	it('同時に起票しても番号が重複しない', async () => {
 		const results = await Promise.all(
 			Array.from({ length: 5 }, (_, i) => createIssue(as(member), 'ACME', { title: `T${i}` }))

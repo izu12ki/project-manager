@@ -8,6 +8,14 @@ import {
 	revokeInvitation
 } from '$lib/server/services/invitations';
 import {
+	createCategory,
+	createMilestone,
+	deleteCategory,
+	deleteMilestone,
+	listCategories,
+	listMilestones
+} from '$lib/server/services/issue-fields';
+import {
 	addMember,
 	listMembers,
 	removeMember,
@@ -24,16 +32,18 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 	if (ctx.actor.role !== 'admin') error(404, 'Not found');
 	return handleLoad(async () => {
 		const p = await requireProject(ctx, params.key);
-		const [members, users, invitations] = await Promise.all([
+		const [members, users, invitations, categories, milestones] = await Promise.all([
 			listMembers(ctx, params.key),
 			listUsers(ctx),
-			listPendingInvitations(ctx, { projectId: p.id })
+			listPendingInvitations(ctx, { projectId: p.id }),
+			listCategories(ctx, params.key),
+			listMilestones(ctx, params.key)
 		]);
 		const memberIds = new Set(members.map((m) => m.id));
 		const candidates = users.filter(
 			(u) => !u.disabledAt && u.role !== 'admin' && !memberIds.has(u.id)
 		);
-		return { members, candidates, invitations };
+		return { members, candidates, invitations, categories, milestones };
 	});
 };
 
@@ -79,6 +89,30 @@ export const actions: Actions = {
 		return handleAction(async () => {
 			const { url } = await reissueInvitation(appContext(locals), id);
 			return { inviteUrl: url };
+		});
+	},
+	addCategory: async ({ request, locals, params }) => {
+		const input = formObject(await request.formData());
+		return handleAction(async () => {
+			await createCategory(appContext(locals), params.key, input);
+		});
+	},
+	deleteCategory: async ({ request, locals, params }) => {
+		const id = await idOf(request);
+		return handleAction(async () => {
+			await deleteCategory(appContext(locals), params.key, id);
+		});
+	},
+	addMilestone: async ({ request, locals, params }) => {
+		const input = formObject(await request.formData());
+		return handleAction(async () => {
+			await createMilestone(appContext(locals), params.key, input);
+		});
+	},
+	deleteMilestone: async ({ request, locals, params }) => {
+		const id = await idOf(request);
+		return handleAction(async () => {
+			await deleteMilestone(appContext(locals), params.key, id);
 		});
 	},
 	revoke: async ({ request, locals }) => {

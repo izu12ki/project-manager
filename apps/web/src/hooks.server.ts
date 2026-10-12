@@ -38,7 +38,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 		mailer,
 		waitUntil,
 		baseUrl: appEnv.BETTER_AUTH_URL,
-		hashPassword: (pw) => authCtx.password.hash(pw)
+		hashPassword: (pw) => authCtx.password.hash(pw),
+		memo: new Map()
 	};
 
 	const s = await auth.api.getSession({ headers: event.request.headers });

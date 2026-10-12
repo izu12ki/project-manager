@@ -43,7 +43,7 @@
 					<a href={`/projects/${p.key}`} class="card project">
 						<div class="grid gap-1.5">
 							<div class="mb-1.5 flex items-center gap-2.5">
-								<span class="avatar avatar-square" style="--size: 36px" style:--c={colorFor(p.key)}
+								<span class="avatar avatar-square" style="--size: 32px" style:--c={colorFor(p.key)}
 									>{p.key[0]}</span
 								>
 								<span class="mono text-xs font-medium text-muted-foreground">{p.key}</span>
@@ -53,8 +53,9 @@
 								<p class="desc">{plain(p.description)}</p>
 							{/if}
 						</div>
-						<div class="mt-auto text-[13px] text-muted-foreground">
-							更新 {formatDate(p.updatedAt)}
+						<div class="mt-auto flex justify-between gap-2 text-[13px] text-muted-foreground">
+							<span>未完了の課題 {p.openCount} 件</span>
+							<span>更新 {formatDate(p.updatedAt)}</span>
 						</div>
 					</a>
 				</li>
@@ -105,15 +106,10 @@
 	.project {
 		height: 100%;
 		padding: 20px;
-		transition:
-			transform 0.2s ease,
-			box-shadow 0.2s ease;
 	}
 	.project:hover {
-		transform: translateY(-3px);
-		box-shadow:
-			0 2px 4px oklch(0.3 0.05 265 / 0.05),
-			0 20px 40px -16px oklch(0.35 0.12 268 / 0.35);
+		border-color: var(--primary);
+		text-decoration: none;
 	}
 	.desc {
 		margin: 0;
@@ -129,12 +125,13 @@
 		gap: 6px;
 		padding: 16px 20px;
 		border: 1px solid var(--border);
-		border-radius: 16px;
+		border-radius: 6px;
 		background: var(--muted);
 		color: var(--muted-foreground);
 	}
 	.archived:hover {
 		color: var(--foreground);
+		text-decoration: none;
 	}
 	.tag {
 		display: inline-flex;

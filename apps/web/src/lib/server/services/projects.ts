@@ -37,17 +37,35 @@ export async function listProjects(ctx: AppContext): Promise<ProjectRow[]> {
 	return rows.map((r) => r.project);
 }
 
-export async function requireProject(ctx: AppContext, key: string): Promise<ProjectRow> {
-	const [p] = await ctx.db.select().from(project).where(eq(project.key, key));
-	if (!p) throw new AppError('not_found', 'プロジェクトが見つかりません');
-	if (ctx.actor.role !== 'admin') {
-		const [m] = await ctx.db
-			.select({ userId: projectMember.userId })
-			.from(projectMember)
-			.where(and(eq(projectMember.projectId, p.id), eq(projectMember.userId, ctx.actor.id)));
-		if (!m) throw new AppError('not_found', 'プロジェクトが見つかりません');
-	}
+export function requireProject(ctx: AppContext, key: string): Promise<ProjectRow> {
+	const memoKey = projectMemoKey(key);
+	const hit = ctx.memo?.get(memoKey) as Promise<ProjectRow> | undefined;
+	if (hit) return hit;
+	const p = fetchProject(ctx, key);
+	ctx.memo?.set(memoKey, p);
 	return p;
+}
+
+async function fetchProject(ctx: AppContext, key: string): Promise<ProjectRow> {
+	const [row] = await ctx.db
+		.select({ project, memberId: projectMember.userId })
+		.from(project)
+		.leftJoin(
+			projectMember,
+			and(eq(projectMember.projectId, project.id), eq(projectMember.userId, ctx.actor.id))
+		)
+		.where(eq(project.key, key));
+	if (!row || (ctx.actor.role !== 'admin' && !row.memberId)) {
+		throw new AppError('not_found', 'プロジェクトが見つかりません');
+	}
+	return row.project;
+}
+
+const projectMemoKey = (key: string) => `project:${key}`;
+
+/** プロジェクト行を変更したら、同じリクエスト内の後続の読み取りが古い行を返さないよう破棄する。 */
+export function forgetProject(ctx: AppContext, key: string): void {
+	ctx.memo?.delete(projectMemoKey(key));
 }
 
 export function assertWritable(p: ProjectRow): void {
@@ -78,6 +96,7 @@ export async function updateProject(ctx: AppContext, key: string, input: unknown
 	const p = await requireProject(ctx, key);
 	const data = parse(v.object({ name: ProjectNameSchema, description: DescriptionSchema }), input);
 	await ctx.db.update(project).set(data).where(eq(project.id, p.id));
+	forgetProject(ctx, key);
 }
 
 export async function setProjectArchived(
@@ -91,6 +110,7 @@ export async function setProjectArchived(
 		.update(project)
 		.set({ archivedAt: archived ? new Date() : null })
 		.where(eq(project.id, p.id));
+	forgetProject(ctx, key);
 }
 
 export async function listMembers(ctx: AppContext, key: string) {

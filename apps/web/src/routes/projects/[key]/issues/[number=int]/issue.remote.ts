@@ -1,0 +1,123 @@
+import { eq } from 'drizzle-orm';
+import * as v from 'valibot';
+import { command, form, query } from '$app/server';
+import { can } from '$lib/server/authz';
+import { user } from '$lib/server/db/schema';
+import { renderMarkdown } from '$lib/server/markdown';
+import { remoteContext, runCommand, runForm, runQuery } from '$lib/server/remote-helpers';
+import {
+	addComment,
+	deleteComment,
+	editComment,
+	listComments
+} from '$lib/server/services/comments';
+import { listCategories, listMilestones } from '$lib/server/services/issue-fields';
+import { getIssue, updateIssue } from '$lib/server/services/issues';
+import { listAssignableUsers, requireProject } from '$lib/server/services/projects';
+
+const IssueRef = v.object({
+	key: v.string(),
+	number: v.pipe(v.number(), v.integer(), v.minValue(1))
+});
+
+const IssueRefFields = IssueRef.entries;
+const opt = v.optional(v.string());
+
+export const getIssueDetail = query(IssueRef, ({ key, number }) => {
+	const ctx = remoteContext();
+	return runQuery(async () => {
+		const p = await requireProject(ctx, key);
+		const [{ project, issue }, assignees, categories, milestones] = await Promise.all([
+			getIssue(ctx, key, number),
+			listAssignableUsers(ctx.db, p.id),
+			listCategories(ctx, key),
+			listMilestones(ctx, key)
+		]);
+		const assignable = assignees.map((u) => ({ ...u, disabled: false }));
+		if (issue.assigneeId && !assignable.some((u) => u.id === issue.assigneeId)) {
+			const [cur] = await ctx.db
+				.select({ id: user.id, name: user.name, role: user.role })
+				.from(user)
+				.where(eq(user.id, issue.assigneeId));
+			if (cur) assignable.push({ ...cur, disabled: true });
+		}
+		const res = { reporterId: issue.reporterId, assigneeId: issue.assigneeId };
+		const writable = !project.archivedAt;
+		return {
+			issue: { ...issue, descriptionHtml: renderMarkdown(issue.description) },
+			assignees: assignable,
+			categories,
+			milestones,
+			perms: {
+				writable,
+				edit: writable && can(ctx.actor, 'issue:edit', res),
+				changeStatus: writable && can(ctx.actor, 'issue:changeStatus', res),
+				assign: writable && can(ctx.actor, 'issue:assign', res),
+				delete: writable && can(ctx.actor, 'issue:delete', res)
+			}
+		};
+	});
+});
+
+export const getComments = query(IssueRef, ({ key, number }) => {
+	const ctx = remoteContext();
+	return runQuery(async () => {
+		const [{ project }, comments] = await Promise.all([
+			getIssue(ctx, key, number),
+			listComments(ctx, key, number)
+		]);
+		return comments.map((c) => ({
+			...c,
+			html: renderMarkdown(c.body),
+			canModify: !project.archivedAt && can(ctx.actor, 'comment:modify', { authorId: c.authorId })
+		}));
+	});
+});
+
+export const saveIssue = form(
+	v.object({
+		...IssueRefFields,
+		title: opt,
+		description: opt,
+		status: opt,
+		priority: opt,
+		assigneeId: opt,
+		categoryId: opt,
+		milestoneId: opt,
+		startDate: opt,
+		dueDate: opt
+	}),
+	({ key, number, ...input }) =>
+		runForm(async () => {
+			await updateIssue(remoteContext(), key, number, input);
+			void getIssueDetail({ key, number }).refresh();
+			return { saved: true };
+		})
+);
+
+export const postComment = form(
+	v.object({ ...IssueRefFields, body: v.string() }),
+	({ key, number, body }) =>
+		runForm(async () => {
+			await addComment(remoteContext(), key, number, { body });
+			void getComments({ key, number }).refresh();
+		})
+);
+
+export const updateComment = form(
+	v.object({ ...IssueRefFields, commentId: v.string(), body: v.string() }),
+	({ key, number, commentId, body }) =>
+		runForm(async () => {
+			await editComment(remoteContext(), key, number, commentId, { body });
+			void getComments({ key, number }).refresh();
+		})
+);
+
+export const removeComment = command(
+	v.object({ ...IssueRefFields, commentId: v.string() }),
+	({ key, number, commentId }) =>
+		runCommand(async () => {
+			await deleteComment(remoteContext(), key, number, commentId);
+			void getComments({ key, number }).refresh();
+		})
+);

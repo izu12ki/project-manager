@@ -26,7 +26,7 @@
 				<div class="flex flex-wrap items-center gap-3">
 					<span
 						class="avatar avatar-square"
-						style="--size: 36px"
+						style="--size: 32px"
 						style:--c={colorFor(data.project.key)}>{data.project.key[0]}</span
 					>
 					<h1 class="page-title">{data.project.name}</h1>
@@ -78,6 +78,7 @@
 	}
 	.tab:hover {
 		color: var(--foreground);
+		text-decoration: none;
 	}
 	.tab[aria-current='page'] {
 		color: var(--primary-ink);

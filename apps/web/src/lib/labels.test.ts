@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PRIORITIES, PRIORITY_LABEL, STATUSES, STATUS_LABEL } from './labels';
+import { PRIORITIES, PRIORITY_LABEL, STATUSES, STATUS_LABEL, milestoneLabel } from './labels';
 
 describe('labels', () => {
 	it('全ステータスに表示名がある', () => {
@@ -9,5 +9,11 @@ describe('labels', () => {
 	it('全優先度に表示名がある', () => {
 		expect(PRIORITIES).toEqual(['none', 'low', 'medium', 'high', 'urgent']);
 		for (const p of PRIORITIES) expect(PRIORITY_LABEL[p]).toBeTruthy();
+	});
+	it('マイルストーンはリリース日があれば併記する', () => {
+		expect(milestoneLabel({ name: 'v1.0', releaseDate: '2026-11-30' })).toBe(
+			'v1.0（11/30 リリース）'
+		);
+		expect(milestoneLabel({ name: 'バックログ', releaseDate: null })).toBe('バックログ');
 	});
 });

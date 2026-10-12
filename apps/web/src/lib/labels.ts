@@ -3,7 +3,7 @@ export type Status = (typeof STATUSES)[number];
 export const STATUS_LABEL: Record<Status, string> = {
 	todo: '未着手',
 	in_progress: '進行中',
-	in_review: 'レビュー中',
+	in_review: 'レビュー',
 	done: '完了'
 };
 
@@ -71,6 +71,11 @@ export function todayJst(): string {
 /** 期限 'YYYY-MM-DD' → 'MM/DD'（未設定は '—'） */
 export function formatDue(due: string | null | undefined): string {
 	return due ? due.slice(5).replace('-', '/') : '—';
+}
+
+/** マイルストーンの表示名。リリース日があれば「v1.0（11/30 リリース）」 */
+export function milestoneLabel(m: { name: string; releaseDate: string | null }): string {
+	return m.releaseDate ? `${m.name}（${formatDue(m.releaseDate)} リリース）` : m.name;
 }
 
 export function isDueAlert(due: string | null | undefined, status: Status): boolean {

@@ -39,6 +39,11 @@ export function createAuth(
 				);
 			}
 		},
+		session: {
+			// 署名付き Cookie でセッションを検証し、リクエスト毎の DB 参照を省く。
+			// 無効化・ロール変更・ログアウト時の反映は最大 maxAge 遅れる。
+			cookieCache: { enabled: true, maxAge: 5 * 60 }
+		},
 		user: {
 			additionalFields: {
 				role: {

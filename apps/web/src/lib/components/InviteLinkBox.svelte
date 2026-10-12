@@ -38,9 +38,9 @@
 <style>
 	.box {
 		display: flex;
-		height: 36px;
+		height: 32px;
 		border: 1px solid var(--input);
-		border-radius: 10px;
+		border-radius: 4px;
 		overflow: hidden;
 	}
 	input {

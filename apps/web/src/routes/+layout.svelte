@@ -1,11 +1,12 @@
 <script lang="ts">
 	import './layout.css';
 	import favicon from '#lib/assets/favicon.svg';
-	import { afterNavigate } from '$app/navigation';
+	import { afterNavigate, onNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import { MediaQuery } from 'svelte/reactivity';
 	import { ChevronRight, FolderKanban, PanelLeft } from '@lucide/svelte';
 	import AppSidebar from '$lib/components/AppSidebar.svelte';
+	import NavProgress from '$lib/components/NavProgress.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import Toaster from '$lib/components/Toaster.svelte';
 	import type { LayoutProps } from './$types';
@@ -16,6 +17,18 @@
 	let sidebarOpen = $state(true);
 	let mobileOpen = $state(false);
 	afterNavigate(() => (mobileOpen = false));
+
+	// データ取得後（DOM 更新直前）に呼ばれるので、待ち時間中に画面が固まることはない
+	onNavigate((navigation) => {
+		if (!document.startViewTransition) return;
+		if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+		return new Promise((resolve) => {
+			document.startViewTransition(async () => {
+				resolve();
+				await navigation.complete;
+			});
+		});
+	});
 
 	function toggleSidebar() {
 		if (isMobile.current) mobileOpen = !mobileOpen;
@@ -51,6 +64,7 @@
 </svelte:head>
 
 <Toaster />
+<NavProgress />
 
 {#if data.user}
 	<div class="shell" data-sidebar={sidebarOpen ? 'open' : 'closed'}>
@@ -125,14 +139,9 @@
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		background-image: radial-gradient(
-			70% 35% at 100% 0%,
-			color-mix(in oklch, var(--primary) 5%, transparent),
-			transparent 70%
-		);
 	}
 	.topbar {
-		height: 56px;
+		height: 48px;
 		display: flex;
 		align-items: center;
 		gap: 8px;
@@ -141,8 +150,8 @@
 		position: sticky;
 		top: 0;
 		z-index: 20;
-		background: color-mix(in oklch, var(--background) 75%, transparent);
-		backdrop-filter: blur(14px) saturate(1.4);
+		background: var(--card);
+		view-transition-name: topbar;
 	}
 	.divider {
 		width: 1px;
@@ -168,7 +177,7 @@
 	}
 	.content {
 		flex: 1;
-		padding: 32px clamp(16px, 4vw, 40px) 96px;
+		padding: 20px clamp(16px, 2.5vw, 32px) 96px;
 	}
 	.container {
 		max-width: 1240px;
@@ -183,17 +192,6 @@
 		justify-content: center;
 		padding: 24px;
 		position: relative;
-		background-image:
-			radial-gradient(
-				60% 50% at 20% 10%,
-				color-mix(in oklch, var(--primary) 22%, transparent),
-				transparent 70%
-			),
-			radial-gradient(
-				50% 45% at 85% 90%,
-				color-mix(in oklch, var(--c-pink) 18%, transparent),
-				transparent 70%
-			);
 	}
 	.auth-theme {
 		position: absolute;

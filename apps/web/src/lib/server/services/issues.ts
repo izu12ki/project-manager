@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, isNull, ne, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
 import { uuidv7 } from 'uuidv7';
@@ -7,7 +7,7 @@ import { PRIORITIES, STATUSES, type Priority, type Status } from '$lib/labels';
 import { authorize } from '../authz';
 import type { AppContext } from '../context';
 import type { DB } from '../db';
-import { issue, project, user } from '../db/schema';
+import { category, issue, milestone, project, user } from '../db/schema';
 import { AppError } from '../errors';
 import { emptyToNull, parse } from '../validation';
 import { assertCategoryOf, assertMilestoneOf } from './issue-fields';
@@ -36,10 +36,14 @@ const DateOrEmpty = v.union(
 	'日付の形式が正しくありません'
 );
 
+/** assigneeId / categoryId / milestoneId は 'none' で未設定のものに絞る。q はタイトルか番号の部分一致。 */
 export interface IssueFilters {
 	status?: Status;
 	assigneeId?: string;
 	priority?: Priority;
+	categoryId?: string;
+	milestoneId?: string;
+	q?: string;
 }
 
 const assignee = alias(user, 'assignee');
@@ -55,6 +59,10 @@ const listColumns = {
 	position: issue.position,
 	assigneeId: issue.assigneeId,
 	assigneeName: assignee.name,
+	categoryId: issue.categoryId,
+	categoryName: category.name,
+	milestoneId: issue.milestoneId,
+	milestoneName: milestone.name,
 	reporterId: issue.reporterId,
 	updatedAt: issue.updatedAt
 };
@@ -66,18 +74,45 @@ function selectIssues(db: DB, where: SQL | undefined, order: SQL[]) {
 		.select(listColumns)
 		.from(issue)
 		.leftJoin(assignee, eq(issue.assigneeId, assignee.id))
+		.leftJoin(category, eq(issue.categoryId, category.id))
+		.leftJoin(milestone, eq(issue.milestoneId, milestone.id))
 		.where(where)
 		.orderBy(...order);
 }
 
+function optionCond(
+	col: typeof issue.assigneeId | typeof issue.categoryId | typeof issue.milestoneId,
+	value: string | undefined
+): SQL | undefined {
+	if (!value) return undefined;
+	return value === 'none' ? isNull(col) : eq(col, value);
+}
+
+/** タイトルの部分一致。「ACME-12」「#12」「12」は番号の一致としても扱う。 */
+function keywordCond(projectKey: string, q: string | undefined): SQL | undefined {
+	const kw = q?.trim();
+	if (!kw) return undefined;
+	const escaped = kw.replace(/[\\%_]/g, (c) => `\\${c}`);
+	const title = sql`${issue.title} like ${`%${escaped}%`} escape '\\'`;
+	const m = kw.match(new RegExp(`^(?:${projectKey}-|#)?(\\d{1,9})$`, 'i'));
+	return m ? or(title, eq(issue.number, Number(m[1]))) : title;
+}
+
+function filterConds(p: ProjectRow, filters: IssueFilters): SQL | undefined {
+	return and(
+		eq(issue.projectId, p.id),
+		filters.status ? eq(issue.status, filters.status) : undefined,
+		filters.priority ? eq(issue.priority, filters.priority) : undefined,
+		optionCond(issue.assigneeId, filters.assigneeId),
+		optionCond(issue.categoryId, filters.categoryId),
+		optionCond(issue.milestoneId, filters.milestoneId),
+		keywordCond(p.key, filters.q)
+	);
+}
+
 export async function listIssues(ctx: AppContext, key: string, filters: IssueFilters = {}) {
 	const p = await requireProject(ctx, key);
-	const conds: SQL[] = [eq(issue.projectId, p.id)];
-	if (filters.status) conds.push(eq(issue.status, filters.status));
-	if (filters.priority) conds.push(eq(issue.priority, filters.priority));
-	if (filters.assigneeId === 'none') conds.push(isNull(issue.assigneeId));
-	else if (filters.assigneeId) conds.push(eq(issue.assigneeId, filters.assigneeId));
-	return selectIssues(ctx.db, and(...conds), [desc(issue.number)]);
+	return selectIssues(ctx.db, filterConds(p, filters), [desc(issue.number)]);
 }
 
 /** プロジェクトごとの未完了（完了以外）の課題数。projectIds は呼び出し側で閲覧可能なものに限ること。 */
@@ -94,12 +129,14 @@ export async function countOpenIssues(
 	return Object.fromEntries(rows.map((r) => [r.projectId, r.n]));
 }
 
+/** 絞り込んだ場合も、カード間の並び順は全体の position を保つ。 */
 export async function listBoard(
 	ctx: AppContext,
-	key: string
+	key: string,
+	filters: Omit<IssueFilters, 'status'> = {}
 ): Promise<Record<Status, IssueListItem[]>> {
 	const p = await requireProject(ctx, key);
-	const rows = await selectIssues(ctx.db, eq(issue.projectId, p.id), [
+	const rows = await selectIssues(ctx.db, filterConds(p, { ...filters, status: undefined }), [
 		asc(issue.position),
 		asc(issue.number)
 	]);

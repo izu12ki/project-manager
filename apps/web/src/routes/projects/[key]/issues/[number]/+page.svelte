@@ -11,7 +11,8 @@
 		STATUSES,
 		STATUS_LABEL,
 		colorFor,
-		formatDateTime
+		formatDateTime,
+		milestoneLabel
 	} from '$lib/labels';
 	import { toast } from '$lib/toast.svelte';
 	import type { PageProps, SubmitFunction } from './$types';
@@ -58,7 +59,7 @@
 				<StatusPill status={issue.status} />
 				<PriorityPill priority={issue.priority} />
 			</div>
-			<h1 class="page-title">{issue.title}</h1>
+			<h1 class="page-title" style="font-size: 22px; text-wrap: pretty">{issue.title}</h1>
 			<p class="m-0 text-[13px] text-muted-foreground">
 				{issue.reporterName} が {formatDateTime(issue.createdAt)} に起票
 			</p>
@@ -226,27 +227,27 @@
 				}}
 		>
 			<h2 class="card-title">属性</h2>
-			<div class="grid gap-4">
-				<div class="field">
-					<label class="label" for="issue-status">ステータス</label>
+			<div class="prop-list">
+				<div class="prop-row">
+					<label for="issue-status">ステータス</label>
 					<select class="select" id="issue-status" name="status" disabled={!perms.changeStatus}>
 						{#each STATUSES as s (s)}
 							<option value={s} selected={s === issue.status}>{STATUS_LABEL[s]}</option>
 						{/each}
 					</select>
 				</div>
-				<div class="field">
-					<label class="label" for="issue-priority">優先度</label>
+				<div class="prop-row">
+					<label for="issue-priority">優先度</label>
 					<select class="select" id="issue-priority" name="priority" disabled={!perms.edit}>
 						{#each PRIORITIES as p (p)}
 							<option value={p} selected={p === issue.priority}>{PRIORITY_LABEL[p]}</option>
 						{/each}
 					</select>
 				</div>
-				<div class="field">
-					<label class="label" for="issue-assignee">担当者</label>
+				<div class="prop-row">
+					<label for="issue-assignee">担当者</label>
 					<select class="select" id="issue-assignee" name="assigneeId" disabled={!perms.assign}>
-						<option value="">未割り当て</option>
+						<option value="">未割当</option>
 						{#each data.assignees as u (u.id)}
 							<option value={u.id} selected={u.id === issue.assigneeId}
 								>{u.disabled ? `${u.name}（無効）` : u.name}</option
@@ -254,8 +255,38 @@
 						{/each}
 					</select>
 				</div>
-				<div class="field">
-					<label class="label" for="issue-due">期限</label>
+				<div class="prop-row">
+					<label for="issue-category">カテゴリー</label>
+					<select class="select" id="issue-category" name="categoryId" disabled={!perms.edit}>
+						<option value="">未設定</option>
+						{#each data.categories as c (c.id)}
+							<option value={c.id} selected={c.id === issue.categoryId}>{c.name}</option>
+						{/each}
+					</select>
+				</div>
+				<div class="prop-row">
+					<label for="issue-milestone">マイルストーン</label>
+					<select class="select" id="issue-milestone" name="milestoneId" disabled={!perms.edit}>
+						<option value="">未設定</option>
+						{#each data.milestones as m (m.id)}
+							<option value={m.id} selected={m.id === issue.milestoneId}>{milestoneLabel(m)}</option
+							>
+						{/each}
+					</select>
+				</div>
+				<div class="prop-row">
+					<label for="issue-start">開始日</label>
+					<input
+						class="input"
+						id="issue-start"
+						type="date"
+						name="startDate"
+						value={issue.startDate ?? ''}
+						disabled={!perms.edit}
+					/>
+				</div>
+				<div class="prop-row">
+					<label for="issue-due">期限日</label>
 					<input
 						class="input"
 						id="issue-due"
@@ -270,7 +301,7 @@
 				<div class="flex flex-wrap items-center gap-2">
 					{#if canSave}<button type="submit" class="btn btn-primary">保存</button>{/if}
 					{#if perms.edit && !editing}
-						<button type="button" class="btn btn-outline" onclick={() => (editing = true)}>
+						<button type="button" class="btn btn-outline btn-sm" onclick={() => (editing = true)}>
 							<Pencil />タイトル・本文を編集
 						</button>
 					{/if}

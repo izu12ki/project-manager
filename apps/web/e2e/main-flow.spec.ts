@@ -69,6 +69,17 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.getByLabel('ゲストのメールアドレス').fill('guest@example.com');
 	await page.getByRole('button', { name: 'ゲストを招待' }).click();
 	const guestUrl = await page.getByLabel('招待リンク').inputValue();
+
+	// 4b. カテゴリー・マイルストーンを定義
+	const addIn = (label: string) =>
+		page.locator('form', { has: page.getByLabel(label) }).getByRole('button', { name: '追加' });
+	await page.getByLabel('カテゴリー名').fill('フロントエンド');
+	await addIn('カテゴリー名').click();
+	await expect(page.getByRole('listitem').filter({ hasText: 'フロントエンド' })).toBeVisible();
+	await page.getByLabel('マイルストーン名').fill('v1.0');
+	await page.getByLabel('リリース日').fill('2026-11-30');
+	await addIn('マイルストーン名').click();
+	await expect(page.getByRole('listitem').filter({ hasText: 'v1.0' })).toBeVisible();
 	await logout(page);
 
 	// 5. ゲストが登録して起票
@@ -79,7 +90,8 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 		.click();
 	await page.getByRole('link', { name: '新規課題' }).click();
 	await page.getByLabel('タイトル').fill('ログインできない');
-	await page.getByRole('button', { name: '起票する' }).click();
+	await page.getByLabel('カテゴリー').selectOption({ label: 'フロントエンド' });
+	await page.getByRole('button', { name: '起票する' }).first().click();
 	await expect(page.getByRole('heading', { name: 'ログインできない' })).toBeVisible();
 	await expect(page.getByRole('main').getByText('ACME-1')).toBeVisible();
 	await logout(page);
@@ -87,11 +99,18 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	// 6. メンバーが登録し、ゲストを担当者にする
 	await acceptInvite(page, memberUrl, '開発 花子');
 	await page.goto('/projects/ACME/issues/1');
+	await expect(page.getByLabel('カテゴリー').locator('option:checked')).toHaveText(
+		'フロントエンド'
+	);
 	await page.getByLabel('担当者').selectOption({ label: '顧客 太郎' });
+	await page.getByLabel('マイルストーン').selectOption({ label: 'v1.0（11/30 リリース）' });
 	await page.getByRole('button', { name: '保存' }).click();
 	await expect(page.getByText('保存しました')).toBeVisible();
 	await page.reload();
 	await expect(page.getByLabel('担当者').locator('option:checked')).toHaveText('顧客 太郎');
+	await expect(page.getByLabel('マイルストーン').locator('option:checked')).toHaveText(
+		'v1.0（11/30 リリース）'
+	);
 	await logout(page);
 
 	// 7. ゲストがカンバンで進行中へ移動

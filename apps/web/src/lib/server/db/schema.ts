@@ -155,6 +155,34 @@ export const invitation = sqliteTable(
 	]
 );
 
+export const category = sqliteTable(
+	'category',
+	{
+		id: text().primaryKey(),
+		projectId: text('project_id')
+			.notNull()
+			.references(() => project.id, { onDelete: 'cascade' }),
+		name: text().notNull(),
+		createdAt: createdAt()
+	},
+	(t) => [uniqueIndex('category_project_name_uq').on(t.projectId, t.name)]
+);
+
+export const milestone = sqliteTable(
+	'milestone',
+	{
+		id: text().primaryKey(),
+		projectId: text('project_id')
+			.notNull()
+			.references(() => project.id, { onDelete: 'cascade' }),
+		name: text().notNull(),
+		/** リリース予定日 'YYYY-MM-DD'（任意） */
+		releaseDate: text('release_date'),
+		createdAt: createdAt()
+	},
+	(t) => [uniqueIndex('milestone_project_name_uq').on(t.projectId, t.name)]
+);
+
 export const issue = sqliteTable(
 	'issue',
 	{
@@ -171,7 +199,10 @@ export const issue = sqliteTable(
 		reporterId: text('reporter_id')
 			.notNull()
 			.references(() => user.id),
+		startDate: text('start_date'),
 		dueDate: text('due_date'),
+		categoryId: text('category_id').references(() => category.id, { onDelete: 'set null' }),
+		milestoneId: text('milestone_id').references(() => milestone.id, { onDelete: 'set null' }),
 		position: text().notNull(),
 		createdAt: createdAt(),
 		updatedAt: updatedAt()

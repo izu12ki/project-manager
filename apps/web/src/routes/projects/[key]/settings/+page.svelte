@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { Archive, ArchiveRestore, Mail } from '@lucide/svelte';
+	import { Archive, ArchiveRestore, Flag, Mail, Tag } from '@lucide/svelte';
 	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
 	import FormAlert from '$lib/components/FormAlert.svelte';
 	import InviteLinkBox from '$lib/components/InviteLinkBox.svelte';
@@ -10,6 +10,7 @@
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
+	const writable = $derived(!data.project.archivedAt);
 
 	$effect(() => {
 		if (form?.saved) toast.success('保存しました');
@@ -85,7 +86,7 @@
 						action="?/removeMember"
 						fields={{ id: m.id }}
 						title={`${m.name} さんを外しますか？`}
-						description="このプロジェクトの課題を閲覧できなくなり、担当している課題は未割り当てになります。"
+						description="このプロジェクトの課題を閲覧できなくなり、担当している課題は未割当になります。"
 						confirmLabel="外す"
 					>
 						{#snippet trigger()}外す{/snippet}
@@ -167,6 +168,119 @@
 		{/if}
 	</div>
 
+	<div class="card">
+		<div class="card-head">
+			<h2 class="card-title">カテゴリー</h2>
+			<p class="card-desc">
+				課題を分類する項目です。削除すると、設定されていた課題は未設定になります
+			</p>
+		</div>
+		{#if data.categories.length > 0}
+			<ul class="list">
+				{#each data.categories as c (c.id)}
+					<li class="option-row">
+						<Tag size={16} class="shrink-0 text-muted-foreground" />
+						<span class="min-w-0 flex-1 truncate">{c.name}</span>
+						{#if writable}
+							<ConfirmAction
+								action="?/deleteCategory"
+								fields={{ id: c.id }}
+								title={`カテゴリー「${c.name}」を削除しますか？`}
+								description="このカテゴリーが設定されている課題は未設定になります。"
+								confirmLabel="削除する"
+								triggerClass="btn btn-ghost btn-xs"
+							>
+								{#snippet trigger()}削除{/snippet}
+							</ConfirmAction>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+		{/if}
+		{#if writable}
+			<form
+				method="POST"
+				action="?/addCategory"
+				use:enhance
+				class="grid items-end gap-3"
+				style="grid-template-columns: minmax(0, 1fr) auto"
+			>
+				<div class="field">
+					<label class="label" for="category-name">カテゴリー名</label>
+					<input
+						class="input"
+						id="category-name"
+						name="name"
+						required
+						maxlength={50}
+						placeholder="例: フロントエンド"
+					/>
+				</div>
+				<button type="submit" class="btn btn-outline">追加</button>
+			</form>
+		{/if}
+	</div>
+
+	<div class="card">
+		<div class="card-head">
+			<h2 class="card-title">マイルストーン</h2>
+			<p class="card-desc">
+				リリースなどの節目です。削除すると、設定されていた課題は未設定になります
+			</p>
+		</div>
+		{#if data.milestones.length > 0}
+			<ul class="list">
+				{#each data.milestones as m (m.id)}
+					<li class="option-row">
+						<Flag size={16} class="shrink-0 text-muted-foreground" />
+						<span class="min-w-0 flex-1 truncate">{m.name}</span>
+						<span class="text-[13px] text-muted-foreground tabular-nums"
+							>{m.releaseDate ? `${m.releaseDate.replaceAll('-', '/')} リリース` : '日付なし'}</span
+						>
+						{#if writable}
+							<ConfirmAction
+								action="?/deleteMilestone"
+								fields={{ id: m.id }}
+								title={`マイルストーン「${m.name}」を削除しますか？`}
+								description="このマイルストーンが設定されている課題は未設定になります。"
+								confirmLabel="削除する"
+								triggerClass="btn btn-ghost btn-xs"
+							>
+								{#snippet trigger()}削除{/snippet}
+							</ConfirmAction>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+		{/if}
+		{#if writable}
+			<form
+				method="POST"
+				action="?/addMilestone"
+				use:enhance
+				class="grid items-end gap-3"
+				style="grid-template-columns: minmax(0, 1fr) 160px auto"
+			>
+				<div class="field">
+					<label class="label" for="milestone-name">マイルストーン名</label>
+					<input
+						class="input"
+						id="milestone-name"
+						name="name"
+						required
+						maxlength={50}
+						placeholder="例: v1.0"
+					/>
+				</div>
+				<div class="field">
+					<label class="label" for="milestone-date">リリース日</label>
+					<input class="input" id="milestone-date" name="releaseDate" type="date" />
+				</div>
+				<button type="submit" class="btn btn-outline">追加</button>
+			</form>
+		{/if}
+	</div>
+
 	<div
 		class="card flex-row flex-wrap items-center justify-between gap-4"
 		style="padding: 20px 24px"
@@ -212,6 +326,14 @@
 		align-items: center;
 		gap: 12px;
 		padding: 10px 0;
+		border-bottom: 1px solid var(--border);
+	}
+	.option-row {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		min-height: 44px;
+		padding: 6px 0;
 		border-bottom: 1px solid var(--border);
 	}
 	.invite {

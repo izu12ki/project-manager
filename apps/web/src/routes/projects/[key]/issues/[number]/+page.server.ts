@@ -11,6 +11,7 @@ import {
 	editComment,
 	listComments
 } from '$lib/server/services/comments';
+import { listCategories, listMilestones } from '$lib/server/services/issue-fields';
 import { deleteIssue, getIssue, updateIssue } from '$lib/server/services/issues';
 import { listAssignableUsers, requireProject } from '$lib/server/services/projects';
 import { formObject } from '$lib/server/validation';
@@ -27,10 +28,12 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 	const number = issueNumber(params.number);
 	return handleLoad(async () => {
 		const p = await requireProject(ctx, params.key);
-		const [{ project, issue }, comments, assignees] = await Promise.all([
+		const [{ project, issue }, comments, assignees, categories, milestones] = await Promise.all([
 			getIssue(ctx, params.key, number),
 			listComments(ctx, params.key, number),
-			listAssignableUsers(ctx.db, p.id)
+			listAssignableUsers(ctx.db, p.id),
+			listCategories(ctx, params.key),
+			listMilestones(ctx, params.key)
 		]);
 		const assignable = [...assignees.map((u) => ({ ...u, disabled: false }))];
 		if (issue.assigneeId && !assignable.some((u) => u.id === issue.assigneeId)) {
@@ -50,6 +53,8 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 				canModify: writable && can(ctx.actor, 'comment:modify', { authorId: c.authorId })
 			})),
 			assignees: assignable,
+			categories,
+			milestones,
 			perms: {
 				writable,
 				edit: writable && can(ctx.actor, 'issue:edit', res),

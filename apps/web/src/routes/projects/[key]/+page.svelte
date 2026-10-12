@@ -47,7 +47,7 @@
 			<label class="label text-[13px]" for="filter-assignee">担当者</label>
 			<select class="select" id="filter-assignee" name="assignee">
 				<option value="">すべて</option>
-				<option value="none" selected={data.filters.assigneeId === 'none'}>未割り当て</option>
+				<option value="none" selected={data.filters.assigneeId === 'none'}>未割当</option>
 				{#each data.assignees as u (u.id)}
 					<option value={u.id} selected={data.filters.assigneeId === u.id}>{u.name}</option>
 				{/each}
@@ -98,7 +98,7 @@
 						<span role="cell"><StatusPill status={i.status} /></span>
 						<span role="cell"><PriorityPill priority={i.priority} /></span>
 						<span role="cell" class:text-muted-foreground={!i.assigneeName} class="truncate"
-							>{i.assigneeName ?? '未割り当て'}</span
+							>{i.assigneeName ?? '未割当'}</span
 						>
 						<span
 							role="cell"

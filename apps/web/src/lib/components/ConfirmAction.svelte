@@ -84,7 +84,7 @@
 		max-width: 480px;
 		padding: 24px;
 		border: 1px solid var(--border);
-		border-radius: 16px;
+		border-radius: 6px;
 		background: var(--background);
 		color: var(--foreground);
 		box-shadow: 0 16px 48px rgb(0 0 0 / 0.2);

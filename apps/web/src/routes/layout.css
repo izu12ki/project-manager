@@ -5,100 +5,97 @@
 /* ---------- tokens ---------- */
 
 :root {
-	--background: oklch(0.985 0.004 265);
-	--foreground: oklch(0.27 0.025 265);
+	--background: oklch(0.972 0.004 255);
+	--foreground: oklch(0.24 0.02 255);
 	--card: oklch(1 0 0);
-	--card-foreground: oklch(0.27 0.025 265);
+	--card-foreground: oklch(0.24 0.02 255);
 	--popover: oklch(1 0 0);
-	--primary: oklch(0.52 0.12 268);
+	--primary: oklch(0.48 0.13 258);
 	--primary-foreground: oklch(0.99 0 0);
-	--primary-soft: oklch(0.955 0.025 268);
-	--primary-ink: oklch(0.48 0.12 268);
-	--secondary: oklch(0.96 0.008 265);
-	--secondary-foreground: oklch(0.35 0.025 265);
-	--muted: oklch(0.965 0.007 265);
-	--muted-foreground: oklch(0.5 0.02 265);
-	--accent: oklch(0.96 0.014 268);
-	--destructive: oklch(0.6 0.17 25);
-	--border: oklch(0.92 0.01 265);
-	--input: oklch(0.89 0.012 265);
-	--ring: oklch(0.65 0.12 268);
-	--ring-soft: oklch(0.65 0.12 268 / 0.2);
-	--sidebar: oklch(0.965 0.014 268);
-	--col: oklch(0.97 0.006 265);
-	--col-over: oklch(0.945 0.022 268);
-	--c-gray: oklch(0.62 0.015 265);
-	--c-blue: oklch(0.64 0.11 248);
-	--c-amber: oklch(0.74 0.11 75);
-	--c-green: oklch(0.66 0.1 155);
-	--c-pink: oklch(0.68 0.12 350);
-	--c-teal: oklch(0.67 0.08 195);
-	--c-orange: oklch(0.7 0.12 50);
-	--overlay: oklch(0.25 0.03 265 / 0.4);
-	--shadow-card: 0 1px 2px oklch(0.3 0.05 265 / 0.05), 0 8px 24px -12px oklch(0.3 0.05 265 / 0.14);
+	--primary-soft: oklch(0.94 0.03 258);
+	--primary-ink: oklch(0.42 0.13 258);
+	--secondary: oklch(0.95 0.006 255);
+	--secondary-foreground: oklch(0.32 0.02 255);
+	--muted: oklch(0.962 0.005 255);
+	--muted-foreground: oklch(0.46 0.02 255);
+	--accent: oklch(0.95 0.012 258);
+	--destructive: oklch(0.56 0.2 25);
+	--border: oklch(0.88 0.008 255);
+	--input: oklch(0.8 0.01 255);
+	--ring: oklch(0.55 0.13 258);
+	--ring-soft: oklch(0.55 0.13 258 / 0.22);
+	--sidebar: oklch(0.44 0.11 260);
+	--col: oklch(0.955 0.006 255);
+	--col-over: oklch(0.93 0.025 258);
+	--c-gray: oklch(0.56 0.02 265);
+	--c-blue: oklch(0.58 0.15 248);
+	--c-amber: oklch(0.7 0.14 72);
+	--c-green: oklch(0.6 0.13 155);
+	--c-pink: oklch(0.62 0.17 350);
+	--c-teal: oklch(0.61 0.1 195);
+	--c-orange: oklch(0.66 0.16 48);
+	--overlay: oklch(0.2 0.02 255 / 0.45);
 	--shadow-pop: 0 8px 24px rgb(0 0 0 / 0.12);
 	color-scheme: light;
 }
 
 [data-theme='dark'] {
-	--background: oklch(0.18 0.015 265);
-	--foreground: oklch(0.95 0.008 265);
-	--card: oklch(0.215 0.016 265);
-	--card-foreground: oklch(0.95 0.008 265);
-	--popover: oklch(0.235 0.018 265);
-	--primary: oklch(0.74 0.11 268);
-	--primary-foreground: oklch(0.18 0.03 268);
-	--primary-soft: oklch(0.29 0.045 268);
-	--primary-ink: oklch(0.83 0.08 268);
-	--secondary: oklch(0.27 0.018 265);
-	--secondary-foreground: oklch(0.9 0.01 265);
-	--muted: oklch(0.25 0.016 265);
-	--muted-foreground: oklch(0.72 0.015 265);
-	--accent: oklch(0.28 0.025 268);
-	--destructive: oklch(0.7 0.15 22);
-	--border: oklch(1 0 0 / 9%);
-	--input: oklch(1 0 0 / 14%);
-	--ring: oklch(0.74 0.11 268);
-	--ring-soft: oklch(0.74 0.11 268 / 0.3);
-	--sidebar: oklch(0.15 0.018 268);
-	--col: oklch(0.2 0.015 265);
-	--col-over: oklch(0.26 0.035 268);
-	--c-gray: oklch(0.7 0.015 265);
-	--c-blue: oklch(0.75 0.09 248);
-	--c-amber: oklch(0.82 0.09 75);
-	--c-green: oklch(0.77 0.09 155);
-	--c-pink: oklch(0.76 0.11 350);
-	--c-teal: oklch(0.77 0.07 195);
-	--c-orange: oklch(0.79 0.1 50);
+	--background: oklch(0.18 0.012 255);
+	--foreground: oklch(0.95 0.006 255);
+	--card: oklch(0.22 0.014 255);
+	--card-foreground: oklch(0.95 0.006 255);
+	--popover: oklch(0.24 0.016 255);
+	--primary: oklch(0.7 0.13 258);
+	--primary-foreground: oklch(0.17 0.03 258);
+	--primary-soft: oklch(0.29 0.05 258);
+	--primary-ink: oklch(0.82 0.09 258);
+	--secondary: oklch(0.27 0.014 255);
+	--secondary-foreground: oklch(0.9 0.008 255);
+	--muted: oklch(0.25 0.012 255);
+	--muted-foreground: oklch(0.74 0.014 255);
+	--accent: oklch(0.28 0.022 258);
+	--destructive: oklch(0.7 0.17 22);
+	--border: oklch(1 0 0 / 12%);
+	--input: oklch(1 0 0 / 20%);
+	--ring: oklch(0.7 0.13 258);
+	--ring-soft: oklch(0.7 0.13 258 / 0.3);
+	--sidebar: oklch(0.27 0.06 260);
+	--col: oklch(0.2 0.012 255);
+	--col-over: oklch(0.26 0.03 258);
+	--c-gray: oklch(0.7 0.02 265);
+	--c-blue: oklch(0.73 0.12 248);
+	--c-amber: oklch(0.8 0.12 75);
+	--c-green: oklch(0.75 0.12 155);
+	--c-pink: oklch(0.74 0.14 350);
+	--c-teal: oklch(0.75 0.09 195);
+	--c-orange: oklch(0.77 0.13 50);
 	--overlay: oklch(0 0 0 / 0.6);
 	color-scheme: dark;
 }
 
-/* サイドバー内だけ半透明の面と淡いアクセントに切り替える */
+/* サイドバーは濃紺の面に白文字。内側のトークンをまとめて差し替える */
 [data-sb] {
-	--foreground: oklch(0.28 0.03 268);
-	--muted-foreground: oklch(0.5 0.03 268);
-	--sidebar-accent: oklch(0.55 0.08 268 / 8%);
-	--sb-active: oklch(1 0 0);
-	--background: oklch(1 0 0 / 70%);
-	--border: oklch(0.55 0.05 268 / 15%);
-	--accent: oklch(0.55 0.08 268 / 10%);
-	--muted: oklch(0.55 0.08 268 / 10%);
+	--foreground: oklch(0.99 0 0);
+	--muted-foreground: oklch(0.87 0.035 260);
+	--sidebar-accent: oklch(1 0 0 / 10%);
+	--sb-active: oklch(1 0 0 / 20%);
+	--background: oklch(1 0 0 / 8%);
+	--border: oklch(1 0 0 / 24%);
+	--accent: oklch(1 0 0 / 14%);
+	--popover: oklch(0.36 0.09 260);
+	--muted: oklch(1 0 0 / 14%);
+	--card: oklch(0.44 0.11 260);
+	--primary: oklch(0.99 0 0);
+	--primary-foreground: oklch(0.44 0.11 260);
 }
 [data-theme='dark'] [data-sb] {
-	--foreground: oklch(0.95 0.01 268);
-	--muted-foreground: oklch(0.74 0.025 268);
-	--sidebar-accent: oklch(1 0 0 / 7%);
-	--sb-active: oklch(1 0 0 / 12%);
-	--background: oklch(1 0 0 / 6%);
-	--border: oklch(1 0 0 / 12%);
-	--accent: oklch(1 0 0 / 10%);
-	--popover: oklch(0.25 0.025 268);
-	--muted: oklch(1 0 0 / 10%);
+	--popover: oklch(0.32 0.06 260);
+	--card: oklch(0.27 0.06 260);
+	--primary-foreground: oklch(0.27 0.06 260);
 }
 
 @theme inline {
-	--font-sans: 'Plus Jakarta Sans', 'IBM Plex Sans JP', system-ui, sans-serif;
+	--font-sans: 'Noto Sans JP', 'Hiragino Sans', system-ui, sans-serif;
 	--font-mono: 'JetBrains Mono', ui-monospace, monospace;
 	--color-background: var(--background);
 	--color-foreground: var(--foreground);
@@ -139,6 +136,9 @@
 		color: inherit;
 		text-decoration: none;
 	}
+	a:hover {
+		text-decoration: underline;
+	}
 	:focus-visible {
 		outline: 2px solid var(--ring);
 		outline-offset: 2px;
@@ -157,10 +157,9 @@
 @layer components {
 	.page-title {
 		margin: 0;
-		font-size: 28px;
+		font-size: 20px;
 		font-weight: 700;
-		letter-spacing: -0.025em;
-		line-height: 1.2;
+		line-height: 1.4;
 		text-wrap: pretty;
 	}
 	.page-desc {
@@ -177,9 +176,9 @@
 		align-items: center;
 		justify-content: center;
 		gap: 8px;
-		height: 36px;
+		height: 32px;
 		padding: 0 16px;
-		border-radius: 10px;
+		border-radius: 4px;
 		border: 1px solid transparent;
 		background: transparent;
 		font-weight: 600;
@@ -187,9 +186,11 @@
 		cursor: pointer;
 		text-decoration: none;
 		transition:
-			transform 0.15s ease,
 			filter 0.15s ease,
 			background 0.15s ease;
+	}
+	.btn:hover {
+		text-decoration: none;
 	}
 	.btn:disabled {
 		opacity: 0.5;
@@ -202,31 +203,30 @@
 	}
 	.btn-primary {
 		border: none;
-		background: linear-gradient(
-			180deg,
-			color-mix(in oklch, var(--primary) 95%, white),
-			var(--primary)
-		);
+		background: var(--primary);
 		color: var(--primary-foreground);
-		letter-spacing: 0.01em;
-		box-shadow:
-			inset 0 1px 0 oklch(1 0 0 / 0.25),
-			0 1px 2px oklch(0.35 0.08 268 / 0.18),
-			0 6px 14px -8px oklch(0.5 0.12 268 / 0.4);
 	}
 	.btn-primary:not(:disabled):hover {
-		filter: brightness(1.07);
-		transform: translateY(-1px);
+		filter: brightness(1.12);
 	}
 	.btn-primary:not(:disabled):active {
-		filter: brightness(0.97);
-		transform: none;
+		filter: brightness(0.95);
 	}
 	.btn-outline {
 		border-color: var(--border);
 		background: var(--card);
 		color: var(--foreground);
-		box-shadow: 0 1px 2px oklch(0.3 0.05 265 / 0.06);
+	}
+	/* 主ボタンと並べる副ボタン（青枠） */
+	.btn-secondary {
+		min-width: 96px;
+		border-color: var(--primary);
+		background: var(--card);
+		color: var(--primary-ink);
+		font-weight: 700;
+	}
+	.btn-secondary:not(:disabled):hover {
+		background: var(--accent);
 	}
 	.btn-outline:not(:disabled):hover,
 	.btn-ghost:not(:disabled):hover,
@@ -253,7 +253,7 @@
 		font-weight: 500;
 	}
 	.btn-destructive:not(:disabled):hover {
-		filter: brightness(1.07);
+		filter: brightness(1.12);
 	}
 	.btn-sm {
 		height: 32px;
@@ -263,7 +263,7 @@
 	.btn-xs {
 		height: 28px;
 		padding: 0 10px;
-		border-radius: 6px;
+		border-radius: 4px;
 		font-size: 13px;
 	}
 	.icon-btn {
@@ -287,10 +287,10 @@
 		height: 16px;
 	}
 	.icon-btn-bordered {
-		width: 36px;
-		height: 36px;
+		width: 32px;
+		height: 32px;
 		border: 1px solid var(--border);
-		border-radius: 10px;
+		border-radius: 4px;
 		background: var(--background);
 		color: var(--foreground);
 	}
@@ -327,9 +327,9 @@
 	.textarea {
 		width: 100%;
 		min-width: 0;
-		height: 36px;
+		height: 32px;
 		padding: 0 12px;
-		border-radius: 10px;
+		border-radius: 4px;
 		border: 1px solid var(--input);
 		background: transparent;
 		color: var(--foreground);
@@ -349,6 +349,7 @@
 		background: var(--background)
 			url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238a8fa3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")
 			no-repeat right 10px center;
+		background-color: var(--card);
 	}
 	.select option {
 		background: var(--popover);
@@ -380,9 +381,8 @@
 	.card {
 		background: var(--card);
 		color: var(--card-foreground);
-		border: 1px solid color-mix(in oklch, var(--border) 55%, transparent);
-		border-radius: 20px;
-		box-shadow: var(--shadow-card);
+		border: 1px solid var(--border);
+		border-radius: 6px;
 		display: flex;
 		flex-direction: column;
 		gap: 20px;
@@ -403,7 +403,7 @@
 	}
 	.empty {
 		border: 1px dashed var(--border);
-		border-radius: 16px;
+		border-radius: 6px;
 		padding: 56px 24px;
 		display: flex;
 		flex-direction: column;
@@ -414,7 +414,7 @@
 	.empty-icon {
 		width: 40px;
 		height: 40px;
-		border-radius: 10px;
+		border-radius: 4px;
 		background: var(--muted);
 		display: grid;
 		place-items: center;
@@ -432,7 +432,7 @@
 		grid-template-columns: 16px 1fr;
 		gap: 2px 12px;
 		padding: 12px 16px;
-		border-radius: 10px;
+		border-radius: 4px;
 		border: 1px solid var(--border);
 		background: var(--card);
 	}
@@ -448,6 +448,41 @@
 		font-weight: 500;
 	}
 
+	/* 属性テーブル（ラベル + 入力の行を罫線で区切る） */
+	.prop-list {
+		display: grid;
+		align-content: start;
+		border-top: 1px solid var(--border);
+	}
+	.prop-row {
+		display: grid;
+		grid-template-columns: 84px minmax(0, 1fr);
+		align-items: center;
+		gap: 12px;
+		padding: 10px 0;
+		border-bottom: 1px solid var(--border);
+	}
+	.prop-row > label,
+	.prop-label {
+		font-weight: 500;
+		color: var(--muted-foreground);
+	}
+	/* 起票フォーム用の広い版 */
+	.prop-list-wide .prop-row {
+		grid-template-columns: clamp(88px, 30%, 180px) minmax(0, 1fr);
+		min-height: 52px;
+		padding: 10px;
+	}
+	.prop-list-wide .prop-row > label {
+		font-weight: 400;
+	}
+	.prop-list-wide .select {
+		max-width: 240px;
+	}
+	.prop-list-wide .input[type='date'] {
+		width: 160px;
+	}
+
 	/* pills & avatars */
 	.pill {
 		--c: var(--c-gray);
@@ -456,15 +491,15 @@
 		gap: 6px;
 		height: 22px;
 		padding: 0 9px;
-		border-radius: 999px;
+		border-radius: 4px;
 		border: 1px solid transparent;
 		font-size: 12px;
 		font-weight: 500;
 		white-space: nowrap;
 	}
 	.pill-tint {
-		background: color-mix(in oklch, var(--c) 12%, transparent);
-		color: color-mix(in oklch, var(--c) 70%, var(--foreground));
+		background: color-mix(in oklch, var(--c) 16%, transparent);
+		color: color-mix(in oklch, var(--c) 75%, var(--foreground));
 	}
 	.pill-status {
 		height: 24px;
@@ -509,17 +544,17 @@
 		place-items: center;
 		font-weight: 700;
 		font-size: calc(var(--size) * 0.42);
-		background: color-mix(in oklch, var(--c) 18%, var(--card));
+		background: color-mix(in oklch, var(--c) 24%, var(--card));
 		color: color-mix(in oklch, var(--c) 60%, var(--foreground));
 	}
 	.avatar-square {
-		border-radius: 10px;
+		border-radius: 4px;
 	}
 
 	/* list tables */
 	.grid-table {
 		border: 1px solid var(--border);
-		border-radius: 16px;
+		border-radius: 6px;
 		overflow-x: auto;
 		background: var(--card);
 	}
@@ -585,7 +620,7 @@
 	}
 	.markdown pre {
 		overflow-x: auto;
-		border-radius: 10px;
+		border-radius: 4px;
 		background: var(--muted);
 		padding: 12px;
 	}

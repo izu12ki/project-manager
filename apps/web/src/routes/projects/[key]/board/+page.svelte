@@ -132,18 +132,14 @@
 									<span class="avatar" style="--size: 20px" style:--c={colorFor(card.assigneeName)}
 										>{card.assigneeName?.[0] ?? '–'}</span
 									>
-									<span class="truncate">{card.assigneeName ?? '未割り当て'}</span>
+									<span class="truncate">{card.assigneeName ?? '未割当'}</span>
 								</span>
-								{#if card.dueDate}
-									<span
-										class="flex shrink-0 items-center gap-1"
-										style:color={isDueAlert(card.dueDate, status)
-											? 'var(--destructive)'
-											: undefined}
-									>
-										<Calendar size={12} />{formatDue(card.dueDate)}
-									</span>
-								{/if}
+								<span
+									class="flex shrink-0 items-center gap-1"
+									style:color={isDueAlert(card.dueDate, status) ? 'var(--destructive)' : undefined}
+								>
+									<Calendar size={12} />{formatDue(card.dueDate)}
+								</span>
 							</div>
 						</li>
 					{/each}
@@ -165,7 +161,7 @@
 		background: var(--col);
 		border: 1px solid var(--border);
 		border-top: 3px solid var(--c);
-		border-radius: 16px;
+		border-radius: 6px;
 		padding: 12px;
 		display: flex;
 		flex-direction: column;
@@ -187,9 +183,9 @@
 		align-items: center;
 		height: 20px;
 		padding: 0 8px;
-		border-radius: 999px;
-		background: color-mix(in oklch, var(--c) 12%, transparent);
-		color: color-mix(in oklch, var(--c) 70%, var(--foreground));
+		border-radius: 4px;
+		background: color-mix(in oklch, var(--c) 16%, transparent);
+		color: color-mix(in oklch, var(--c) 75%, var(--foreground));
 		font-size: 12px;
 	}
 	ul {
@@ -201,21 +197,20 @@
 		flex-direction: column;
 		gap: 10px;
 		min-height: 80px;
-		border-radius: 10px;
+		border-radius: 4px;
 	}
 	.card-item {
 		background: var(--card);
 		border: 1px solid var(--border);
-		border-radius: 10px;
-		box-shadow: var(--shadow-card);
+		border-radius: 4px;
 		padding: 12px;
 		display: grid;
 		gap: 10px;
 		cursor: grab;
-		transition: box-shadow 0.15s ease;
+		transition: border-color 0.15s ease;
 	}
 	.card-item:hover {
-		box-shadow: 0 14px 28px -14px oklch(0.35 0.12 268 / 0.4);
+		border-color: var(--primary);
 	}
 	.title {
 		font-weight: 500;

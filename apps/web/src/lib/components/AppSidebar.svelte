@@ -68,7 +68,7 @@
 			{#each active as p (p.key)}
 				<a
 					href={`/projects/${p.key}`}
-					class="item"
+					class="item row"
 					aria-current={isCurrent(p.key) ? 'page' : undefined}
 				>
 					<span class="proj-icon" style:--c={colorFor(p.key)}>{p.key[0]}</span>
@@ -81,7 +81,7 @@
 				<div class="group-label">管理</div>
 				<a
 					href="/admin/users"
-					class="item"
+					class="item row"
 					aria-current={path.startsWith('/admin/users') ? 'page' : undefined}
 				>
 					<Users size={16} class="muted-icon" />ユーザー
@@ -98,9 +98,10 @@
 					<span class="sub">{user.email}</span>
 				</div>
 				<div class="sep"></div>
-				<a href="/account" class="item"><CircleUser size={16} class="muted-icon" />アカウント</a>
+				<a href="/account" class="item row"><CircleUser size={16} class="muted-icon" />アカウント</a
+				>
 				<form method="POST" action="/logout" style="margin: 0">
-					<button type="submit" class="item"
+					<button type="submit" class="item row"
 						><LogOut size={16} class="muted-icon" />ログアウト</button
 					>
 				</form>
@@ -128,25 +129,15 @@
 <style>
 	.sidebar {
 		view-transition-name: sidebar;
-		width: 256px;
+		width: 220px;
 		flex-shrink: 0;
 		position: sticky;
-		top: 10px;
-		height: calc(100vh - 20px);
-		margin: 10px 0 10px 10px;
+		top: 0;
+		height: 100vh;
 		display: flex;
 		flex-direction: column;
-		border-radius: 18px;
 		color: var(--foreground);
 		background: var(--sidebar);
-		background-image: radial-gradient(
-			120% 50% at 0% 0%,
-			oklch(0.75 0.1 268 / 0.14),
-			transparent 65%
-		);
-		box-shadow:
-			0 1px 2px oklch(0.3 0.04 268 / 0.05),
-			0 12px 32px -18px oklch(0.3 0.06 270 / 0.3);
 		z-index: 40;
 	}
 	:global([data-sidebar='closed']) .sidebar {
@@ -161,8 +152,6 @@
 			top: 0;
 			width: 288px;
 			height: 100vh;
-			margin: 0;
-			border-radius: 0;
 			transform: translateX(-100%);
 			transition: transform 0.2s ease;
 			box-shadow: none;
@@ -194,7 +183,7 @@
 		align-items: center;
 		gap: 10px;
 		padding: 8px;
-		border-radius: 10px;
+		border-radius: 4px;
 	}
 	.brand:hover,
 	.user:hover {
@@ -204,7 +193,7 @@
 		width: 32px;
 		height: 32px;
 		flex-shrink: 0;
-		border-radius: 10px;
+		border-radius: 4px;
 		background: var(--primary);
 		color: var(--primary-foreground);
 		display: grid;
@@ -213,10 +202,9 @@
 	.nav {
 		flex: 1;
 		overflow-y: auto;
-		padding: 0 8px;
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: 12px;
 	}
 	.group {
 		display: grid;
@@ -247,6 +235,12 @@
 	.item:hover {
 		background: var(--sidebar-accent);
 	}
+	/* プロジェクト・管理の行は端まで塗る 40px 行 */
+	.row {
+		height: 40px;
+		padding: 0 12px;
+		border-radius: 0;
+	}
 	.item[aria-current='page'] {
 		background: var(--sb-active);
 		font-weight: 500;
@@ -256,7 +250,7 @@
 		height: 22px;
 		flex-shrink: 0;
 		border-radius: 6px;
-		background: color-mix(in oklch, var(--c) 18%, var(--card));
+		background: color-mix(in oklch, var(--c) 24%, var(--card));
 		color: color-mix(in oklch, var(--c) 60%, var(--foreground));
 		display: grid;
 		place-items: center;
@@ -278,7 +272,7 @@
 		gap: 8px;
 		padding: 8px;
 		border: none;
-		border-radius: 10px;
+		border-radius: 4px;
 		background: transparent;
 		text-align: left;
 		cursor: pointer;
@@ -294,7 +288,7 @@
 		bottom: calc(100% - 4px);
 		padding: 4px;
 		border: 1px solid var(--border);
-		border-radius: 10px;
+		border-radius: 4px;
 		background: var(--popover);
 		box-shadow: var(--shadow-pop);
 		z-index: 60;

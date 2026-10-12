@@ -139,14 +139,9 @@
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		background-image: radial-gradient(
-			70% 35% at 100% 0%,
-			color-mix(in oklch, var(--primary) 5%, transparent),
-			transparent 70%
-		);
 	}
 	.topbar {
-		height: 56px;
+		height: 48px;
 		display: flex;
 		align-items: center;
 		gap: 8px;
@@ -155,8 +150,7 @@
 		position: sticky;
 		top: 0;
 		z-index: 20;
-		background: color-mix(in oklch, var(--background) 75%, transparent);
-		backdrop-filter: blur(14px) saturate(1.4);
+		background: var(--card);
 		view-transition-name: topbar;
 	}
 	.divider {
@@ -183,7 +177,7 @@
 	}
 	.content {
 		flex: 1;
-		padding: 32px clamp(16px, 4vw, 40px) 96px;
+		padding: 20px clamp(16px, 2.5vw, 32px) 96px;
 	}
 	.container {
 		max-width: 1240px;
@@ -198,17 +192,6 @@
 		justify-content: center;
 		padding: 24px;
 		position: relative;
-		background-image:
-			radial-gradient(
-				60% 50% at 20% 10%,
-				color-mix(in oklch, var(--primary) 22%, transparent),
-				transparent 70%
-			),
-			radial-gradient(
-				50% 45% at 85% 90%,
-				color-mix(in oklch, var(--c-pink) 18%, transparent),
-				transparent 70%
-			);
 	}
 	.auth-theme {
 		position: absolute;

@@ -47,7 +47,8 @@ export const getIssueDetail = query(IssueRef, ({ key, number }) => {
 			issue: { ...issue, descriptionHtml: renderMarkdown(issue.description) },
 			assignees: assignable,
 			categories,
-			milestones,
+			// 完了済みは選択肢から外す。ただし現在設定されているものは残す
+			milestones: milestones.filter((m) => !m.completedAt || m.id === issue.milestoneId),
 			perms: {
 				writable,
 				edit: writable && can(ctx.actor, 'issue:edit', res),

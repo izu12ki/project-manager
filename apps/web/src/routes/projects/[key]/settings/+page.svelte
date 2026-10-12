@@ -1,6 +1,15 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
-	import { Archive, ArchiveRestore, Flag, Mail, Tag } from '@lucide/svelte';
+	import { enhance, type SubmitFunction } from '$app/forms';
+	import {
+		Archive,
+		ArchiveRestore,
+		CircleCheck,
+		Flag,
+		Mail,
+		Pencil,
+		RotateCcw,
+		Tag
+	} from '@lucide/svelte';
 	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
 	import FormAlert from '$lib/components/FormAlert.svelte';
 	import InviteLinkBox from '$lib/components/InviteLinkBox.svelte';
@@ -15,6 +24,14 @@
 	$effect(() => {
 		if (form?.saved) toast.success('保存しました');
 	});
+
+	/** 編集フォームを保存できたら、開いていた details を閉じる */
+	const closeOnSuccess: SubmitFunction =
+		({ formElement }) =>
+		async ({ result, update }) => {
+			await update({ reset: false });
+			if (result.type === 'success') formElement.closest('details')?.removeAttribute('open');
+		};
 </script>
 
 <section class="grid w-full max-w-[800px] gap-6">
@@ -179,8 +196,36 @@
 			<ul class="list">
 				{#each data.categories as c (c.id)}
 					<li class="option-row">
-						<Tag size={16} class="shrink-0 text-muted-foreground" />
-						<span class="min-w-0 flex-1 truncate">{c.name}</span>
+						<Tag size={16} class="row-icon shrink-0 text-muted-foreground" />
+						{#if writable}
+							<details class="edit">
+								<summary>
+									<span class="truncate">{c.name}</span>
+									<Pencil size={14} class="shrink-0 text-muted-foreground" />
+									<span class="sr-only">を編集</span>
+								</summary>
+								<form
+									method="POST"
+									action="?/updateCategory"
+									use:enhance={closeOnSuccess}
+									class="edit-form"
+									style="grid-template-columns: minmax(0, 1fr) auto"
+								>
+									<input type="hidden" name="id" value={c.id} />
+									<input
+										class="input"
+										name="name"
+										aria-label={`${c.name} の名称`}
+										required
+										maxlength={50}
+										value={c.name}
+									/>
+									<button type="submit" class="btn btn-outline">保存</button>
+								</form>
+							</details>
+						{:else}
+							<span class="min-w-0 flex-1 truncate">{c.name}</span>
+						{/if}
 						{#if writable}
 							<ConfirmAction
 								action="?/deleteCategory"
@@ -225,19 +270,69 @@
 		<div class="card-head">
 			<h2 class="card-title">マイルストーン</h2>
 			<p class="card-desc">
-				リリースなどの節目です。削除すると、設定されていた課題は未設定になります
+				リリースなどの節目です。完了にすると課題の選択肢から外れます。削除すると、設定されていた課題は未設定になります
 			</p>
 		</div>
 		{#if data.milestones.length > 0}
 			<ul class="list">
 				{#each data.milestones as m (m.id)}
 					<li class="option-row">
-						<Flag size={16} class="shrink-0 text-muted-foreground" />
-						<span class="min-w-0 flex-1 truncate">{m.name}</span>
-						<span class="text-[13px] text-muted-foreground tabular-nums"
-							>{m.releaseDate ? `${m.releaseDate.replaceAll('-', '/')} リリース` : '日付なし'}</span
+						{#if m.completedAt}
+							<CircleCheck size={16} class="row-icon shrink-0" style="color: var(--c-green)" />
+						{:else}
+							<Flag size={16} class="row-icon shrink-0 text-muted-foreground" />
+						{/if}
+						{#if writable}
+							<details class="edit">
+								<summary>
+									<span class="truncate" class:text-muted-foreground={m.completedAt}>{m.name}</span>
+									<Pencil size={14} class="shrink-0 text-muted-foreground" />
+									<span class="sr-only">を編集</span>
+								</summary>
+								<form
+									method="POST"
+									action="?/updateMilestone"
+									use:enhance={closeOnSuccess}
+									class="edit-form"
+									style="grid-template-columns: minmax(0, 1fr) 160px auto"
+								>
+									<input type="hidden" name="id" value={m.id} />
+									<input
+										class="input"
+										name="name"
+										aria-label={`${m.name} の名称`}
+										required
+										maxlength={50}
+										value={m.name}
+									/>
+									<input
+										class="input"
+										name="releaseDate"
+										type="date"
+										aria-label={`${m.name} の予定日`}
+										value={m.releaseDate ?? ''}
+									/>
+									<button type="submit" class="btn btn-outline">保存</button>
+								</form>
+							</details>
+						{:else}
+							<span class="min-w-0 flex-1 truncate" class:text-muted-foreground={m.completedAt}
+								>{m.name}</span
+							>
+						{/if}
+						<span class="row-meta text-[13px] text-muted-foreground tabular-nums"
+							>{m.completedAt ? '完了 · ' : ''}{m.releaseDate
+								? `${m.releaseDate.replaceAll('-', '/')} リリース`
+								: '日付なし'}</span
 						>
 						{#if writable}
+							<form method="POST" action="?/completeMilestone" use:enhance class="row-meta">
+								<input type="hidden" name="id" value={m.id} />
+								<input type="hidden" name="completed" value={String(!m.completedAt)} />
+								<button type="submit" class="btn btn-ghost btn-xs">
+									{#if m.completedAt}<RotateCcw />未完了に戻す{:else}<CircleCheck />完了にする{/if}
+								</button>
+							</form>
 							<ConfirmAction
 								action="?/deleteMilestone"
 								fields={{ id: m.id }}
@@ -335,6 +430,45 @@
 		min-height: 44px;
 		padding: 6px 0;
 		border-bottom: 1px solid var(--border);
+	}
+	.option-row:has(details[open]) {
+		align-items: flex-start;
+	}
+	.option-row:has(details[open]) :global(.row-icon),
+	.option-row:has(details[open]) .row-meta {
+		margin-top: 10px;
+	}
+	.edit {
+		flex: 1;
+		min-width: 0;
+	}
+	.edit summary {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		width: fit-content;
+		max-width: 100%;
+		cursor: pointer;
+		list-style: none;
+		border-radius: 4px;
+	}
+	.edit summary::-webkit-details-marker {
+		display: none;
+	}
+	.edit summary:hover {
+		text-decoration: underline;
+	}
+	.edit summary:focus-visible {
+		outline: 2px solid var(--ring);
+		outline-offset: 2px;
+	}
+	.edit[open] summary {
+		margin: 10px 0 8px;
+	}
+	.edit-form {
+		display: grid;
+		gap: 8px;
+		padding-bottom: 8px;
 	}
 	.invite {
 		display: flex;

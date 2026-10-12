@@ -24,7 +24,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			canSetStatus: can(ctx.actor, 'issue:changeStatus', { assigneeId: null }),
 			assignees,
 			categories,
-			milestones
+			milestones: milestones.filter((m) => !m.completedAt)
 		};
 	});
 };

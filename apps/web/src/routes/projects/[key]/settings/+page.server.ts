@@ -13,7 +13,10 @@ import {
 	deleteCategory,
 	deleteMilestone,
 	listCategories,
-	listMilestones
+	listMilestones,
+	setMilestoneCompleted,
+	updateCategory,
+	updateMilestone
 } from '$lib/server/services/issue-fields';
 import {
 	addMember,
@@ -97,6 +100,12 @@ export const actions: Actions = {
 			await createCategory(appContext(locals), params.key, input);
 		});
 	},
+	updateCategory: async ({ request, locals, params }) => {
+		const { id = '', ...input } = formObject(await request.formData());
+		return handleAction(async () => {
+			await updateCategory(appContext(locals), params.key, id, input);
+		});
+	},
 	deleteCategory: async ({ request, locals, params }) => {
 		const id = await idOf(request);
 		return handleAction(async () => {
@@ -107,6 +116,20 @@ export const actions: Actions = {
 		const input = formObject(await request.formData());
 		return handleAction(async () => {
 			await createMilestone(appContext(locals), params.key, input);
+		});
+	},
+	updateMilestone: async ({ request, locals, params }) => {
+		const { id = '', ...input } = formObject(await request.formData());
+		return handleAction(async () => {
+			await updateMilestone(appContext(locals), params.key, id, input);
+		});
+	},
+	completeMilestone: async ({ request, locals, params }) => {
+		const fd = await request.formData();
+		const id = String(fd.get('id') ?? '');
+		const completed = fd.get('completed') === 'true';
+		return handleAction(async () => {
+			await setMilestoneCompleted(appContext(locals), params.key, id, completed);
 		});
 	},
 	deleteMilestone: async ({ request, locals, params }) => {

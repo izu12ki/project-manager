@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Inbox, SearchX } from '@lucide/svelte';
+	import { Flag, Inbox, Search, SearchX } from '@lucide/svelte';
 	import PriorityPill from '$lib/components/PriorityPill.svelte';
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import {
@@ -8,15 +8,14 @@
 		STATUSES,
 		STATUS_LABEL,
 		formatDue,
-		isDueAlert
+		isDueAlert,
+		milestoneLabel
 	} from '$lib/labels';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
 	const base = $derived(`/projects/${data.project.key}`);
-	const filtering = $derived(
-		!!(data.filters.status || data.filters.priority || data.filters.assigneeId)
-	);
+	const filtering = $derived(Object.values(data.filters).some(Boolean));
 </script>
 
 <section class="grid gap-4">
@@ -25,6 +24,21 @@
 		class="flex flex-wrap items-end gap-3"
 		onchange={(e) => e.currentTarget.requestSubmit()}
 	>
+		<div class="field w-56 gap-1.5">
+			<label class="label text-[13px]" for="filter-q">キーワード</label>
+			<div class="search">
+				<Search size={16} class="search-icon" />
+				<input
+					class="input"
+					id="filter-q"
+					name="q"
+					type="search"
+					maxlength={200}
+					placeholder="タイトル・課題キー"
+					value={data.filters.q ?? ''}
+				/>
+			</div>
+		</div>
 		<div class="field w-40 gap-1.5">
 			<label class="label text-[13px]" for="filter-status">ステータス</label>
 			<select class="select" id="filter-status" name="status">
@@ -53,6 +67,32 @@
 				{/each}
 			</select>
 		</div>
+		{#if data.categories.length > 0}
+			<div class="field w-40 gap-1.5">
+				<label class="label text-[13px]" for="filter-category">カテゴリー</label>
+				<select class="select" id="filter-category" name="category">
+					<option value="">すべて</option>
+					<option value="none" selected={data.filters.categoryId === 'none'}>未設定</option>
+					{#each data.categories as c (c.id)}
+						<option value={c.id} selected={data.filters.categoryId === c.id}>{c.name}</option>
+					{/each}
+				</select>
+			</div>
+		{/if}
+		{#if data.milestones.length > 0}
+			<div class="field w-48 gap-1.5">
+				<label class="label text-[13px]" for="filter-milestone">マイルストーン</label>
+				<select class="select" id="filter-milestone" name="milestone">
+					<option value="">すべて</option>
+					<option value="none" selected={data.filters.milestoneId === 'none'}>未設定</option>
+					{#each data.milestones as m (m.id)}
+						<option value={m.id} selected={data.filters.milestoneId === m.id}
+							>{milestoneLabel(m)}{m.completedAt ? '（完了）' : ''}</option
+						>
+					{/each}
+				</select>
+			</div>
+		{/if}
 		<noscript><button type="submit" class="btn btn-outline">絞り込む</button></noscript>
 		<span class="ml-auto pb-2 text-[13px] text-muted-foreground">{data.issues.length} 件</span>
 	</form>
@@ -77,14 +117,15 @@
 			{#if filtering}<a href={base} class="btn btn-outline">絞り込みを解除</a>{/if}
 		</div>
 	{:else}
-		<div class="grid-table" style="--cols: 96px minmax(240px, 1fr) 120px 80px 140px 88px">
-			<div role="table" aria-label="課題一覧" style="min-width: 760px">
+		<div class="grid-table" style="--cols: 96px minmax(240px, 1fr) 120px 80px 140px 140px 88px">
+			<div role="table" aria-label="課題一覧" style="min-width: 900px">
 				<div role="row" class="grid-table-head">
 					<span role="columnheader">キー</span>
 					<span role="columnheader">タイトル</span>
 					<span role="columnheader">ステータス</span>
 					<span role="columnheader">優先度</span>
 					<span role="columnheader">担当者</span>
+					<span role="columnheader">マイルストーン</span>
 					<span role="columnheader">期限</span>
 				</div>
 				{#each data.issues as i (i.id)}
@@ -92,14 +133,20 @@
 						<span role="cell" class="mono text-[13px] text-muted-foreground"
 							>{data.project.key}-{i.number}</span
 						>
-						<span role="cell">
-							<a href={`${base}/issues/${i.number}`} class="title">{i.title}</a>
+						<span role="cell" class="flex min-w-0 items-center gap-2">
+							<a href={`${base}/issues/${i.number}`} class="title truncate">{i.title}</a>
+							{#if i.categoryName}<span class="tag">{i.categoryName}</span>{/if}
 						</span>
 						<span role="cell"><StatusPill status={i.status} /></span>
 						<span role="cell"><PriorityPill priority={i.priority} /></span>
 						<span role="cell" class:text-muted-foreground={!i.assigneeName} class="truncate"
 							>{i.assigneeName ?? '未割当'}</span
 						>
+						<span role="cell" class="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+							{#if i.milestoneName}<Flag size={14} class="shrink-0" /><span class="truncate"
+									>{i.milestoneName}</span
+								>{:else}—{/if}
+						</span>
 						<span
 							role="cell"
 							class="tabular-nums"
@@ -124,6 +171,32 @@
 	}
 	.title {
 		font-weight: 500;
+	}
+	.tag {
+		flex-shrink: 0;
+		max-width: 10em;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		padding: 1px 8px;
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		font-size: 12px;
+		color: var(--muted-foreground);
+	}
+	.search {
+		position: relative;
+	}
+	.search :global(.search-icon) {
+		position: absolute;
+		left: 10px;
+		top: 50%;
+		transform: translateY(-50%);
+		color: var(--muted-foreground);
+		pointer-events: none;
+	}
+	.search .input {
+		padding-left: 32px;
 	}
 	/* 行全体をクリック可能にする */
 	.title::after {

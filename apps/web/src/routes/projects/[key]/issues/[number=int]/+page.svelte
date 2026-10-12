@@ -339,7 +339,7 @@
 					>
 						<option value="">未設定</option>
 						{#each detail.milestones as m (m.id)}
-							<option value={m.id}>{milestoneLabel(m)}</option>
+							<option value={m.id}>{milestoneLabel(m)}{m.completedAt ? '（完了）' : ''}</option>
 						{/each}
 					</select>
 				</div>

@@ -1,6 +1,4 @@
 <script lang="ts">
-	import { deserialize } from '$app/forms';
-	import { invalidateAll } from '$app/navigation';
 	import { Calendar, CircleAlert, X } from '@lucide/svelte';
 	import { dndzone, type DndEvent } from 'svelte-dnd-action';
 	import PriorityPill from '$lib/components/PriorityPill.svelte';
@@ -13,17 +11,19 @@
 		isDueAlert,
 		type Status
 	} from '$lib/labels';
+	import { getBoard, moveCard } from './board.remote';
 	import type { PageProps } from './$types';
 
-	let { data }: PageProps = $props();
+	let { data, params }: PageProps = $props();
+	const board = $derived(await getBoard(params.key));
 
-	type Columns = typeof data.columns;
+	type Columns = typeof board;
 	type Card = Columns[Status][number];
 
 	const clone = (c: Columns): Columns =>
 		Object.fromEntries(STATUSES.map((s) => [s, [...c[s]]])) as Columns;
 
-	let columns = $derived(clone(data.columns));
+	let columns = $derived(clone(board));
 	let snapshot: Columns | null = null;
 	let message = $state<string | null>(null);
 	let pending = $state(false);
@@ -43,36 +43,29 @@
 		snapshot = null;
 		pending = true;
 
-		const fd = new FormData();
-		fd.set('issueId', String(e.detail.info.id));
-		fd.set('status', status);
-		fd.set('beforeId', items[idx - 1]?.id ?? '');
-		fd.set('afterId', items[idx + 1]?.id ?? '');
-		let failure: string | null = null;
+		// 400/409 は業務エラーなのでサーバーのメッセージを出し、それ以外は汎用文言にする
+		const failure = (err: unknown) => {
+			const { status, body } = (err ?? {}) as { status?: number; body?: { message?: string } };
+			return (status === 400 || status === 409) && body?.message
+				? body.message
+				: 'この課題は移動できません';
+		};
 		try {
-			const res = await fetch('?/move', {
-				method: 'POST',
-				body: fd,
-				headers: { accept: 'application/json', 'x-sveltekit-action': 'true' }
+			// 移動と最新の列の再取得を 1 往復で行う（サーバー側で getBoard を refresh）
+			await moveCard({
+				key: params.key,
+				issueId: String(e.detail.info.id),
+				status,
+				beforeId: items[idx - 1]?.id ?? '',
+				afterId: items[idx + 1]?.id ?? ''
 			});
-			const result = deserialize(await res.text());
-			if (result.type !== 'success') {
-				failure =
-					result.type === 'failure' && typeof result.data?.message === 'string'
-						? result.data.message
-						: 'この課題は移動できません';
-			}
-		} catch {
-			failure = 'この課題は移動できません';
-		}
-		try {
-			if (failure !== null) {
-				if (before) columns = before;
-				message = failure;
-			}
-			await invalidateAll();
-		} catch {
-			// 再取得に失敗しても楽観表示を残さない（失敗時は上で巻き戻し済み）
+		} catch (err) {
+			if (before) columns = before;
+			message = failure(err);
+			// 失敗時は他の人の変更も反映されているかもしれないので取り直す
+			getBoard(params.key)
+				.refresh()
+				.catch(() => {});
 		} finally {
 			pending = false;
 		}

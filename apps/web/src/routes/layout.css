@@ -343,6 +343,12 @@
 		padding: 8px 12px;
 		resize: vertical;
 	}
+	/* autosize アタッチメントで高さを伸縮させる textarea */
+	.textarea.autosize {
+		max-height: 60vh;
+		overflow-y: auto;
+		resize: none;
+	}
 	.select {
 		appearance: none;
 		padding-right: 32px;

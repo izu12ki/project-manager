@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
 	import { Pencil, Trash2 } from '@lucide/svelte';
+	import { autosize } from '$lib/autosize';
 	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
 	import FormAlert from '$lib/components/FormAlert.svelte';
 	import PriorityPill from '$lib/components/PriorityPill.svelte';
@@ -15,39 +15,64 @@
 		milestoneLabel
 	} from '$lib/labels';
 	import { toast } from '$lib/toast.svelte';
-	import type { PageProps, SubmitFunction } from './$types';
+	import {
+		getComments,
+		getIssueDetail,
+		postComment,
+		removeComment,
+		saveIssue,
+		updateComment
+	} from './issue.remote';
+	import type { PageProps } from './$types';
 
-	let { data, form }: PageProps = $props();
-	const issue = $derived(data.issue);
-	const perms = $derived(data.perms);
+	let { data, params }: PageProps = $props();
+	const ref = $derived({ key: params.key, number: params.number });
+	// 2つの query は同時に取得を始め、コメントの更新では課題側を取り直さない
+	const detailQuery = $derived(getIssueDetail(ref));
+	const commentsQuery = $derived(getComments(ref));
+	const detail = $derived(await detailQuery);
+	const comments = $derived(await commentsQuery);
+	const issue = $derived(detail.issue);
+	const perms = $derived(detail.perms);
 	const canSave = $derived(perms.edit || perms.changeStatus || perms.assign);
 	let editing = $state(false);
 	let editingComment = $state<string | null>(null);
 	const attrFormId = 'issue-attributes';
 
-	$effect(() => {
-		if (form?.saved) toast.success('保存しました');
-	});
+	async function deleteComment(commentId: string) {
+		try {
+			await removeComment({ ...ref, commentId });
+		} catch {
+			failed();
+		}
+	}
+
+	const failed = () => toast.error('エラーが発生しました。時間をおいて再度お試しください');
 
 	// 送信直後に自分のコメントを仮表示し、サーバーの結果で本物に置き換える
 	type PendingComment = { id: number; body: string };
 	let pendingComments = $state<PendingComment[]>([]);
 	let nextPendingId = 0;
 
-	const submitComment: SubmitFunction = ({ formData, formElement }) => {
-		const body = String(formData.get('body') ?? '').trim();
+	const commentForm = postComment.enhance(async ({ element, submit }) => {
+		const textarea = element.querySelector('textarea')!;
+		const body = textarea.value.trim();
 		const pending = { id: ++nextPendingId, body };
 		pendingComments.push(pending);
-		formElement.reset();
-		return async ({ result, update }) => {
-			await update({ reset: false });
+		element.reset();
+		let ok = false;
+		try {
+			ok = await submit();
+		} catch {
+			failed();
+		} finally {
 			pendingComments = pendingComments.filter((c) => c.id !== pending.id);
-			if (result.type !== 'success' && result.type !== 'redirect') {
-				const textarea = formElement.elements.namedItem('body') as HTMLTextAreaElement;
-				if (!textarea.value) textarea.value = body;
-			}
-		};
-	};
+		}
+		if (!ok && !textarea.value) {
+			textarea.value = body;
+			textarea.dispatchEvent(new Event('input', { bubbles: true }));
+		}
+	});
 </script>
 
 <section class="detail">
@@ -65,7 +90,9 @@
 			</p>
 		</header>
 
-		{#if form?.message}<FormAlert message={form.message} />{/if}
+		{#each saveIssue.fields.allIssues() ?? [] as i (i.message)}<FormAlert
+				message={i.message}
+			/>{/each}
 
 		{#if editing}
 			<!-- title/description は右列の属性フォーム(id=issue-attributes)に form 属性で紐づけ、編集中だけ送信される -->
@@ -75,22 +102,21 @@
 					<input
 						class="input"
 						id="issue-title"
-						name="title"
+						{...saveIssue.fields.title.as('text', issue.title)}
 						form={attrFormId}
 						required
 						maxlength={200}
-						value={issue.title}
 					/>
 				</div>
 				<div class="field">
 					<label class="label" for="issue-description">本文</label>
 					<textarea
-						class="textarea"
+						class="textarea autosize"
 						id="issue-description"
-						name="description"
+						{...saveIssue.fields.description.as('text', issue.description)}
 						form={attrFormId}
 						rows="10"
-						value={issue.description}></textarea>
+						{@attach autosize}></textarea>
 					<p class="hint">Markdown が使えます。右の「保存」で反映されます。</p>
 				</div>
 				<div>
@@ -113,13 +139,13 @@
 		<section class="grid gap-4">
 			<h2 class="m-0 text-base font-bold">
 				コメント <span class="font-medium text-muted-foreground"
-					>{data.comments.length + pendingComments.length}</span
+					>{comments.length + pendingComments.length}</span
 				>
 			</h2>
-			{#if data.comments.length + pendingComments.length === 0}
+			{#if comments.length + pendingComments.length === 0}
 				<p class="m-0 text-muted-foreground">まだコメントはありません</p>
 			{/if}
-			{#each data.comments as c (c.id)}
+			{#each comments as c (c.id)}
 				<article class="comment">
 					<span class="avatar" style:--c={colorFor(c.authorName)}>{c.authorName[0]}</span>
 					<div class="grid min-w-0 gap-1">
@@ -139,8 +165,7 @@
 										<Pencil />
 									</button>
 									<ConfirmAction
-										action="?/deleteComment"
-										fields={{ commentId: c.id }}
+										onconfirm={() => deleteComment(c.id)}
 										title="コメントを削除しますか？"
 										description="このコメントは完全に削除され、元に戻せません。"
 										confirmLabel="削除する"
@@ -153,24 +178,30 @@
 							{/if}
 						</div>
 						{#if editingComment === c.id}
+							{@const edit = updateComment.for(c.id)}
 							<form
-								method="POST"
-								action="?/editComment"
 								class="grid gap-2"
-								use:enhance={() =>
-									async ({ update, result }) => {
-										await update();
-										if (result.type === 'success') editingComment = null;
-									}}
+								{...edit.enhance(async ({ submit }) => {
+									try {
+										if (await submit()) editingComment = null;
+									} catch {
+										failed();
+									}
+								})}
 							>
-								<input type="hidden" name="commentId" value={c.id} />
+								{#each edit.fields.allIssues() ?? [] as i (i.message)}<FormAlert
+										message={i.message}
+									/>{/each}
+								<input {...edit.fields.key.as('hidden', ref.key)} />
+								<input {...edit.fields.number.as('hidden', ref.number)} />
+								<input {...edit.fields.commentId.as('hidden', c.id)} />
 								<textarea
-									class="textarea"
-									name="body"
+									class="textarea autosize"
+									{...edit.fields.body.as('text', c.body)}
 									rows="4"
 									required
-									value={c.body}
-									aria-label="コメントを編集"></textarea>
+									aria-label="コメントを編集"
+									{@attach autosize}></textarea>
 								<div class="flex justify-end gap-2">
 									<button
 										type="button"
@@ -202,9 +233,20 @@
 				</article>
 			{/each}
 			{#if perms.writable}
-				<form method="POST" action="?/comment" use:enhance={submitComment} class="new-comment">
+				<form {...commentForm} class="new-comment">
+					<input {...postComment.fields.key.as('hidden', ref.key)} />
+					<input {...postComment.fields.number.as('hidden', ref.number)} />
 					<label class="label" for="new-comment">コメントを追加</label>
-					<textarea class="textarea" id="new-comment" name="body" rows="3" required></textarea>
+					{#each postComment.fields.allIssues() ?? [] as i (i.message)}<FormAlert
+							message={i.message}
+						/>{/each}
+					<textarea
+						class="textarea autosize"
+						id="new-comment"
+						{...postComment.fields.body.as('text')}
+						rows="3"
+						required
+						{@attach autosize}></textarea>
 					<div class="flex justify-end">
 						<button type="submit" class="btn btn-primary">コメントする</button>
 					</div>
@@ -216,61 +258,88 @@
 	<aside class="side">
 		<form
 			id={attrFormId}
-			method="POST"
-			action="?/update"
 			class="card"
 			style="padding: 20px"
-			use:enhance={() =>
-				async ({ update, result }) => {
-					await update({ reset: false });
-					if (result.type === 'success') editing = false;
-				}}
+			{...saveIssue.enhance(async ({ submit }) => {
+				try {
+					if (await submit()) {
+						editing = false;
+						toast.success('保存しました');
+					}
+				} catch {
+					failed();
+				}
+			})}
 		>
+			<input {...saveIssue.fields.key.as('hidden', ref.key)} />
+			<input {...saveIssue.fields.number.as('hidden', ref.number)} />
 			<h2 class="card-title">属性</h2>
 			<div class="prop-list">
 				<div class="prop-row">
 					<label for="issue-status">ステータス</label>
-					<select class="select" id="issue-status" name="status" disabled={!perms.changeStatus}>
+					<select
+						class="select"
+						id="issue-status"
+						{...saveIssue.fields.status.as('select', issue.status)}
+						disabled={!perms.changeStatus}
+					>
 						{#each STATUSES as s (s)}
-							<option value={s} selected={s === issue.status}>{STATUS_LABEL[s]}</option>
+							<option value={s}>{STATUS_LABEL[s]}</option>
 						{/each}
 					</select>
 				</div>
 				<div class="prop-row">
 					<label for="issue-priority">優先度</label>
-					<select class="select" id="issue-priority" name="priority" disabled={!perms.edit}>
+					<select
+						class="select"
+						id="issue-priority"
+						{...saveIssue.fields.priority.as('select', issue.priority)}
+						disabled={!perms.edit}
+					>
 						{#each PRIORITIES as p (p)}
-							<option value={p} selected={p === issue.priority}>{PRIORITY_LABEL[p]}</option>
+							<option value={p}>{PRIORITY_LABEL[p]}</option>
 						{/each}
 					</select>
 				</div>
 				<div class="prop-row">
 					<label for="issue-assignee">担当者</label>
-					<select class="select" id="issue-assignee" name="assigneeId" disabled={!perms.assign}>
+					<select
+						class="select"
+						id="issue-assignee"
+						{...saveIssue.fields.assigneeId.as('select', issue.assigneeId ?? '')}
+						disabled={!perms.assign}
+					>
 						<option value="">未割当</option>
-						{#each data.assignees as u (u.id)}
-							<option value={u.id} selected={u.id === issue.assigneeId}
-								>{u.disabled ? `${u.name}（無効）` : u.name}</option
-							>
+						{#each detail.assignees as u (u.id)}
+							<option value={u.id}>{u.disabled ? `${u.name}（無効）` : u.name}</option>
 						{/each}
 					</select>
 				</div>
 				<div class="prop-row">
 					<label for="issue-category">カテゴリー</label>
-					<select class="select" id="issue-category" name="categoryId" disabled={!perms.edit}>
+					<select
+						class="select"
+						id="issue-category"
+						{...saveIssue.fields.categoryId.as('select', issue.categoryId ?? '')}
+						disabled={!perms.edit}
+					>
 						<option value="">未設定</option>
-						{#each data.categories as c (c.id)}
-							<option value={c.id} selected={c.id === issue.categoryId}>{c.name}</option>
+						{#each detail.categories as c (c.id)}
+							<option value={c.id}>{c.name}</option>
 						{/each}
 					</select>
 				</div>
 				<div class="prop-row">
 					<label for="issue-milestone">マイルストーン</label>
-					<select class="select" id="issue-milestone" name="milestoneId" disabled={!perms.edit}>
+					<select
+						class="select"
+						id="issue-milestone"
+						{...saveIssue.fields.milestoneId.as('select', issue.milestoneId ?? '')}
+						disabled={!perms.edit}
+					>
 						<option value="">未設定</option>
-						{#each data.milestones as m (m.id)}
-							<option value={m.id} selected={m.id === issue.milestoneId}>{milestoneLabel(m)}</option
-							>
+						{#each detail.milestones as m (m.id)}
+							<option value={m.id}>{milestoneLabel(m)}</option>
 						{/each}
 					</select>
 				</div>
@@ -279,9 +348,7 @@
 					<input
 						class="input"
 						id="issue-start"
-						type="date"
-						name="startDate"
-						value={issue.startDate ?? ''}
+						{...saveIssue.fields.startDate.as('date', issue.startDate ?? '')}
 						disabled={!perms.edit}
 					/>
 				</div>
@@ -290,9 +357,7 @@
 					<input
 						class="input"
 						id="issue-due"
-						type="date"
-						name="dueDate"
-						value={issue.dueDate ?? ''}
+						{...saveIssue.fields.dueDate.as('date', issue.dueDate ?? '')}
 						disabled={!perms.edit}
 					/>
 				</div>

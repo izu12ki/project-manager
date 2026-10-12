@@ -7,7 +7,9 @@ export default defineConfig({
 	plugins: [
 		tailwindcss(),
 		sveltekit({
+			experimental: { remoteFunctions: true },
 			compilerOptions: {
+				experimental: { async: true },
 				runes: ({ filename }) =>
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},

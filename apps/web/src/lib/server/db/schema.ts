@@ -178,6 +178,8 @@ export const milestone = sqliteTable(
 		name: text().notNull(),
 		/** リリース予定日 'YYYY-MM-DD'（任意） */
 		releaseDate: text('release_date'),
+		/** 完了にした日時。完了したものは課題の選択肢に出さない */
+		completedAt: integer('completed_at', { mode: 'timestamp_ms' }),
 		createdAt: createdAt()
 	},
 	(t) => [uniqueIndex('milestone_project_name_uq').on(t.projectId, t.name)]

@@ -142,4 +142,52 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page.getByRole('alertdialog')).toBeHidden();
 	await expect(row.getByText('無効', { exact: true })).toBeVisible();
 	await expect(row.getByRole('button', { name: '有効化' })).toBeVisible();
+	// 10. 管理者が一覧・ボードを絞り込む
+	await page.goto('/projects/ACME');
+	const issueRow = page.getByRole('row', { name: /ログインできない/ });
+	await expect(issueRow.getByText('フロントエンド')).toBeVisible();
+	await expect(issueRow.getByText('v1.0')).toBeVisible();
+	await page.getByLabel('キーワード').fill('存在しない課題');
+	await page.getByLabel('キーワード').press('Enter');
+	await expect(page.getByText('条件に一致する課題はありません')).toBeVisible();
+	await page.getByLabel('キーワード').fill('acme-1');
+	await page.getByLabel('キーワード').press('Enter');
+	await expect(issueRow).toBeVisible();
+	await page.getByLabel('マイルストーン').selectOption({ label: '未設定' });
+	await expect(page).toHaveURL(/milestone=none/);
+	await expect(page.getByText('条件に一致する課題はありません')).toBeVisible();
+
+	await page.goto('/projects/ACME/board');
+	await page.getByLabel('マイルストーン').selectOption({ label: '未設定' });
+	await expect(page).toHaveURL(/milestone=none/);
+	await expect(page.getByTestId('card-1')).toBeHidden();
+	await page.getByLabel('マイルストーン').selectOption({ label: 'v1.0（11/30 リリース）' });
+	await expect(page.getByTestId('column-in_progress').getByTestId('card-1')).toBeVisible();
+
+	// 11. 管理者がカテゴリー名を変更し、マイルストーンを完了にする
+	await page.goto('/projects/ACME/settings');
+	await page.locator('summary', { hasText: 'フロントエンド' }).click();
+	await page.getByLabel('フロントエンド の名称').fill('UI');
+	await page
+		.locator('form', { has: page.getByLabel('フロントエンド の名称') })
+		.getByRole('button', { name: '保存' })
+		.click();
+	await expect(page.locator('summary', { hasText: 'UI' })).toBeVisible();
+	await page
+		.getByRole('listitem')
+		.filter({ hasText: 'v1.0' })
+		.getByRole('button', { name: '完了にする' })
+		.click();
+	await expect(
+		page
+			.getByRole('listitem')
+			.filter({ hasText: 'v1.0' })
+			.getByText(/^完了 · /)
+	).toBeVisible();
+
+	// 完了したマイルストーンは起票時の選択肢に出ない
+	await page.goto('/projects/ACME/issues/new');
+	await expect(
+		page.getByLabel('マイルストーン').locator('option', { hasText: 'v1.0' })
+	).toHaveCount(0);
 });

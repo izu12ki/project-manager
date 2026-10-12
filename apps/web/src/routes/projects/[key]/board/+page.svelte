@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { Calendar, CircleAlert, X } from '@lucide/svelte';
+	import { Calendar, CircleAlert, Flag, X } from '@lucide/svelte';
+	import { page } from '$app/state';
 	import { dndzone, type DndEvent } from 'svelte-dnd-action';
 	import PriorityPill from '$lib/components/PriorityPill.svelte';
 	import {
@@ -9,21 +10,26 @@
 		colorFor,
 		formatDue,
 		isDueAlert,
+		milestoneLabel,
 		type Status
 	} from '$lib/labels';
 	import { getBoard, moveCard } from './board.remote';
 	import type { PageProps } from './$types';
 
 	let { data, params }: PageProps = $props();
-	const board = $derived(await getBoard(params.key));
+	const ref = $derived({
+		key: params.key,
+		milestone: page.url.searchParams.get('milestone') ?? ''
+	});
+	const board = $derived(await getBoard(ref));
 
-	type Columns = typeof board;
+	type Columns = typeof board.columns;
 	type Card = Columns[Status][number];
 
 	const clone = (c: Columns): Columns =>
 		Object.fromEntries(STATUSES.map((s) => [s, [...c[s]]])) as Columns;
 
-	let columns = $derived(clone(board));
+	let columns = $derived(clone(board.columns));
 	let snapshot: Columns | null = null;
 	let message = $state<string | null>(null);
 	let pending = $state(false);
@@ -53,7 +59,7 @@
 		try {
 			// 移動と最新の列の再取得を 1 往復で行う（サーバー側で getBoard を refresh）
 			await moveCard({
-				key: params.key,
+				...ref,
 				issueId: String(e.detail.info.id),
 				status,
 				beforeId: items[idx - 1]?.id ?? '',
@@ -63,7 +69,7 @@
 			if (before) columns = before;
 			message = failure(err);
 			// 失敗時は他の人の変更も反映されているかもしれないので取り直す
-			getBoard(params.key)
+			getBoard(ref)
 				.refresh()
 				.catch(() => {});
 		} finally {
@@ -73,6 +79,28 @@
 </script>
 
 <section class="grid gap-4">
+	{#if board.milestones.length > 0}
+		<form
+			method="GET"
+			class="flex flex-wrap items-end gap-3"
+			onchange={(e) => e.currentTarget.requestSubmit()}
+		>
+			<div class="field w-56 gap-1.5">
+				<label class="label text-[13px]" for="board-milestone">マイルストーン</label>
+				<select class="select" id="board-milestone" name="milestone">
+					<option value="">すべて</option>
+					<option value="none" selected={ref.milestone === 'none'}>未設定</option>
+					{#each board.milestones as m (m.id)}
+						<option value={m.id} selected={ref.milestone === m.id}
+							>{milestoneLabel(m)}{m.completedAt ? '（完了）' : ''}</option
+						>
+					{/each}
+				</select>
+			</div>
+			<noscript><button type="submit" class="btn btn-outline">絞り込む</button></noscript>
+		</form>
+	{/if}
+
 	{#if message}
 		<div role="alert" class="alert alert-destructive" style="grid-template-columns: 16px 1fr auto">
 			<CircleAlert />
@@ -120,6 +148,16 @@
 							<a href={`/projects/${data.project.key}/issues/${card.number}`} class="title"
 								>{card.title}</a
 							>
+							{#if card.categoryName || card.milestoneName}
+								<div class="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+									{#if card.categoryName}<span class="tag">{card.categoryName}</span>{/if}
+									{#if card.milestoneName}<span class="flex min-w-0 items-center gap-1"
+											><Flag size={12} class="shrink-0" /><span class="truncate"
+												>{card.milestoneName}</span
+											></span
+										>{/if}
+								</div>
+							{/if}
 							<div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
 								<span class="flex min-w-0 items-center gap-1.5">
 									<span class="avatar" style="--size: 20px" style:--c={colorFor(card.assigneeName)}
@@ -212,5 +250,14 @@
 	}
 	.title:hover {
 		text-decoration: underline;
+	}
+	.tag {
+		max-width: 12em;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		padding: 0 6px;
+		border: 1px solid var(--border);
+		border-radius: 4px;
 	}
 </style>

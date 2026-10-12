@@ -1,5 +1,5 @@
 // 課題の分類項目（カテゴリー・マイルストーン）。プロジェクトごとに管理者が定義する。
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
 import { authorize } from '../authz';
@@ -87,6 +87,87 @@ export async function createMilestone(ctx: AppContext, key: string, input: unkno
 	});
 }
 
+async function requireCategory(db: DB, projectId: string, id: string): Promise<CategoryRow> {
+	const [row] = await db
+		.select()
+		.from(category)
+		.where(and(eq(category.projectId, projectId), eq(category.id, id)));
+	if (!row) throw new AppError('not_found', 'カテゴリーが見つかりません');
+	return row;
+}
+
+async function requireMilestone(db: DB, projectId: string, id: string): Promise<MilestoneRow> {
+	const [row] = await db
+		.select()
+		.from(milestone)
+		.where(and(eq(milestone.projectId, projectId), eq(milestone.id, id)));
+	if (!row) throw new AppError('not_found', 'マイルストーンが見つかりません');
+	return row;
+}
+
+export async function updateCategory(
+	ctx: AppContext,
+	key: string,
+	id: string,
+	input: unknown
+): Promise<void> {
+	authorize(ctx.actor, 'project:manage');
+	const p = await requireProject(ctx, key);
+	assertWritable(p);
+	const cur = await requireCategory(ctx.db, p.id, id);
+	const data = parse(v.object({ name: NameSchema('カテゴリー') }), input);
+	if (data.name === cur.name) return;
+	const [dup] = await ctx.db
+		.select({ id: category.id })
+		.from(category)
+		.where(and(eq(category.projectId, p.id), eq(category.name, data.name), ne(category.id, id)));
+	if (dup) throw duplicate('name', 'カテゴリー');
+	await ctx.db.update(category).set({ name: data.name }).where(eq(category.id, id));
+}
+
+export async function updateMilestone(
+	ctx: AppContext,
+	key: string,
+	id: string,
+	input: unknown
+): Promise<void> {
+	authorize(ctx.actor, 'project:manage');
+	const p = await requireProject(ctx, key);
+	assertWritable(p);
+	await requireMilestone(ctx.db, p.id, id);
+	const data = parse(
+		v.object({ name: NameSchema('マイルストーン'), releaseDate: v.optional(DateOrEmpty) }),
+		input
+	);
+	const [dup] = await ctx.db
+		.select({ id: milestone.id })
+		.from(milestone)
+		.where(and(eq(milestone.projectId, p.id), eq(milestone.name, data.name), ne(milestone.id, id)));
+	if (dup) throw duplicate('name', 'マイルストーン');
+	await ctx.db
+		.update(milestone)
+		.set({ name: data.name, releaseDate: emptyToNull(data.releaseDate) ?? null })
+		.where(eq(milestone.id, id));
+}
+
+/** 完了にしたマイルストーンは新規の割り当て候補から外れる（既存の課題の設定は残す）。 */
+export async function setMilestoneCompleted(
+	ctx: AppContext,
+	key: string,
+	id: string,
+	completed: boolean
+): Promise<void> {
+	authorize(ctx.actor, 'project:manage');
+	const p = await requireProject(ctx, key);
+	assertWritable(p);
+	const cur = await requireMilestone(ctx.db, p.id, id);
+	if (!!cur.completedAt === completed) return;
+	await ctx.db
+		.update(milestone)
+		.set({ completedAt: completed ? new Date() : null })
+		.where(eq(milestone.id, id));
+}
+
 /** 削除すると、その項目が設定されていた課題は「未設定」に戻る。 */
 export async function deleteCategory(ctx: AppContext, key: string, id: string): Promise<void> {
 	authorize(ctx.actor, 'project:manage');
@@ -126,14 +207,16 @@ export async function assertCategoryOf(db: DB, projectId: string, id: string): P
 	}
 }
 
+/** 新しく割り当てる場合に使う。完了済みのマイルストーンは割り当てられない。 */
 export async function assertMilestoneOf(db: DB, projectId: string, id: string): Promise<void> {
 	const [row] = await db
-		.select({ id: milestone.id })
+		.select({ id: milestone.id, completedAt: milestone.completedAt })
 		.from(milestone)
 		.where(and(eq(milestone.projectId, projectId), eq(milestone.id, id)));
-	if (!row) {
-		throw new AppError('validation', 'マイルストーンが見つかりません', {
-			milestoneId: ['マイルストーンが見つかりません']
-		});
-	}
+	const msg = !row
+		? 'マイルストーンが見つかりません'
+		: row.completedAt
+			? '完了済みのマイルストーンは設定できません'
+			: null;
+	if (msg) throw new AppError('validation', msg, { milestoneId: [msg] });
 }

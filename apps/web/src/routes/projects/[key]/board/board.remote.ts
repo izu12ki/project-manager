@@ -1,24 +1,34 @@
 import * as v from 'valibot';
 import { command, query } from '$app/server';
 import { remoteContext, runCommand, runQuery } from '$lib/server/remote-helpers';
+import { listMilestones } from '$lib/server/services/issue-fields';
 import { listBoard, moveIssue } from '$lib/server/services/issues';
 
-export const getBoard = query(v.string(), (key) => {
+/** milestone: 絞り込むマイルストーン ID（'none' は未設定、'' は絞り込みなし） */
+const BoardRef = v.object({ key: v.string(), milestone: v.string() });
+
+export const getBoard = query(BoardRef, ({ key, milestone }) => {
 	const ctx = remoteContext();
-	return runQuery(() => listBoard(ctx, key));
+	return runQuery(async () => {
+		const [columns, milestones] = await Promise.all([
+			listBoard(ctx, key, { milestoneId: milestone || undefined }),
+			listMilestones(ctx, key)
+		]);
+		return { columns, milestones };
+	});
 });
 
 export const moveCard = command(
 	v.object({
-		key: v.string(),
+		...BoardRef.entries,
 		issueId: v.string(),
 		status: v.string(),
 		beforeId: v.string(),
 		afterId: v.string()
 	}),
-	({ key, ...input }) =>
+	({ key, milestone, ...input }) =>
 		runCommand(async () => {
 			await moveIssue(remoteContext(), key, input);
-			void getBoard(key).refresh();
+			void getBoard({ key, milestone }).refresh();
 		})
 );

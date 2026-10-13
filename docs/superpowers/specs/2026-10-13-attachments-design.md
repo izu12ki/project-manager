@@ -117,7 +117,7 @@ Worker を経由して R2 バインディングに読み書きする。
 
 ### 個別削除
 
-`DELETE /projects/[key]/attachments/[id]`（課題詳細の添付一覧から呼ぶ）
+課題詳細の添付一覧から remote command `removeAttachment` で呼ぶ（課題ページの他の操作と同じ方式）。
 
 - 権限は `attachment:delete`。admin は全て、それ以外は `uploaderId = actor.id` の場合のみ。
 - 行を削除し、`waitUntil` で `bucket.delete(r2Key)`。
@@ -171,7 +171,9 @@ Worker を経由して R2 バインディングに読み書きする。
 
 - 新規起票で画像を貼り付け → 起票後に `<img>` が表示される。
 - PDF を添付 → 添付一覧に表示され、ダウンロードできる。
-- 別プロジェクトの guest が添付 URL を開くと 404。
+- 存在しない添付 ID の URL は 404。HTML ファイルは `application/octet-stream` の `attachment` で配信される。
+
+他プロジェクト・未参加ユーザーからの 404 は単体テストで確認する（E2E は単一シナリオで、別プロジェクトの参加者を用意しないため）。
 
 ## 12. 導入・ドキュメント
 

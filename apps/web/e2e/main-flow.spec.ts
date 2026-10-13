@@ -1,5 +1,11 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
+// 1x1 の透明 PNG
+const PNG = Buffer.from(
+	'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+	'base64'
+);
+
 const PW = 'password-1234';
 const HOME = /localhost:4173\/$/;
 
@@ -91,9 +97,21 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.getByRole('link', { name: '新規課題' }).click();
 	await page.getByLabel('タイトル').fill('ログインできない');
 	await page.getByLabel('カテゴリー').selectOption({ label: 'フロントエンド' });
+	await page
+		.getByTestId('attach-input')
+		.setInputFiles({ name: 'screen.png', mimeType: 'image/png', buffer: PNG });
+	await expect(page.getByLabel('本文')).toHaveValue(
+		/!\[screen\.png\]\(\/projects\/ACME\/attachments\/[0-9a-f-]{36}\)/
+	);
 	await page.getByRole('button', { name: '起票する' }).first().click();
 	await expect(page.getByRole('heading', { name: 'ログインできない' })).toBeVisible();
 	await expect(page.getByRole('main').getByText('ACME-1')).toBeVisible();
+	const shot = page.locator('.markdown img[alt="screen.png"]');
+	await expect(shot).toBeVisible();
+	expect(await shot.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1);
+	await expect(
+		page.getByRole('region', { name: '添付ファイル' }).getByRole('link', { name: 'screen.png' })
+	).toBeVisible();
 
 	// 5b. 添付 API: アップロード → 配信ヘッダ（HTML は必ずダウンロード）→ 存在しない ID は 404
 	const up = await page.request.post('/projects/ACME/attachments', {
@@ -152,11 +170,40 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.reload();
 	await expect(page.getByTestId('column-in_progress').getByTestId('card-1')).toBeVisible();
 
-	// 8. ゲストがコメント
+	// 8. ゲストがコメント（PDF を添付）。テキストの貼り付けは横取りしない
 	await page.goto('/projects/ACME/issues/1');
-	await page.getByLabel('コメントを追加').fill('確認しました');
+	const commentBox = page.getByLabel('コメントを追加');
+	const textPastePrevented = await commentBox.evaluate((el) => {
+		const data = new DataTransfer();
+		data.setData('text/plain', 'hello');
+		const ev = new ClipboardEvent('paste', {
+			clipboardData: data,
+			bubbles: true,
+			cancelable: true
+		});
+		el.dispatchEvent(ev);
+		return ev.defaultPrevented;
+	});
+	expect(textPastePrevented).toBe(false);
+	await commentBox.fill('確認しました\n');
+	await page
+		.locator('form.new-comment')
+		.getByTestId('attach-input')
+		.setInputFiles({
+			name: 'spec.pdf',
+			mimeType: 'application/pdf',
+			buffer: Buffer.from('%PDF-1.4\n%%EOF\n')
+		});
+	await expect(commentBox).toHaveValue(/\[spec\.pdf\]\(\/projects\/ACME\/attachments\//);
 	await page.getByRole('button', { name: 'コメントする' }).click();
 	await expect(page.locator('.markdown').getByText('確認しました')).toBeVisible();
+	const attachmentList = page.getByRole('region', { name: '添付ファイル' });
+	await expect(attachmentList.getByRole('link', { name: 'spec.pdf' })).toBeVisible();
+
+	// 8b. 自分の添付を削除できる
+	await attachmentList.getByRole('button', { name: 'spec.pdf を削除' }).click();
+	await page.getByRole('alertdialog').getByRole('button', { name: '削除する' }).click();
+	await expect(attachmentList.getByRole('link', { name: 'spec.pdf' })).toBeHidden();
 
 	// 9. 管理者がゲストを無効化（確認ダイアログ）
 	await logout(page);

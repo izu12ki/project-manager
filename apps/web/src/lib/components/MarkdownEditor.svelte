@@ -1,8 +1,14 @@
 <script lang="ts">
 	import { Bold, Code, Link, List, ListChecks } from '@lucide/svelte';
 	import type { HTMLTextareaAttributes } from 'svelte/elements';
+	import { uploadable } from '$lib/attachment-upload';
+	import AttachButton from './AttachButton.svelte';
 
-	let { value = $bindable(''), ...rest }: HTMLTextareaAttributes & { value?: string } = $props();
+	let {
+		value = $bindable(''),
+		projectKey,
+		...rest
+	}: HTMLTextareaAttributes & { value?: string; projectKey?: string } = $props();
 	let textarea = $state<HTMLTextAreaElement>();
 
 	/** 選択範囲を before/after で囲む（未選択なら placeholder を入れて選択する） */
@@ -49,15 +55,21 @@
 </script>
 
 <div class="editor">
-	<textarea bind:this={textarea} bind:value {...rest}></textarea>
+	<textarea bind:this={textarea} bind:value {...rest} {@attach projectKey && uploadable(projectKey)}
+	></textarea>
 	<div class="toolbar" role="toolbar" aria-label="書式">
-		<span class="hint">Markdown が使えます</span>
+		<span class="hint"
+			>Markdown が使えます{projectKey ? '・ファイルは貼り付けかドロップでも添付できます' : ''}</span
+		>
 		<span style="flex: 1"></span>
 		{#each tools as t (t.label)}
 			<button type="button" class="icon-btn" aria-label={t.label} title={t.label} onclick={t.run}>
 				<t.icon />
 			</button>
 		{/each}
+		{#if projectKey}
+			<AttachButton {projectKey} target={() => textarea} />
+		{/if}
 	</div>
 </div>
 

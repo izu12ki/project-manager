@@ -36,7 +36,13 @@
 	/>
 	<div class="sheet">
 		<label for="issue-description" class="sr-only">本文</label>
-		<MarkdownEditor id="issue-description" name="description" rows={10} placeholder="課題の詳細" />
+		<MarkdownEditor
+			id="issue-description"
+			name="description"
+			rows={10}
+			placeholder="課題の詳細"
+			projectKey={data.project.key}
+		/>
 		<div class="props">
 			<div class="prop-list prop-list-wide">
 				{#if data.canSetStatus}

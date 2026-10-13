@@ -12,3 +12,15 @@ export function isSafeImage(contentType: string): boolean {
 export function attachmentUrl(projectKey: string, id: string): string {
 	return `/projects/${projectKey}/attachments/${id}`;
 }
+
+/** 本文に挿入する Markdown。ファイル名の [ ] \ はエスケープする */
+export function markdownFor(r: { filename: string; url: string; isImage: boolean }): string {
+	const label = r.filename.replace(/[\\[\]]/g, (c) => `\\${c}`);
+	return `${r.isImage ? '!' : ''}[${label}](${r.url})`;
+}
+
+export function formatBytes(n: number): string {
+	if (n < 1024) return `${n} B`;
+	if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+	return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}

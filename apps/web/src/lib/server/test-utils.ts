@@ -4,6 +4,7 @@ import { drizzle } from 'drizzle-orm/libsql';
 import { migrate } from 'drizzle-orm/libsql/migrator';
 import { fileURLToPath } from 'node:url';
 import { uuidv7 } from 'uuidv7';
+import { createMemoryStore } from './attachment-store';
 import type { Actor, Role } from './authz';
 import type { AppContext, BaseContext } from './context';
 import type { DB } from './db';
@@ -30,6 +31,7 @@ export function createTestBase(
 				sent.push(m);
 			}
 		},
+		bucket: createMemoryStore(),
 		waitUntil: (p) => {
 			void p;
 		},

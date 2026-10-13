@@ -20,7 +20,11 @@ const table: [Action, Parameters<typeof can>[2], boolean, boolean, boolean][] = 
 	['issue:delete', {}, true, true, false],
 	['comment:modify', { authorId: 'x' }, true, false, false],
 	['comment:modify', { authorId: 'm' }, true, true, false],
-	['comment:modify', { authorId: 'g' }, true, false, true]
+	['comment:modify', { authorId: 'g' }, true, false, true],
+	['attachment:create', {}, true, true, true],
+	['attachment:delete', { uploaderId: 'x' }, true, false, false],
+	['attachment:delete', { uploaderId: 'm' }, true, true, false],
+	['attachment:delete', { uploaderId: 'g' }, true, false, true]
 ];
 
 describe('can', () => {

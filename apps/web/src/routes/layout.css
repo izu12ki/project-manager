@@ -633,6 +633,43 @@
 	.markdown pre code {
 		padding: 0;
 	}
+	/* 画像は ImageLightbox で拡大できる。ホバーで右上に虫眼鏡を出す */
+	.markdown .md-img {
+		position: relative;
+		display: inline-block;
+		max-width: 100%;
+		vertical-align: top;
+	}
+	.markdown .md-img img {
+		max-width: 100%;
+		border-radius: 4px;
+		cursor: zoom-in;
+	}
+	.markdown .md-img::after {
+		content: '';
+		position: absolute;
+		top: 8px;
+		right: 8px;
+		width: 28px;
+		height: 28px;
+		border-radius: 4px;
+		background: rgb(0 0 0 / 0.6)
+			url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35M11 8v6M8 11h6'/%3E%3C/svg%3E")
+			center / 16px no-repeat;
+		opacity: 0;
+		transition: opacity 0.15s ease;
+		pointer-events: none;
+	}
+	.markdown .md-img:hover::after {
+		opacity: 1;
+	}
+	/* リンクになっている画像はリンクを優先する */
+	.markdown a .md-img img {
+		cursor: pointer;
+	}
+	.markdown a .md-img::after {
+		display: none;
+	}
 }
 
 /* ---------- page transitions ---------- */

@@ -37,6 +37,12 @@ pnpm exec wrangler secret put BETTER_AUTH_SECRET   # `openssl rand -base64 32` �
 pnpm exec wrangler secret put BETTER_AUTH_URL      # 公開 URL。例: https://project-manager.<サブドメイン>.workers.dev
 ```
 
+添付ファイルを保存する R2 バケットを作ります（名前は `apps/web/wrangler.jsonc` の `bucket_name` と同じにします）。
+
+```bash
+pnpm exec wrangler r2 bucket create project-manager-attachments
+```
+
 メールを送る場合は `MAIL_PROVIDER` / `MAIL_API_KEY` / `MAIL_FROM` も登録します（[メール送信の設定](/guides/mail/)）。登録しなければ招待リンクは画面に表示されるので、手で相手に渡せます。
 
 初回はまだ Worker が無いので、`secret put` が Worker の作成を確認してきたら「はい」を選びます。`BETTER_AUTH_URL` が分からない場合は、先に手順 5 でデプロイして URL を確認し、登録後にもう一度デプロイします。

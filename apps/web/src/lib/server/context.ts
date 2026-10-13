@@ -1,4 +1,5 @@
 import { redirect } from '@sveltejs/kit';
+import type { AttachmentStore } from './attachment-store';
 import type { Actor } from './authz';
 import type { DB } from './db';
 import type { Mailer } from './mailer';
@@ -6,6 +7,7 @@ import type { Mailer } from './mailer';
 export interface BaseContext {
 	db: DB;
 	mailer: Mailer;
+	bucket: AttachmentStore;
 	waitUntil: (p: Promise<unknown>) => void;
 	baseUrl: string;
 	hashPassword: (password: string) => Promise<string>;

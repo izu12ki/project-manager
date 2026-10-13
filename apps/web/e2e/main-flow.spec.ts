@@ -1,5 +1,11 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
+// 1x1 の透明 PNG
+const PNG = Buffer.from(
+	'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+	'base64'
+);
+
 const PW = 'password-1234';
 const HOME = /localhost:4173\/$/;
 
@@ -91,9 +97,56 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.getByRole('link', { name: '新規課題' }).click();
 	await page.getByLabel('タイトル').fill('ログインできない');
 	await page.getByLabel('カテゴリー').selectOption({ label: 'フロントエンド' });
+	await page
+		.getByTestId('attach-input')
+		.setInputFiles({ name: 'screen.png', mimeType: 'image/png', buffer: PNG });
+	await expect(page.getByLabel('本文')).toHaveValue(
+		/!\[screen\.png\]\(\/projects\/ACME\/attachments\/[0-9a-f-]{36}\)/
+	);
 	await page.getByRole('button', { name: '起票する' }).first().click();
 	await expect(page.getByRole('heading', { name: 'ログインできない' })).toBeVisible();
 	await expect(page.getByRole('main').getByText('ACME-1')).toBeVisible();
+	const shot = page.locator('.markdown img[alt="screen.png"]');
+	await expect(shot).toBeVisible();
+	expect(await shot.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1);
+	await shot.click();
+	const lightbox = page.getByRole('dialog', { name: '画像の拡大表示' });
+	await expect(lightbox.locator('img[alt="screen.png"]')).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(lightbox).toBeHidden();
+	await expect(page.getByRole('region', { name: '添付ファイル' })).toContainText(
+		'添付ファイル数: 1'
+	);
+	await expect(
+		page.getByRole('region', { name: '添付ファイル' }).getByRole('link', { name: 'screen.png' })
+	).toBeVisible();
+
+	// 5b. 添付 API: アップロード → 配信ヘッダ（HTML は必ずダウンロード）→ 存在しない ID は 404
+	const up = await page.request.post('/projects/ACME/attachments', {
+		headers: { Origin: 'http://localhost:4173', Accept: 'application/json' },
+		multipart: {
+			file: {
+				name: '仕様書.html',
+				mimeType: 'text/html',
+				buffer: Buffer.from('<script>alert(1)</script>')
+			}
+		}
+	});
+	expect(up.status()).toBe(201);
+	const uploaded = await up.json();
+	expect(uploaded).toMatchObject({ filename: '仕様書.html', isImage: false });
+	const dl = await page.request.get(uploaded.url);
+	expect(dl.status()).toBe(200);
+	expect(dl.headers()['content-type']).toBe('application/octet-stream');
+	expect(dl.headers()['content-disposition']).toBe(
+		`attachment; filename*=UTF-8''${encodeURIComponent('仕様書.html')}`
+	);
+	expect(dl.headers()['x-content-type-options']).toBe('nosniff');
+	expect(await dl.text()).toBe('<script>alert(1)</script>');
+	const missing = await page.request.get(
+		'/projects/ACME/attachments/00000000-0000-7000-8000-000000000000'
+	);
+	expect(missing.status()).toBe(404);
 	await logout(page);
 
 	// 6. メンバーが登録し、ゲストを担当者にする
@@ -125,11 +178,55 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.reload();
 	await expect(page.getByTestId('column-in_progress').getByTestId('card-1')).toBeVisible();
 
-	// 8. ゲストがコメント
+	// 8. ゲストがコメント（PDF を添付）。テキストの貼り付けは横取りしない
 	await page.goto('/projects/ACME/issues/1');
-	await page.getByLabel('コメントを追加').fill('確認しました');
+	const commentBox = page.getByLabel('コメントを追加');
+	const textPastePrevented = await commentBox.evaluate((el) => {
+		const data = new DataTransfer();
+		data.setData('text/plain', 'hello');
+		const ev = new ClipboardEvent('paste', {
+			clipboardData: data,
+			bubbles: true,
+			cancelable: true
+		});
+		el.dispatchEvent(ev);
+		return ev.defaultPrevented;
+	});
+	expect(textPastePrevented).toBe(false);
+	await commentBox.fill('確認しました\n');
+	// アップロードが終わるまで送信させない（プレースホルダのまま保存されるのを防ぐ）
+	let releaseUpload!: () => void;
+	const uploadHeld = new Promise<void>((r) => (releaseUpload = r));
+	await page.route('**/projects/ACME/attachments', async (route) => {
+		await uploadHeld;
+		await route.continue();
+	});
+	await page
+		.locator('form.new-comment')
+		.getByTestId('attach-input')
+		.setInputFiles({
+			name: 'spec.pdf',
+			mimeType: 'application/pdf',
+			buffer: Buffer.from('%PDF-1.4\n%%EOF\n')
+		});
+	await expect(commentBox).toHaveValue(/アップロード中: spec\.pdf/);
+	await page.getByRole('button', { name: 'コメントする' }).click();
+	await expect(page.getByText('アップロードが終わってから送信してください')).toBeVisible();
+	await expect(commentBox).toHaveValue(/アップロード中: spec\.pdf/);
+	releaseUpload();
+	await expect(commentBox).toHaveValue(/\[spec\.pdf\]\(\/projects\/ACME\/attachments\//);
+	await page.unroute('**/projects/ACME/attachments');
 	await page.getByRole('button', { name: 'コメントする' }).click();
 	await expect(page.locator('.markdown').getByText('確認しました')).toBeVisible();
+	const attachmentList = page.getByRole('region', { name: '添付ファイル' });
+	await expect(attachmentList.getByRole('link', { name: 'spec.pdf' })).toBeVisible();
+
+	// 8b. 自分の添付を削除できる
+	await attachmentList.getByRole('button', { name: 'spec.pdf を削除' }).click();
+	const deleteDialog = page.getByRole('alertdialog', { name: '添付ファイルの削除' });
+	await expect(deleteDialog).toContainText('「spec.pdf」を削除してよろしいですか？');
+	await deleteDialog.getByRole('button', { name: '添付ファイルを削除する' }).click();
+	await expect(attachmentList.getByRole('link', { name: 'spec.pdf' })).toBeHidden();
 
 	// 9. 管理者がゲストを無効化（確認ダイアログ）
 	await logout(page);
@@ -137,9 +234,14 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.goto('/admin/users');
 	const row = page.getByRole('row', { name: /顧客 太郎/ });
 	await row.getByRole('button', { name: '無効化' }).click();
-	await expect(page.getByRole('alertdialog')).toBeVisible();
-	await page.getByRole('button', { name: '無効化する' }).click();
-	await expect(page.getByRole('alertdialog')).toBeHidden();
+	const disableDialog = page.getByRole('alertdialog', { name: 'ユーザーの無効化' });
+	await expect(disableDialog).toBeVisible();
+	// ×で閉じられる
+	await disableDialog.getByRole('button', { name: '閉じる' }).click();
+	await expect(disableDialog).toBeHidden();
+	await row.getByRole('button', { name: '無効化' }).click();
+	await disableDialog.getByRole('button', { name: '無効化する' }).click();
+	await expect(disableDialog).toBeHidden();
 	await expect(row.getByText('無効', { exact: true })).toBeVisible();
 	await expect(row.getByRole('button', { name: '有効化' })).toBeVisible();
 	// 10. 管理者が一覧・ボードを絞り込む

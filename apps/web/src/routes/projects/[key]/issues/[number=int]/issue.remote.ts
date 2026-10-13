@@ -1,10 +1,12 @@
 import { eq } from 'drizzle-orm';
 import * as v from 'valibot';
 import { command, form, query } from '$app/server';
+import { attachmentUrl, isSafeImage } from '$lib/attachment-rules';
 import { can } from '$lib/server/authz';
 import { user } from '$lib/server/db/schema';
 import { renderMarkdown } from '$lib/server/markdown';
 import { remoteContext, runCommand, runForm, runQuery } from '$lib/server/remote-helpers';
+import { deleteAttachment, listAttachments } from '$lib/server/services/attachments';
 import {
 	addComment,
 	deleteComment,
@@ -75,6 +77,23 @@ export const getComments = query(IssueRef, ({ key, number }) => {
 	});
 });
 
+export const getAttachments = query(IssueRef, ({ key, number }) => {
+	const ctx = remoteContext();
+	return runQuery(async () => {
+		const [{ project }, rows] = await Promise.all([
+			getIssue(ctx, key, number),
+			listAttachments(ctx, key, number)
+		]);
+		return rows.map((a) => ({
+			...a,
+			url: attachmentUrl(project.key, a.id),
+			isImage: isSafeImage(a.contentType),
+			canDelete:
+				!project.archivedAt && can(ctx.actor, 'attachment:delete', { uploaderId: a.uploaderId })
+		}));
+	});
+});
+
 export const saveIssue = form(
 	v.object({
 		...IssueRefFields,
@@ -92,6 +111,7 @@ export const saveIssue = form(
 		runForm(async () => {
 			await updateIssue(remoteContext(), key, number, input);
 			void getIssueDetail({ key, number }).refresh();
+			void getAttachments({ key, number }).refresh();
 			return { saved: true };
 		})
 );
@@ -102,6 +122,7 @@ export const postComment = form(
 		runForm(async () => {
 			await addComment(remoteContext(), key, number, { body });
 			void getComments({ key, number }).refresh();
+			void getAttachments({ key, number }).refresh();
 		})
 );
 
@@ -111,6 +132,7 @@ export const updateComment = form(
 		runForm(async () => {
 			await editComment(remoteContext(), key, number, commentId, { body });
 			void getComments({ key, number }).refresh();
+			void getAttachments({ key, number }).refresh();
 		})
 );
 
@@ -120,5 +142,14 @@ export const removeComment = command(
 		runCommand(async () => {
 			await deleteComment(remoteContext(), key, number, commentId);
 			void getComments({ key, number }).refresh();
+		})
+);
+
+export const removeAttachment = command(
+	v.object({ ...IssueRefFields, attachmentId: v.string() }),
+	({ key, number, attachmentId }) =>
+		runCommand(async () => {
+			await deleteAttachment(remoteContext(), key, attachmentId);
+			void getAttachments({ key, number }).refresh();
 		})
 );

@@ -18,12 +18,15 @@ export type Action =
 	| 'issue:assign'
 	| 'issue:delete'
 	| 'comment:create'
-	| 'comment:modify';
+	| 'comment:modify'
+	| 'attachment:create'
+	| 'attachment:delete';
 
 export interface Resource {
 	reporterId?: string;
 	assigneeId?: string | null;
 	authorId?: string;
+	uploaderId?: string;
 }
 
 export function can(actor: Actor, action: Action, res: Resource = {}): boolean {
@@ -35,6 +38,7 @@ export function can(actor: Actor, action: Action, res: Resource = {}): boolean {
 			return false;
 		case 'issue:create':
 		case 'comment:create':
+		case 'attachment:create':
 			return true;
 		case 'issue:assign':
 		case 'issue:delete':
@@ -45,6 +49,8 @@ export function can(actor: Actor, action: Action, res: Resource = {}): boolean {
 			return isMember || (res.assigneeId != null && res.assigneeId === actor.id);
 		case 'comment:modify':
 			return res.authorId === actor.id;
+		case 'attachment:delete':
+			return res.uploaderId === actor.id;
 	}
 }
 

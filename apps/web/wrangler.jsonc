@@ -8,6 +8,15 @@
 	"workers_dev": true,
 	"preview_urls": true,
 	"observability": { "enabled": true },
+	// 添付ファイル。バケットは `wrangler r2 bucket create project-manager-attachments` で作る
+	"r2_buckets": [{ "binding": "BUCKET", "bucket_name": "project-manager-attachments" }],
 	// Turso（aws-ap-northeast-1）の近くで実行し、DB 往復を短くする
-	"placement": { "region": "aws:ap-northeast-1" }
+	"placement": { "region": "aws:ap-northeast-1" },
+	// 動作確認用のプレビュー環境（Worker 名は project-manager-preview）。DB・R2・シークレットは本番と別
+	// デプロイ: pnpm deploy:preview。バインディングは環境ごとに書き直す必要がある
+	"env": {
+		"preview": {
+			"r2_buckets": [{ "binding": "BUCKET", "bucket_name": "project-manager-attachments-preview" }]
+		}
+	}
 }

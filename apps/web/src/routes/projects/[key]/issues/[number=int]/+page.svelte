@@ -1,6 +1,9 @@
 <script lang="ts">
-	import { Pencil, Trash2 } from '@lucide/svelte';
+	import { Paperclip, Pencil, Trash2 } from '@lucide/svelte';
+	import { formatBytes } from '$lib/attachment-rules';
+	import { uploadable } from '$lib/attachment-upload';
 	import { autosize } from '$lib/autosize';
+	import AttachButton from '$lib/components/AttachButton.svelte';
 	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
 	import FormAlert from '$lib/components/FormAlert.svelte';
 	import PriorityPill from '$lib/components/PriorityPill.svelte';
@@ -16,9 +19,11 @@
 	} from '$lib/labels';
 	import { toast } from '$lib/toast.svelte';
 	import {
+		getAttachments,
 		getComments,
 		getIssueDetail,
 		postComment,
+		removeAttachment,
 		removeComment,
 		saveIssue,
 		updateComment
@@ -30,8 +35,20 @@
 	// 2つの query は同時に取得を始め、コメントの更新では課題側を取り直さない
 	const detailQuery = $derived(getIssueDetail(ref));
 	const commentsQuery = $derived(getComments(ref));
+	const attachmentsQuery = $derived(getAttachments(ref));
 	const detail = $derived(await detailQuery);
 	const comments = $derived(await commentsQuery);
+	const attachments = $derived(await attachmentsQuery);
+	let commentInput = $state<HTMLTextAreaElement>();
+	let descriptionInput = $state<HTMLTextAreaElement>();
+
+	async function deleteAttachment(attachmentId: string) {
+		try {
+			await removeAttachment({ ...ref, attachmentId });
+		} catch {
+			failed();
+		}
+	}
 	const issue = $derived(detail.issue);
 	const perms = $derived(detail.perms);
 	const canSave = $derived(perms.edit || perms.changeStatus || perms.assign);
@@ -116,8 +133,16 @@
 						{...saveIssue.fields.description.as('text', issue.description)}
 						form={attrFormId}
 						rows="10"
-						{@attach autosize}></textarea>
-					<p class="hint">Markdown が使えます。右の「保存」で反映されます。</p>
+						bind:this={descriptionInput}
+						{@attach autosize}
+						{@attach uploadable(ref.key)}></textarea>
+					<div class="flex items-center gap-2">
+						<p class="hint" style="flex: 1">
+							Markdown
+							が使えます。ファイルは貼り付け・ドロップでも添付できます。右の「保存」で反映されます。
+						</p>
+						<AttachButton projectKey={ref.key} target={() => descriptionInput} />
+					</div>
 				</div>
 				<div>
 					<button type="button" class="btn btn-outline btn-sm" onclick={() => (editing = false)}>
@@ -134,6 +159,41 @@
 					<p class="m-0 text-muted-foreground">本文はありません</p>
 				{/if}
 			</div>
+		{/if}
+
+		{#if attachments.length > 0}
+			<section class="card attachments" aria-label="添付ファイル">
+				<h2 class="card-title">
+					<Paperclip class="size-4" /> 添付ファイル数: {attachments.length}
+				</h2>
+				<ul>
+					{#each attachments as a (a.id)}
+						<li>
+							<a
+								href={a.url}
+								target={a.isImage ? '_blank' : undefined}
+								rel="noopener"
+								download={a.isImage ? undefined : a.filename}>{a.filename}</a
+							>
+							<span class="text-xs text-muted-foreground"
+								>{formatBytes(a.size)} · {a.uploaderName} · {formatDateTime(a.createdAt)}</span
+							>
+							{#if a.canDelete}
+								<ConfirmAction
+									onconfirm={() => deleteAttachment(a.id)}
+									title="添付ファイルの削除"
+									description={`「${a.filename}」を削除してよろしいですか？\n本文やコメントからも表示できなくなります。`}
+									confirmLabel="添付ファイルを削除する"
+									triggerClass="icon-btn danger-hover ml-auto"
+									triggerLabel={`${a.filename} を削除`}
+								>
+									{#snippet trigger()}<Trash2 />{/snippet}
+								</ConfirmAction>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			</section>
 		{/if}
 
 		<section class="grid gap-4">
@@ -166,9 +226,9 @@
 									</button>
 									<ConfirmAction
 										onconfirm={() => deleteComment(c.id)}
-										title="コメントを削除しますか？"
-										description="このコメントは完全に削除され、元に戻せません。"
-										confirmLabel="削除する"
+										title="コメントの削除"
+										description="このコメントを削除してよろしいですか？&#10;この操作は元に戻せません。"
+										confirmLabel="コメントを削除する"
 										triggerClass="icon-btn danger-hover"
 										triggerLabel="コメントを削除"
 									>
@@ -201,7 +261,8 @@
 									rows="4"
 									required
 									aria-label="コメントを編集"
-									{@attach autosize}></textarea>
+									{@attach autosize}
+									{@attach uploadable(ref.key)}></textarea>
 								<div class="flex justify-end gap-2">
 									<button
 										type="button"
@@ -246,8 +307,11 @@
 						{...postComment.fields.body.as('text')}
 						rows="3"
 						required
-						{@attach autosize}></textarea>
-					<div class="flex justify-end">
+						bind:this={commentInput}
+						{@attach autosize}
+						{@attach uploadable(ref.key)}></textarea>
+					<div class="flex items-center justify-end gap-2">
+						<AttachButton projectKey={ref.key} target={() => commentInput} />
 						<button type="submit" class="btn btn-primary">コメントする</button>
 					</div>
 				</form>
@@ -378,9 +442,9 @@
 		{#if perms.delete}
 			<ConfirmAction
 				action="?/delete"
-				title="課題を削除しますか？"
-				description={`「${data.project.key}-${issue.number} ${issue.title}」とコメントがすべて削除されます。この操作は元に戻せません。`}
-				confirmLabel="削除する"
+				title="課題の削除"
+				description="この課題を削除してよろしいですか？&#10;この操作は元に戻せません。"
+				confirmLabel="課題を削除する"
 				triggerClass="btn btn-danger w-full"
 			>
 				{#snippet trigger()}<Trash2 />課題を削除{/snippet}
@@ -433,5 +497,22 @@
 		gap: 8px;
 		padding-top: 20px;
 		border-top: 1px solid var(--border);
+	}
+	.attachments ul {
+		display: grid;
+		gap: 6px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.attachments li {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 4px 12px;
+		min-width: 0;
+	}
+	.attachments li a {
+		overflow-wrap: anywhere;
 	}
 </style>

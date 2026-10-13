@@ -36,6 +36,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.base = {
 		db,
 		mailer,
+		bucket: env.BUCKET,
 		waitUntil,
 		baseUrl: appEnv.BETTER_AUTH_URL,
 		hashPassword: (pw) => authCtx.password.hash(pw),

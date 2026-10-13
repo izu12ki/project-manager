@@ -102,8 +102,8 @@
 					<ConfirmAction
 						action="?/removeMember"
 						fields={{ id: m.id }}
-						title={`${m.name} さんを外しますか？`}
-						description="このプロジェクトの課題を閲覧できなくなり、担当している課題は未割当になります。"
+						title="参加者の削除"
+						description={`${m.name} さんをこのプロジェクトから外してよろしいですか？\n担当している課題は未割当になります。`}
 						confirmLabel="外す"
 					>
 						{#snippet trigger()}外す{/snippet}
@@ -171,8 +171,8 @@
 						<ConfirmAction
 							action="?/revoke"
 							fields={{ id: inv.id }}
-							title="招待を取り消しますか？"
-							description={`${inv.email} 宛ての招待リンクは無効になります。`}
+							title="招待の取り消し"
+							description={`${inv.email} 宛ての招待を取り消してよろしいですか？\n招待リンクは無効になります。`}
 							confirmLabel="取り消す"
 							triggerClass="btn btn-ghost btn-xs"
 						>
@@ -230,8 +230,8 @@
 							<ConfirmAction
 								action="?/deleteCategory"
 								fields={{ id: c.id }}
-								title={`カテゴリー「${c.name}」を削除しますか？`}
-								description="このカテゴリーが設定されている課題は未設定になります。"
+								title="カテゴリーの削除"
+								description={`カテゴリー「${c.name}」を削除してよろしいですか？\n設定されている課題は未設定になります。`}
 								confirmLabel="削除する"
 								triggerClass="btn btn-ghost btn-xs"
 							>
@@ -336,8 +336,8 @@
 							<ConfirmAction
 								action="?/deleteMilestone"
 								fields={{ id: m.id }}
-								title={`マイルストーン「${m.name}」を削除しますか？`}
-								description="このマイルストーンが設定されている課題は未設定になります。"
+								title="マイルストーンの削除"
+								description={`マイルストーン「${m.name}」を削除してよろしいですか？\n設定されている課題は未設定になります。`}
 								confirmLabel="削除する"
 								triggerClass="btn btn-ghost btn-xs"
 							>
@@ -397,10 +397,9 @@
 			<ConfirmAction
 				action="?/archive"
 				fields={{ archived: 'true' }}
-				title="プロジェクトをアーカイブしますか？"
-				description={`「${data.project.name}」はアーカイブ済みに移動し、課題の追加・編集ができなくなります。`}
+				title="プロジェクトのアーカイブ"
+				description={`「${data.project.name}」をアーカイブしてよろしいですか？\n課題の追加・編集ができなくなります。`}
 				confirmLabel="アーカイブする"
-				destructive={false}
 				triggerClass="btn btn-outline"
 			>
 				{#snippet trigger()}<Archive />アーカイブする{/snippet}

@@ -96,8 +96,8 @@
 								<ConfirmAction
 									action="?/disable"
 									fields={{ id: u.id }}
-									title={`${u.name} さんを無効化しますか？`}
-									description="すぐにログアウトされ、ログインできなくなります。課題やコメントは残ります。"
+									title="ユーザーの無効化"
+									description={`${u.name} さんを無効化してよろしいですか？\nすぐにログアウトされ、ログインできなくなります。`}
 									confirmLabel="無効化する"
 									triggerClass="btn btn-danger btn-sm"
 								>
@@ -140,8 +140,8 @@
 						<ConfirmAction
 							action="?/revoke"
 							fields={{ id: inv.id }}
-							title="招待を取り消しますか？"
-							description={`${inv.email} 宛ての招待リンクは無効になります。`}
+							title="招待の取り消し"
+							description={`${inv.email} 宛ての招待を取り消してよろしいですか？\n招待リンクは無効になります。`}
 							confirmLabel="取り消す"
 							triggerClass="btn btn-ghost btn-xs"
 						>

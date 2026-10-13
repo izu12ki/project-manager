@@ -233,6 +233,32 @@ export const comment = sqliteTable(
 	(t) => [index('comment_issue_idx').on(t.issueId)]
 );
 
+// issueId が null の行は「仮置き」（起票・コメント投稿前にアップロードしたもの）
+export const attachment = sqliteTable(
+	'attachment',
+	{
+		id: text().primaryKey(),
+		projectId: text('project_id')
+			.notNull()
+			.references(() => project.id, { onDelete: 'cascade' }),
+		issueId: text('issue_id').references(() => issue.id, { onDelete: 'cascade' }),
+		commentId: text('comment_id').references(() => comment.id, { onDelete: 'set null' }),
+		uploaderId: text('uploader_id')
+			.notNull()
+			.references(() => user.id),
+		filename: text().notNull(),
+		contentType: text('content_type').notNull(),
+		size: integer().notNull(),
+		r2Key: text('r2_key').notNull(),
+		createdAt: createdAt()
+	},
+	(t) => [
+		uniqueIndex('attachment_r2_key_uq').on(t.r2Key),
+		index('attachment_issue_idx').on(t.issueId),
+		index('attachment_uploader_idx').on(t.uploaderId, t.issueId)
+	]
+);
+
 // better-auth の Drizzle アダプタ（relations-v2）が使う。アプリ側のクエリはコア API（select/join）で書く。
 export const relations = defineRelations(
 	{ user, session, account, verification, rateLimit },

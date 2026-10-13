@@ -6,6 +6,7 @@ import type { AppContext } from '../context';
 import { comment, issue as issueTable, user } from '../db/schema';
 import { AppError } from '../errors';
 import { parse } from '../validation';
+import { linkAttachments } from './attachment-links';
 import { getIssue } from './issues';
 import { assertWritable, requireProject } from './projects';
 
@@ -47,9 +48,9 @@ export async function addComment(
 	assertWritable(project);
 	authorize(ctx.actor, 'comment:create');
 	const { body } = parse(BodyInput, input);
-	await ctx.db
-		.insert(comment)
-		.values({ id: uuidv7(), issueId: issue.id, authorId: ctx.actor.id, body });
+	const id = uuidv7();
+	await ctx.db.insert(comment).values({ id, issueId: issue.id, authorId: ctx.actor.id, body });
+	await linkAttachments(ctx, { projectId: project.id, issueId: issue.id, commentId: id }, body);
 }
 
 async function findOwnedComment(ctx: AppContext, key: string, number: number, commentId: string) {
@@ -61,7 +62,7 @@ async function findOwnedComment(ctx: AppContext, key: string, number: number, co
 		.where(and(eq(comment.id, commentId), eq(comment.issueId, issue.id)));
 	if (!c) throw new AppError('not_found', 'コメントが見つかりません');
 	authorize(ctx.actor, 'comment:modify', { authorId: c.authorId });
-	return c;
+	return { ...c, projectId: project.id };
 }
 
 export async function editComment(
@@ -74,6 +75,7 @@ export async function editComment(
 	const c = await findOwnedComment(ctx, key, number, commentId);
 	const { body } = parse(BodyInput, input);
 	await ctx.db.update(comment).set({ body }).where(eq(comment.id, c.id));
+	await linkAttachments(ctx, { projectId: c.projectId, issueId: c.issueId, commentId: c.id }, body);
 }
 
 export async function deleteComment(

@@ -7,7 +7,7 @@ import { PRIORITIES, STATUSES, type Priority, type Status } from '$lib/labels';
 import { authorize } from '../authz';
 import type { AppContext } from '../context';
 import type { DB } from '../db';
-import { category, issue, milestone, project, user } from '../db/schema';
+import { attachment, category, issue, milestone, project, user } from '../db/schema';
 import { AppError } from '../errors';
 import { emptyToNull, parse } from '../validation';
 import { linkAttachments } from './attachment-links';
@@ -384,5 +384,17 @@ export async function deleteIssue(ctx: AppContext, key: string, number: number):
 	const { project: p, issue: cur } = await getIssue(ctx, key, number);
 	assertWritable(p);
 	authorize(ctx.actor, 'issue:delete');
+	const files = await ctx.db
+		.select({ r2Key: attachment.r2Key })
+		.from(attachment)
+		.where(eq(attachment.issueId, cur.id));
+	// 添付の行は課題の削除で連鎖削除される
 	await ctx.db.delete(issue).where(eq(issue.id, cur.id));
+	if (files.length > 0) {
+		ctx.waitUntil(
+			ctx.bucket
+				.delete(files.map((f) => f.r2Key))
+				.catch((e) => console.error('attachment delete failed', e))
+		);
+	}
 }

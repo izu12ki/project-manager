@@ -4,14 +4,18 @@ import { MAX_ATTACHMENT_BYTES } from '$lib/attachment-rules';
 import { createMemoryStore } from '../attachment-store';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
-import { attachment } from '../db/schema';
+import { attachment, project } from '../db/schema';
 import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
 import {
+	deleteAttachment,
+	downloadHeaders,
 	normalizeContentType,
+	openAttachment,
 	purgeStaleUploads,
 	sanitizeFilename,
 	uploadAttachment
 } from './attachments';
+import { createIssue, deleteIssue } from './issues';
 
 const file = (name = 'shot.png', size = 4, type = 'image/png') =>
 	new File([new Uint8Array(size)], name, { type });
@@ -138,5 +142,102 @@ describe('normalizeContentType', () => {
 	it('パラメータを落として小文字にし、空なら application/octet-stream', () => {
 		expect(normalizeContentType('Image/PNG; charset=binary')).toBe('image/png');
 		expect(normalizeContentType('')).toBe('application/octet-stream');
+	});
+});
+
+describe('attachments: open / delete', () => {
+	let db: DB;
+	let store: ReturnType<typeof createMemoryStore>;
+	let base: ReturnType<typeof createTestBase>;
+	let pending: Promise<unknown>[];
+	let admin: Actor, member: Actor, guest: Actor, outsider: Actor;
+	const as = (a: Actor) => ctxOf(base, a);
+	const settle = () => Promise.all(pending.splice(0));
+
+	beforeEach(async () => {
+		db = await createTestDb();
+		store = createMemoryStore();
+		pending = [];
+		base = createTestBase(db, { bucket: store, waitUntil: (p) => void pending.push(p) });
+		admin = await seedUser(db, 'admin');
+		member = await seedUser(db, 'member');
+		guest = await seedUser(db, 'guest');
+		outsider = await seedUser(db, 'member', 'outsider');
+		await seedProject(db, { key: 'ACME', members: [member, guest] });
+		await seedProject(db, { key: 'BETA', members: [member, outsider] });
+	});
+
+	it('参加者は中身を取得できる', async () => {
+		const up = await uploadAttachment(as(guest), 'ACME', file('a.txt', 5, 'text/plain'));
+		const { row, body } = await openAttachment(as(member), 'ACME', up.id);
+		expect(row.filename).toBe('a.txt');
+		expect((await new Response(body).arrayBuffer()).byteLength).toBe(5);
+	});
+
+	it('未参加・別プロジェクトのキー・R2 に実体がない場合は not_found', async () => {
+		const up = await uploadAttachment(as(guest), 'ACME', file());
+		await expect(openAttachment(as(outsider), 'ACME', up.id)).rejects.toMatchObject({
+			code: 'not_found'
+		});
+		await expect(openAttachment(as(member), 'BETA', up.id)).rejects.toMatchObject({
+			code: 'not_found'
+		});
+		store.objects.clear();
+		await expect(openAttachment(as(member), 'ACME', up.id)).rejects.toMatchObject({
+			code: 'not_found'
+		});
+	});
+
+	it('削除できるのは本人と admin。member でも他人の添付は forbidden', async () => {
+		const a = await uploadAttachment(as(guest), 'ACME', file('a.png'));
+		const b = await uploadAttachment(as(guest), 'ACME', file('b.png'));
+		await expect(deleteAttachment(as(member), 'ACME', a.id)).rejects.toMatchObject({
+			code: 'forbidden'
+		});
+		await deleteAttachment(as(guest), 'ACME', a.id);
+		await deleteAttachment(as(admin), 'ACME', b.id);
+		await settle();
+		expect(await db.select().from(attachment)).toHaveLength(0);
+		expect(store.objects.size).toBe(0);
+	});
+
+	it('アーカイブ済みプロジェクトでは削除できない', async () => {
+		const a = await uploadAttachment(as(guest), 'ACME', file());
+		await db.update(project).set({ archivedAt: new Date() }).where(eq(project.key, 'ACME'));
+		await expect(deleteAttachment(as(guest), 'ACME', a.id)).rejects.toMatchObject({
+			code: 'conflict'
+		});
+	});
+
+	it('課題を削除すると添付の行と R2 の実体も消える', async () => {
+		const a = await uploadAttachment(as(member), 'ACME', file('a.png'));
+		await createIssue(as(member), 'ACME', { title: 'A', description: `![a](${a.url})` });
+		await settle();
+		await deleteIssue(as(member), 'ACME', 1);
+		await settle();
+		expect(await db.select().from(attachment)).toHaveLength(0);
+		expect(store.objects.size).toBe(0);
+	});
+});
+
+describe('downloadHeaders', () => {
+	it('安全な画像は inline、それ以外は octet-stream の attachment', () => {
+		const png = downloadHeaders({ filename: 'a.png', contentType: 'image/png' });
+		expect(png.get('content-type')).toBe('image/png');
+		expect(png.get('content-disposition')).toBe("inline; filename*=UTF-8''a.png");
+		for (const contentType of ['image/svg+xml', 'text/html', 'application/pdf']) {
+			const h = downloadHeaders({ filename: 'x', contentType });
+			expect(h.get('content-type')).toBe('application/octet-stream');
+			expect(h.get('content-disposition')).toMatch(/^attachment; /);
+		}
+	});
+
+	it('日本語と記号を含むファイル名を RFC 5987 で符号化し、共通ヘッダを付ける', () => {
+		const h = downloadHeaders({ filename: "仕様書 (最終)'*.pdf", contentType: 'application/pdf' });
+		expect(h.get('content-disposition')).toBe(
+			"attachment; filename*=UTF-8''%E4%BB%95%E6%A7%98%E6%9B%B8%20%28%E6%9C%80%E7%B5%82%29%27%2A.pdf"
+		);
+		expect(h.get('x-content-type-options')).toBe('nosniff');
+		expect(h.get('cache-control')).toBe('private, max-age=3600');
 	});
 });

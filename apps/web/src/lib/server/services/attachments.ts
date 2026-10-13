@@ -111,3 +111,49 @@ export async function listAttachments(ctx: AppContext, key: string, number: numb
 		.where(eq(attachment.issueId, issue.id))
 		.orderBy(asc(attachment.createdAt), asc(attachment.id));
 }
+
+async function findAttachment(ctx: AppContext, key: string, id: string) {
+	const p = await requireProject(ctx, key);
+	const [row] = await ctx.db
+		.select()
+		.from(attachment)
+		.where(and(eq(attachment.id, id), eq(attachment.projectId, p.id)));
+	if (!row) throw new AppError('not_found', '添付ファイルが見つかりません');
+	return { project: p, row };
+}
+
+export async function openAttachment(ctx: AppContext, key: string, id: string) {
+	const { row } = await findAttachment(ctx, key, id);
+	const obj = await ctx.bucket.get(row.r2Key);
+	if (!obj) throw new AppError('not_found', '添付ファイルが見つかりません');
+	return { row, body: obj.body };
+}
+
+export async function deleteAttachment(ctx: AppContext, key: string, id: string): Promise<void> {
+	const { project: p, row } = await findAttachment(ctx, key, id);
+	assertWritable(p);
+	authorize(ctx.actor, 'attachment:delete', { uploaderId: row.uploaderId });
+	await ctx.db.delete(attachment).where(eq(attachment.id, row.id));
+	ctx.waitUntil(
+		ctx.bucket.delete(row.r2Key).catch((e) => console.error('attachment delete failed', e))
+	);
+}
+
+/** RFC 5987 の filename* 用。encodeURIComponent が残す ' ( ) * も符号化する */
+function encodeFilename(name: string): string {
+	return encodeURIComponent(name).replace(
+		/['()*]/g,
+		(c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`
+	);
+}
+
+/** 安全な画像だけインライン表示し、それ以外は種類を伏せて必ずダウンロードさせる */
+export function downloadHeaders(row: { filename: string; contentType: string }): Headers {
+	const image = isSafeImage(row.contentType);
+	return new Headers({
+		'Content-Type': image ? row.contentType : 'application/octet-stream',
+		'Content-Disposition': `${image ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeFilename(row.filename)}`,
+		'X-Content-Type-Options': 'nosniff',
+		'Cache-Control': 'private, max-age=3600'
+	});
+}

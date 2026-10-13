@@ -94,6 +94,33 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.getByRole('button', { name: '起票する' }).first().click();
 	await expect(page.getByRole('heading', { name: 'ログインできない' })).toBeVisible();
 	await expect(page.getByRole('main').getByText('ACME-1')).toBeVisible();
+
+	// 5b. 添付 API: アップロード → 配信ヘッダ（HTML は必ずダウンロード）→ 存在しない ID は 404
+	const up = await page.request.post('/projects/ACME/attachments', {
+		headers: { Origin: 'http://localhost:4173', Accept: 'application/json' },
+		multipart: {
+			file: {
+				name: '仕様書.html',
+				mimeType: 'text/html',
+				buffer: Buffer.from('<script>alert(1)</script>')
+			}
+		}
+	});
+	expect(up.status()).toBe(201);
+	const uploaded = await up.json();
+	expect(uploaded).toMatchObject({ filename: '仕様書.html', isImage: false });
+	const dl = await page.request.get(uploaded.url);
+	expect(dl.status()).toBe(200);
+	expect(dl.headers()['content-type']).toBe('application/octet-stream');
+	expect(dl.headers()['content-disposition']).toBe(
+		`attachment; filename*=UTF-8''${encodeURIComponent('仕様書.html')}`
+	);
+	expect(dl.headers()['x-content-type-options']).toBe('nosniff');
+	expect(await dl.text()).toBe('<script>alert(1)</script>');
+	const missing = await page.request.get(
+		'/projects/ACME/attachments/00000000-0000-7000-8000-000000000000'
+	);
+	expect(missing.status()).toBe(404);
 	await logout(page);
 
 	// 6. メンバーが登録し、ゲストを担当者にする

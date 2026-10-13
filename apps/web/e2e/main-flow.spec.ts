@@ -109,6 +109,14 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	const shot = page.locator('.markdown img[alt="screen.png"]');
 	await expect(shot).toBeVisible();
 	expect(await shot.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1);
+	await shot.click();
+	const lightbox = page.getByRole('dialog', { name: '画像の拡大表示' });
+	await expect(lightbox.locator('img[alt="screen.png"]')).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(lightbox).toBeHidden();
+	await expect(page.getByRole('region', { name: '添付ファイル' })).toContainText(
+		'添付ファイル数: 1'
+	);
 	await expect(
 		page.getByRole('region', { name: '添付ファイル' }).getByRole('link', { name: 'screen.png' })
 	).toBeVisible();

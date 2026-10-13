@@ -164,8 +164,7 @@
 		{#if attachments.length > 0}
 			<section class="card attachments" aria-label="添付ファイル">
 				<h2 class="card-title">
-					<Paperclip class="size-4" /> 添付ファイル
-					<span class="font-medium text-muted-foreground">{attachments.length}</span>
+					<Paperclip class="size-4" /> 添付ファイル数: {attachments.length}
 				</h2>
 				<ul>
 					{#each attachments as a (a.id)}

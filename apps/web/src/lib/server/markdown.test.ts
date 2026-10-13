@@ -20,4 +20,9 @@ describe('renderMarkdown', () => {
 	it('URL を自動リンクする', () => {
 		expect(renderMarkdown('see https://example.com')).toContain('<a href="https://example.com"');
 	});
+	it('画像は拡大表示用の .md-img で包む', () => {
+		expect(renderMarkdown('![shot](/a.png)')).toContain(
+			'<span class="md-img"><img src="/a.png" alt="shot"></span>'
+		);
+	});
 });

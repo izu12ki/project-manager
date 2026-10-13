@@ -107,8 +107,8 @@
 	dialog {
 		margin: auto;
 		width: calc(100% - 32px);
-		max-width: 480px;
-		padding: 24px;
+		max-width: 400px;
+		padding: 20px;
 		border: 1px solid var(--border);
 		border-radius: 6px;
 		background: var(--background);
@@ -117,7 +117,7 @@
 	}
 	dialog[open] {
 		display: grid;
-		gap: 16px;
+		gap: 14px;
 		animation: pop 0.15s ease;
 	}
 	dialog::backdrop {
@@ -130,11 +130,12 @@
 	}
 	h2 {
 		margin: 0;
-		font-size: 18px;
+		font-size: 16px;
 		font-weight: 600;
 	}
 	p {
 		margin: 0;
+		font-size: 14px;
 		color: var(--muted-foreground);
 		text-wrap: pretty;
 	}

@@ -8,6 +8,7 @@
 	import AppSidebar from '$lib/components/AppSidebar.svelte';
 	import NavProgress from '$lib/components/NavProgress.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+	import ImageLightbox from '$lib/components/ImageLightbox.svelte';
 	import Toaster from '$lib/components/Toaster.svelte';
 	import type { LayoutProps } from './$types';
 
@@ -64,6 +65,7 @@
 </svelte:head>
 
 <Toaster />
+<ImageLightbox />
 <NavProgress />
 
 {#if data.user}

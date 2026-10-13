@@ -3,7 +3,8 @@ import {
 	MAX_ATTACHMENT_BYTES,
 	TOO_LARGE_MESSAGE,
 	markdownFor,
-	shouldUploadPaste
+	shouldUploadPaste,
+	uploadSeparator
 } from './attachment-rules';
 import { toast } from './toast.svelte';
 
@@ -59,7 +60,8 @@ function trackUpload(form: HTMLFormElement | null): () => void {
 /** カーソル位置にプレースホルダを入れてアップロードし、終わったらリンクに置き換える（失敗時は消す） */
 async function insertUpload(el: HTMLTextAreaElement, projectKey: string, file: File) {
 	const placeholder = `![アップロード中: ${file.name.replace(/[[\]]/g, '')}]()`;
-	el.setRangeText(placeholder, el.selectionStart, el.selectionEnd, 'end');
+	const separator = uploadSeparator(el.value.slice(0, el.selectionStart));
+	el.setRangeText(separator + placeholder, el.selectionStart, el.selectionEnd, 'end');
 	notify(el);
 	// form 属性で外のフォームに属する textarea もあるので el.form で辿る
 	const done = trackUpload(el.form);

@@ -32,3 +32,8 @@ export function formatBytes(n: number): string {
 export function shouldUploadPaste(types: readonly string[], fileCount: number): boolean {
 	return fileCount > 0 && !types.includes('text/plain');
 }
+
+/** 添付のリンクは 1 行に 1 つ置く。カーソルが行の途中なら前に改行を入れる */
+export function uploadSeparator(textBeforeCursor: string): string {
+	return textBeforeCursor === '' || textBeforeCursor.endsWith('\n') ? '' : '\n';
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatBytes, markdownFor, shouldUploadPaste } from './attachment-rules';
+import { formatBytes, markdownFor, shouldUploadPaste, uploadSeparator } from './attachment-rules';
 
 describe('markdownFor', () => {
 	const url = '/projects/ACME/attachments/0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b';
@@ -35,5 +35,13 @@ describe('shouldUploadPaste', () => {
 
 	it('ファイルがなければアップロードしない', () => {
 		expect(shouldUploadPaste(['text/plain'], 0)).toBe(false);
+	});
+});
+
+describe('uploadSeparator', () => {
+	it('行頭なら何も付けず、行の途中（直前に別のリンクがあるなど）なら改行を入れる', () => {
+		expect(uploadSeparator('')).toBe('');
+		expect(uploadSeparator('見てください\n')).toBe('');
+		expect(uploadSeparator('[a.html](/projects/T/attachments/x)')).toBe('\n');
 	});
 });

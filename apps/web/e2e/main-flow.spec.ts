@@ -223,7 +223,9 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 
 	// 8b. 自分の添付を削除できる
 	await attachmentList.getByRole('button', { name: 'spec.pdf を削除' }).click();
-	await page.getByRole('alertdialog').getByRole('button', { name: '削除する' }).click();
+	const deleteDialog = page.getByRole('alertdialog', { name: '添付ファイルの削除' });
+	await expect(deleteDialog).toContainText('「spec.pdf」を削除してよろしいですか？');
+	await deleteDialog.getByRole('button', { name: '添付ファイルを削除する' }).click();
 	await expect(attachmentList.getByRole('link', { name: 'spec.pdf' })).toBeHidden();
 
 	// 9. 管理者がゲストを無効化（確認ダイアログ）
@@ -232,9 +234,14 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.goto('/admin/users');
 	const row = page.getByRole('row', { name: /顧客 太郎/ });
 	await row.getByRole('button', { name: '無効化' }).click();
-	await expect(page.getByRole('alertdialog')).toBeVisible();
-	await page.getByRole('button', { name: '無効化する' }).click();
-	await expect(page.getByRole('alertdialog')).toBeHidden();
+	const disableDialog = page.getByRole('alertdialog', { name: 'ユーザーの無効化' });
+	await expect(disableDialog).toBeVisible();
+	// ×で閉じられる
+	await disableDialog.getByRole('button', { name: '閉じる' }).click();
+	await expect(disableDialog).toBeHidden();
+	await row.getByRole('button', { name: '無効化' }).click();
+	await disableDialog.getByRole('button', { name: '無効化する' }).click();
+	await expect(disableDialog).toBeHidden();
 	await expect(row.getByText('無効', { exact: true })).toBeVisible();
 	await expect(row.getByRole('button', { name: '有効化' })).toBeVisible();
 	// 10. 管理者が一覧・ボードを絞り込む

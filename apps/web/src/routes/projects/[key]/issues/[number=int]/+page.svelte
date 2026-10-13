@@ -181,9 +181,9 @@
 							{#if a.canDelete}
 								<ConfirmAction
 									onconfirm={() => deleteAttachment(a.id)}
-									title="添付ファイルを削除しますか？"
-									description={`「${a.filename}」を削除します。本文やコメントのリンクは表示できなくなります。この操作は元に戻せません。`}
-									confirmLabel="削除する"
+									title="添付ファイルの削除"
+									description={`「${a.filename}」を削除してよろしいですか？\n本文やコメントからも表示できなくなります。`}
+									confirmLabel="添付ファイルを削除する"
 									triggerClass="icon-btn danger-hover ml-auto"
 									triggerLabel={`${a.filename} を削除`}
 								>
@@ -226,9 +226,9 @@
 									</button>
 									<ConfirmAction
 										onconfirm={() => deleteComment(c.id)}
-										title="コメントを削除しますか？"
-										description="このコメントは完全に削除され、元に戻せません。"
-										confirmLabel="削除する"
+										title="コメントの削除"
+										description="このコメントを削除してよろしいですか？&#10;この操作は元に戻せません。"
+										confirmLabel="コメントを削除する"
 										triggerClass="icon-btn danger-hover"
 										triggerLabel="コメントを削除"
 									>
@@ -442,9 +442,9 @@
 		{#if perms.delete}
 			<ConfirmAction
 				action="?/delete"
-				title="課題を削除しますか？"
-				description={`「${data.project.key}-${issue.number} ${issue.title}」とコメントがすべて削除されます。この操作は元に戻せません。`}
-				confirmLabel="削除する"
+				title="課題の削除"
+				description="この課題を削除してよろしいですか？&#10;この操作は元に戻せません。"
+				confirmLabel="課題を削除する"
 				triggerClass="btn btn-danger w-full"
 			>
 				{#snippet trigger()}<Trash2 />課題を削除{/snippet}

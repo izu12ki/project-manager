@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { X } from '@lucide/svelte';
 	import { enhance } from '$app/forms';
 
 	let {
@@ -9,7 +10,6 @@
 		title,
 		description,
 		confirmLabel,
-		destructive = true,
 		triggerClass = 'btn btn-outline btn-sm',
 		triggerLabel,
 		trigger
@@ -19,10 +19,11 @@
 		/** 渡すと form action の代わりに確定時に呼ぶ（remote function の command 用） */
 		onconfirm?: () => Promise<void>;
 		fields?: Record<string, string>;
+		/** 見出しバーの短い名前（例: 課題の削除） */
 		title: string;
+		/** 中央に出す確認文。改行（\n）はそのまま改行になる */
 		description?: string;
 		confirmLabel: string;
-		destructive?: boolean;
 		triggerClass?: string;
 		/** アイコンのみのトリガーに付けるアクセシブルネーム */
 		triggerLabel?: string;
@@ -50,19 +51,18 @@
 	<noscript><button type="submit" class={triggerClass}>{@render trigger()}</button></noscript>
 
 	<dialog bind:this={dialog} role="alertdialog" aria-modal="true" aria-labelledby={titleId}>
-		<div class="body">
+		<header>
 			<h2 id={titleId}>{title}</h2>
-			{#if description}<p>{description}</p>{/if}
-		</div>
+			<button type="button" class="close" aria-label="閉じる" onclick={() => dialog?.close()}>
+				<X />
+			</button>
+		</header>
+		{#if description}<p>{description}</p>{/if}
 		<div class="actions">
 			<button type="button" class="btn btn-outline" onclick={() => dialog?.close()}>
 				キャンセル
 			</button>
-			<button
-				type="submit"
-				class="btn {destructive ? 'btn-destructive' : 'btn-primary'}"
-				disabled={pending}
-			>
+			<button type="submit" class="btn btn-primary" disabled={pending}>
 				{confirmLabel}
 			</button>
 		</div>
@@ -107,43 +107,72 @@
 	dialog {
 		margin: auto;
 		width: calc(100% - 32px);
-		max-width: 400px;
-		padding: 20px;
-		border: 1px solid var(--border);
+		max-width: 420px;
+		padding: 0;
+		border: none;
 		border-radius: 6px;
+		overflow: hidden;
 		background: var(--background);
 		color: var(--foreground);
 		box-shadow: 0 16px 48px rgb(0 0 0 / 0.2);
 	}
 	dialog[open] {
-		display: grid;
-		gap: 14px;
 		animation: pop 0.15s ease;
 	}
 	dialog::backdrop {
 		background: var(--overlay);
 	}
-	.body {
-		display: grid;
+	header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
 		gap: 8px;
-		text-align: left;
+		padding: 8px 8px 8px 16px;
+		background: var(--primary);
+		color: var(--primary-foreground);
 	}
 	h2 {
 		margin: 0;
-		font-size: 16px;
+		font-size: 15px;
 		font-weight: 600;
+	}
+	.close {
+		display: grid;
+		place-items: center;
+		width: 32px;
+		height: 32px;
+		border: none;
+		border-radius: 4px;
+		background: transparent;
+		color: inherit;
+		cursor: pointer;
+	}
+	.close:hover {
+		background: rgb(255 255 255 / 0.15);
+	}
+	.close :global(svg) {
+		width: 20px;
+		height: 20px;
 	}
 	p {
 		margin: 0;
-		font-size: 14px;
-		color: var(--muted-foreground);
-		text-wrap: pretty;
+		padding: 24px 20px 0;
+		font-size: 15px;
+		font-weight: 600;
+		line-height: 1.7;
+		text-align: center;
+		white-space: pre-line;
+		overflow-wrap: anywhere;
 	}
 	.actions {
 		display: flex;
 		flex-wrap: wrap;
-		justify-content: flex-end;
-		gap: 8px;
+		justify-content: center;
+		gap: 12px;
+		padding: 20px;
+	}
+	.actions .btn {
+		min-width: 104px;
 	}
 	@keyframes pop {
 		from {

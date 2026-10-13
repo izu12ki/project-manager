@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, lt } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lt } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import {
 	MAX_ATTACHMENT_BYTES,
@@ -8,8 +8,9 @@ import {
 } from '$lib/attachment-rules';
 import { authorize } from '../authz';
 import type { AppContext } from '../context';
-import { attachment } from '../db/schema';
+import { attachment, user } from '../db/schema';
 import { AppError } from '../errors';
+import { getIssue } from './issues';
 import { assertWritable, requireProject } from './projects';
 
 /** 仮置きのまま残す期間 */
@@ -90,4 +91,23 @@ export async function purgeStaleUploads(ctx: AppContext): Promise<void> {
 		)
 	);
 	await ctx.bucket.delete(rows.map((r) => r.r2Key));
+}
+
+/** 課題に紐付いた添付（説明・コメントの両方）を古い順に返す */
+export async function listAttachments(ctx: AppContext, key: string, number: number) {
+	const { issue } = await getIssue(ctx, key, number);
+	return ctx.db
+		.select({
+			id: attachment.id,
+			filename: attachment.filename,
+			contentType: attachment.contentType,
+			size: attachment.size,
+			uploaderId: attachment.uploaderId,
+			uploaderName: user.name,
+			createdAt: attachment.createdAt
+		})
+		.from(attachment)
+		.innerJoin(user, eq(user.id, attachment.uploaderId))
+		.where(eq(attachment.issueId, issue.id))
+		.orderBy(asc(attachment.createdAt), asc(attachment.id));
 }

@@ -10,6 +10,7 @@ import type { DB } from '../db';
 import { category, issue, milestone, project, user } from '../db/schema';
 import { AppError } from '../errors';
 import { emptyToNull, parse } from '../validation';
+import { linkAttachments } from './attachment-links';
 import { assertCategoryOf, assertMilestoneOf } from './issue-fields';
 import {
 	assertAssignable,
@@ -236,6 +237,7 @@ export async function createIssue(
 			position
 		})
 	]);
+	await linkAttachments(ctx, { projectId: p.id, issueId: id }, data.description);
 	forgetProject(ctx, key); // nextIssueNumber が変わった
 	const [row] = await ctx.db.select({ number: issue.number }).from(issue).where(eq(issue.id, id));
 	return { number: row.number };
@@ -303,6 +305,9 @@ export async function updateIssue(
 
 	if (Object.keys(patch).length === 0) return;
 	await ctx.db.update(issue).set(patch).where(eq(issue.id, cur.id));
+	if (patch.description !== undefined) {
+		await linkAttachments(ctx, { projectId: p.id, issueId: cur.id }, patch.description);
+	}
 }
 
 const MoveInput = v.object({

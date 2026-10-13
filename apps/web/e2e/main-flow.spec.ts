@@ -186,6 +186,13 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	});
 	expect(textPastePrevented).toBe(false);
 	await commentBox.fill('確認しました\n');
+	// アップロードが終わるまで送信させない（プレースホルダのまま保存されるのを防ぐ）
+	let releaseUpload!: () => void;
+	const uploadHeld = new Promise<void>((r) => (releaseUpload = r));
+	await page.route('**/projects/ACME/attachments', async (route) => {
+		await uploadHeld;
+		await route.continue();
+	});
 	await page
 		.locator('form.new-comment')
 		.getByTestId('attach-input')
@@ -194,7 +201,13 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 			mimeType: 'application/pdf',
 			buffer: Buffer.from('%PDF-1.4\n%%EOF\n')
 		});
+	await expect(commentBox).toHaveValue(/アップロード中: spec\.pdf/);
+	await page.getByRole('button', { name: 'コメントする' }).click();
+	await expect(page.getByText('アップロードが終わってから送信してください')).toBeVisible();
+	await expect(commentBox).toHaveValue(/アップロード中: spec\.pdf/);
+	releaseUpload();
 	await expect(commentBox).toHaveValue(/\[spec\.pdf\]\(\/projects\/ACME\/attachments\//);
+	await page.unroute('**/projects/ACME/attachments');
 	await page.getByRole('button', { name: 'コメントする' }).click();
 	await expect(page.locator('.markdown').getByText('確認しました')).toBeVisible();
 	const attachmentList = page.getByRole('region', { name: '添付ファイル' });

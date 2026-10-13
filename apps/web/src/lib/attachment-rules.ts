@@ -24,3 +24,11 @@ export function formatBytes(n: number): string {
 	if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
 	return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
+
+/**
+ * 貼り付けをアップロードとして扱うか。Excel・Word などはテキストと一緒に画像も載せるので、
+ * テキストがあればブラウザ標準の貼り付けに任せる（スクリーンショットはテキストを持たない）。
+ */
+export function shouldUploadPaste(types: readonly string[], fileCount: number): boolean {
+	return fileCount > 0 && !types.includes('text/plain');
+}

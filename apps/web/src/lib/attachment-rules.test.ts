@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatBytes, markdownFor } from './attachment-rules';
+import { formatBytes, markdownFor, shouldUploadPaste } from './attachment-rules';
 
 describe('markdownFor', () => {
 	const url = '/projects/ACME/attachments/0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b';
@@ -21,5 +21,19 @@ describe('formatBytes', () => {
 		expect(formatBytes(512)).toBe('512 B');
 		expect(formatBytes(1536)).toBe('1.5 KB');
 		expect(formatBytes(25 * 1024 * 1024)).toBe('25.0 MB');
+	});
+});
+
+describe('shouldUploadPaste', () => {
+	it('スクリーンショット（ファイルのみ）はアップロードする', () => {
+		expect(shouldUploadPaste(['Files'], 1)).toBe(true);
+	});
+
+	it('Excel・Word のようにテキストと画像を両方持つ貼り付けはテキストとして扱う', () => {
+		expect(shouldUploadPaste(['text/plain', 'text/html', 'Files'], 1)).toBe(false);
+	});
+
+	it('ファイルがなければアップロードしない', () => {
+		expect(shouldUploadPaste(['text/plain'], 0)).toBe(false);
 	});
 });

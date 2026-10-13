@@ -1,5 +1,10 @@
 import type { Attachment } from 'svelte/attachments';
-import { MAX_ATTACHMENT_BYTES, TOO_LARGE_MESSAGE, markdownFor } from './attachment-rules';
+import {
+	MAX_ATTACHMENT_BYTES,
+	TOO_LARGE_MESSAGE,
+	markdownFor,
+	shouldUploadPaste
+} from './attachment-rules';
 import { toast } from './toast.svelte';
 
 export interface UploadResult {
@@ -28,16 +33,43 @@ export async function uploadFile(projectKey: string, file: File): Promise<Upload
 /** value を書き換えたことを bind:value・autosize・remote form に知らせる */
 const notify = (el: HTMLTextAreaElement) => el.dispatchEvent(new Event('input', { bubbles: true }));
 
+/** アップロード中のフォームと件数。0 になるまで送信を止める */
+const uploading = new Map<HTMLFormElement, number>();
+
+// enhance の submit ハンドラより先に動くよう capture で登録する
+function blockSubmit(e: SubmitEvent) {
+	e.preventDefault();
+	e.stopImmediatePropagation();
+	toast.error('アップロードが終わってから送信してください');
+}
+
+function trackUpload(form: HTMLFormElement | null): () => void {
+	if (!form) return () => {};
+	const n = uploading.get(form) ?? 0;
+	if (n === 0) form.addEventListener('submit', blockSubmit, true);
+	uploading.set(form, n + 1);
+	return () => {
+		const left = (uploading.get(form) ?? 1) - 1;
+		if (left > 0) return void uploading.set(form, left);
+		uploading.delete(form);
+		form.removeEventListener('submit', blockSubmit, true);
+	};
+}
+
 /** カーソル位置にプレースホルダを入れてアップロードし、終わったらリンクに置き換える（失敗時は消す） */
 async function insertUpload(el: HTMLTextAreaElement, projectKey: string, file: File) {
 	const placeholder = `![アップロード中: ${file.name.replace(/[[\]]/g, '')}]()`;
 	el.setRangeText(placeholder, el.selectionStart, el.selectionEnd, 'end');
 	notify(el);
+	// form 属性で外のフォームに属する textarea もあるので el.form で辿る
+	const done = trackUpload(el.form);
 	let replacement = '';
 	try {
 		replacement = markdownFor(await uploadFile(projectKey, file));
 	} catch (e) {
 		toast.error(e instanceof Error ? e.message : 'アップロードに失敗しました');
+	} finally {
+		done();
 	}
 	const i = el.value.indexOf(placeholder);
 	if (i === -1) return; // アップロード中にユーザーがプレースホルダを消した
@@ -59,7 +91,7 @@ export function uploadable(projectKey: string): Attachment<HTMLTextAreaElement> 
 	return (el) => {
 		const onPaste = (e: ClipboardEvent) => {
 			const files = Array.from(e.clipboardData?.files ?? []);
-			if (files.length === 0) return;
+			if (!shouldUploadPaste(Array.from(e.clipboardData?.types ?? []), files.length)) return;
 			e.preventDefault();
 			void insertUploads(el, projectKey, files);
 		};

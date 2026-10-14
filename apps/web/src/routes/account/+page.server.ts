@@ -1,9 +1,15 @@
 import { fail } from '@sveltejs/kit';
 import { APIError } from 'better-auth/api';
 import * as v from 'valibot';
+import { appContext } from '$lib/server/context';
 import { handleAction } from '$lib/server/errors';
+import { disableSlack, enableSlack, getSlackStatus } from '$lib/server/services/integrations';
 import { formObject, NameSchema, parse, PasswordSchema } from '$lib/server/validation';
-import type { Actions } from './$types';
+import type { Actions, PageServerLoad } from './$types';
+
+export const load: PageServerLoad = async ({ locals }) => ({
+	slack: await getSlackStatus(appContext(locals))
+});
 
 export const actions: Actions = {
 	updateName: async ({ request, locals }) =>
@@ -31,5 +37,15 @@ export const actions: Actions = {
 			}
 			return { passwordSaved: true };
 		});
-	}
+	},
+	enableSlack: async ({ locals }) =>
+		handleAction(async () => {
+			await enableSlack(appContext(locals));
+			return { slackEnabled: true };
+		}),
+	disableSlack: async ({ locals }) =>
+		handleAction(async () => {
+			await disableSlack(appContext(locals));
+			return { slackDisabled: true };
+		})
 };

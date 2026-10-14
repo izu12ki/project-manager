@@ -319,6 +319,14 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 		page.getByLabel('マイルストーン').locator('option', { hasText: 'v1.0' })
 	).toHaveCount(0);
 
+	// 12. 個人設定の Slack 通知（E2E 環境はトークン未設定）
+	await page.goto('/account');
+	await expect(
+		page.getByText('と同じメールアドレスの Slack アカウントに、DM で通知が届きます')
+	).toBeVisible();
+	await expect(page.getByRole('switch', { name: 'Slack 通知' })).toBeDisabled();
+	await expect(page.getByText('Slack 連携は未設定です（管理者に連絡してください）')).toBeVisible();
+
 	// 11. 管理者が Slack 連携を追加・削除する（実際の送信はしない）
 	await page.goto('/projects/ACME/settings');
 	await page.getByLabel('Webhook URL').fill('https://example.com/hook');

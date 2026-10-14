@@ -3,7 +3,15 @@ import { describe, expect, it } from 'vitest';
 import { createIssue } from '$lib/server/services/issues';
 import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '$lib/server/test-utils';
 import { uuidv7 } from 'uuidv7';
-import { comment, issue, notification, project, projectWebhook, user } from './schema';
+import {
+	comment,
+	issue,
+	notification,
+	project,
+	projectWebhook,
+	user,
+	userIntegration
+} from './schema';
 
 describe('schema', () => {
 	it('マイグレーションが適用され、課題削除でコメントが連鎖削除される', async () => {
@@ -63,5 +71,20 @@ describe('notification / project_webhook', () => {
 		expect(await db.select().from(notification)).toHaveLength(0);
 		await db.delete(project);
 		expect(await db.select().from(projectWebhook)).toHaveLength(0);
+	});
+});
+
+describe('user_integration', () => {
+	it('ユーザーを消すと連携も消え、(user, provider) は一意', async () => {
+		const db = await createTestDb();
+		const member = await seedUser(db, 'member');
+		await db
+			.insert(userIntegration)
+			.values({ userId: member.id, provider: 'slack', externalId: 'U1' });
+		await expect(
+			db.insert(userIntegration).values({ userId: member.id, provider: 'slack', externalId: 'U2' })
+		).rejects.toThrow();
+		await db.delete(user).where(eq(user.id, member.id));
+		expect(await db.select().from(userIntegration)).toHaveLength(0);
 	});
 });

@@ -9,7 +9,9 @@ export interface BaseContext {
 	mailer: Mailer;
 	bucket: AttachmentStore;
 	waitUntil: (p: Promise<unknown>) => void;
-	/** 外部 HTTP 呼び出し（Webhook）。テストで差し替える */
+	/** Slack ボットのトークン。未設定なら null（DM を送らない） */
+	slackBotToken: string | null;
+	/** 外部 HTTP 呼び出し（Slack API）。テストで差し替える */
 	fetch: typeof fetch;
 	baseUrl: string;
 	hashPassword: (password: string) => Promise<string>;

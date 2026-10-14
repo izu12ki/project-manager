@@ -43,8 +43,12 @@ export function createTestBase(
 		},
 		fetch: async (input, init) => {
 			fetched.push({ url: String(input), body: JSON.parse(String(init?.body ?? 'null')) });
-			return new Response('ok', { status: 200 });
+			return new Response(JSON.stringify({ ok: true }), {
+				status: 200,
+				headers: { 'Content-Type': 'application/json' }
+			});
 		},
+		slackBotToken: null,
 		baseUrl: 'http://localhost:5173',
 		hashPassword: async (pw) => `test-hash:${pw}`,
 		sent,

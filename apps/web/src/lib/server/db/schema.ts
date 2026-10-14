@@ -305,6 +305,24 @@ export const projectWebhook = sqliteTable(
 	(t) => [index('project_webhook_project_idx').on(t.projectId)]
 );
 
+export const INTEGRATION_PROVIDERS = ['slack'] as const;
+export type IntegrationProviderId = (typeof INTEGRATION_PROVIDERS)[number];
+
+/** 個人の外部連携。行があればオン */
+export const userIntegration = sqliteTable(
+	'user_integration',
+	{
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		provider: text({ enum: INTEGRATION_PROVIDERS }).notNull(),
+		/** 連携先でのユーザー ID（Slack は U…） */
+		externalId: text('external_id').notNull(),
+		createdAt: createdAt()
+	},
+	(t) => [primaryKey({ columns: [t.userId, t.provider] })]
+);
+
 // better-auth の Drizzle アダプタ（relations-v2）が使う。アプリ側のクエリはコア API（select/join）で書く。
 export const relations = defineRelations(
 	{ user, session, account, verification, rateLimit },

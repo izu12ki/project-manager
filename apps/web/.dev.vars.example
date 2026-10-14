@@ -4,3 +4,4 @@ BETTER_AUTH_URL=http://localhost:5173
 MAIL_PROVIDER=console
 # MAIL_API_KEY=
 # MAIL_FROM=Project Manager <noreply@example.com>
+# SLACK_BOT_TOKEN=xoxb-...

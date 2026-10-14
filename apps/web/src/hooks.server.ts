@@ -40,6 +40,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		waitUntil,
 		// Workers の fetch は this が違うと Illegal invocation になるので包む
 		fetch: (input, init) => fetch(input, init),
+		slackBotToken: appEnv.SLACK_BOT_TOKEN || null,
 		baseUrl: appEnv.BETTER_AUTH_URL,
 		hashPassword: (pw) => authCtx.password.hash(pw),
 		memo: new Map()

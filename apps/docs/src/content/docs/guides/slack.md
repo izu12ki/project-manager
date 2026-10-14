@@ -6,9 +6,13 @@ title: Slack 連携
 
 ## 1. Slack で Incoming Webhook を作る
 
-1. https://api.slack.com/apps で「Create New App」→「From scratch」を選び、ワークスペースを指定します。
-2. 「Incoming Webhooks」を開いて有効にし、「Add New Webhook to Workspace」で投稿先のチャンネルを選びます。
-3. 表示された `https://hooks.slack.com/services/...` の URL をコピーします。
+1. https://api.slack.com/apps で「Create New App」→「Blank app」を選びます。
+2. アプリ名（例: `projectManagerNotification`）とワークスペースを指定して進みます。
+3. スコープ（Scopes）とイベント（Events）の画面は、何も追加せずに「Continue」で進めてアプリを作成します。Webhook に必要な権限は次の手順で自動的に付きます。
+4. 左メニューの「Incoming Webhooks」を開いてスイッチをオンにし、「Add New Webhook」（「Add New Webhook to Workspace」と表示される場合もあります）で投稿先のチャンネルを選んで許可します。
+5. 表示された `https://hooks.slack.com/services/...` の URL をコピーします。
+
+ワークスペースの設定によっては、アプリの作成やインストールに Slack 管理者の承認が必要です。
 
 ## 2. プロジェクトに登録する
 

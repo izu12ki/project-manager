@@ -9,6 +9,8 @@ export interface BaseContext {
 	mailer: Mailer;
 	bucket: AttachmentStore;
 	waitUntil: (p: Promise<unknown>) => void;
+	/** 外部 HTTP 呼び出し（Webhook）。テストで差し替える */
+	fetch: typeof fetch;
 	baseUrl: string;
 	hashPassword: (password: string) => Promise<string>;
 	/** リクエスト内で読み取り結果を共有するキャッシュ。未指定ならキャッシュしない。 */

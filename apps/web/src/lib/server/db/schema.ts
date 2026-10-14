@@ -259,6 +259,52 @@ export const attachment = sqliteTable(
 	]
 );
 
+export const NOTIFICATION_TYPES = ['assigned', 'commented', 'status_changed', 'mentioned'] as const;
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+export const notification = sqliteTable(
+	'notification',
+	{
+		id: text().primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id),
+		actorId: text('actor_id')
+			.notNull()
+			.references(() => user.id),
+		issueId: text('issue_id')
+			.notNull()
+			.references(() => issue.id, { onDelete: 'cascade' }),
+		type: text({ enum: NOTIFICATION_TYPES }).notNull(),
+		commentId: text('comment_id').references(() => comment.id, { onDelete: 'cascade' }),
+		fromStatus: text('from_status', { enum: STATUSES }),
+		toStatus: text('to_status', { enum: STATUSES }),
+		readAt: integer('read_at', { mode: 'timestamp_ms' }),
+		createdAt: createdAt()
+	},
+	(t) => [
+		index('notification_user_read_idx').on(t.userId, t.readAt),
+		index('notification_user_created_idx').on(t.userId, t.createdAt)
+	]
+);
+
+export const WEBHOOK_PROVIDERS = ['slack'] as const;
+export type WebhookProviderId = (typeof WEBHOOK_PROVIDERS)[number];
+
+export const projectWebhook = sqliteTable(
+	'project_webhook',
+	{
+		id: text().primaryKey(),
+		projectId: text('project_id')
+			.notNull()
+			.references(() => project.id, { onDelete: 'cascade' }),
+		provider: text({ enum: WEBHOOK_PROVIDERS }).notNull(),
+		url: text().notNull(),
+		createdAt: createdAt()
+	},
+	(t) => [index('project_webhook_project_idx').on(t.projectId)]
+);
+
 // better-auth の Drizzle アダプタ（relations-v2）が使う。アプリ側のクエリはコア API（select/join）で書く。
 export const relations = defineRelations(
 	{ user, session, account, verification, rateLimit },

@@ -22,8 +22,14 @@ export async function createTestDb(): Promise<DB> {
 export function createTestBase(
 	db: DB,
 	overrides: Partial<BaseContext> = {}
-): BaseContext & { sent: MailMessage[] } {
+): BaseContext & {
+	sent: MailMessage[];
+	fetched: { url: string; body: unknown }[];
+	pending: Promise<unknown>[];
+} {
 	const sent: MailMessage[] = [];
+	const fetched: { url: string; body: unknown }[] = [];
+	const pending: Promise<unknown>[] = [];
 	return {
 		db,
 		mailer: {
@@ -33,11 +39,17 @@ export function createTestBase(
 		},
 		bucket: createMemoryStore(),
 		waitUntil: (p) => {
-			void p;
+			pending.push(p);
+		},
+		fetch: async (input, init) => {
+			fetched.push({ url: String(input), body: JSON.parse(String(init?.body ?? 'null')) });
+			return new Response('ok', { status: 200 });
 		},
 		baseUrl: 'http://localhost:5173',
 		hashPassword: async (pw) => `test-hash:${pw}`,
 		sent,
+		fetched,
+		pending,
 		...overrides
 	};
 }

@@ -38,6 +38,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 		mailer,
 		bucket: env.BUCKET,
 		waitUntil,
+		// Workers の fetch は this が違うと Illegal invocation になるので包む
+		fetch: (input, init) => fetch(input, init),
 		baseUrl: appEnv.BETTER_AUTH_URL,
 		hashPassword: (pw) => authCtx.password.hash(pw),
 		memo: new Map()

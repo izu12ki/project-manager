@@ -1,7 +1,9 @@
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
-import { createTestDb } from '$lib/server/test-utils';
-import { comment, issue, project, user } from './schema';
+import { createIssue } from '$lib/server/services/issues';
+import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '$lib/server/test-utils';
+import { uuidv7 } from 'uuidv7';
+import { comment, issue, notification, project, projectWebhook, user } from './schema';
 
 describe('schema', () => {
 	it('マイグレーションが適用され、課題削除でコメントが連鎖削除される', async () => {
@@ -33,5 +35,33 @@ describe('schema', () => {
 		const row = { projectId: 'p1', number: 1, title: 't', reporterId: 'u1', position: 'a0' };
 		await db.insert(issue).values({ id: 'i1', ...row });
 		await expect(db.insert(issue).values({ id: 'i2', ...row })).rejects.toThrow();
+	});
+});
+
+describe('notification / project_webhook', () => {
+	it('課題を消すと通知も消え、プロジェクトを消すと Webhook も消える', async () => {
+		const db = await createTestDb();
+		const base = createTestBase(db);
+		const member = await seedUser(db, 'member');
+		const p = await seedProject(db, { key: 'ACME', members: [member] });
+		await createIssue(ctxOf(base, member), 'ACME', { title: 'A' });
+		const [i] = await db.select().from(issue);
+		await db.insert(notification).values({
+			id: uuidv7(),
+			userId: member.id,
+			actorId: member.id,
+			issueId: i.id,
+			type: 'assigned'
+		});
+		await db.insert(projectWebhook).values({
+			id: uuidv7(),
+			projectId: p.id,
+			provider: 'slack',
+			url: 'https://hooks.slack.com/services/T/B/X'
+		});
+		await db.delete(issue);
+		expect(await db.select().from(notification)).toHaveLength(0);
+		await db.delete(project);
+		expect(await db.select().from(projectWebhook)).toHaveLength(0);
 	});
 });

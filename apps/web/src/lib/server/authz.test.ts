@@ -9,6 +9,7 @@ const guest: Actor = { id: 'g', name: 'G', email: 'g@x', role: 'guest' };
 const table: [Action, Parameters<typeof can>[2], boolean, boolean, boolean][] = [
 	['user:manage', {}, true, false, false],
 	['project:manage', {}, true, false, false],
+	['webhook:manage', {}, true, false, false],
 	['issue:create', {}, true, true, true],
 	['comment:create', {}, true, true, true],
 	['issue:edit', { reporterId: 'x' }, true, true, false],

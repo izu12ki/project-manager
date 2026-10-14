@@ -12,6 +12,7 @@ export interface Actor {
 export type Action =
 	| 'user:manage'
 	| 'project:manage'
+	| 'webhook:manage'
 	| 'issue:create'
 	| 'issue:edit'
 	| 'issue:changeStatus'
@@ -35,6 +36,7 @@ export function can(actor: Actor, action: Action, res: Resource = {}): boolean {
 	switch (action) {
 		case 'user:manage':
 		case 'project:manage':
+		case 'webhook:manage':
 			return false;
 		case 'issue:create':
 		case 'comment:create':

@@ -5,6 +5,7 @@
 	import { autosize } from '$lib/autosize';
 	import AttachButton from '$lib/components/AttachButton.svelte';
 	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
+	import MentionMenu from '$lib/components/MentionMenu.svelte';
 	import FormAlert from '$lib/components/FormAlert.svelte';
 	import PriorityPill from '$lib/components/PriorityPill.svelte';
 	import StatusPill from '$lib/components/StatusPill.svelte';
@@ -46,6 +47,10 @@
 	const attachments = $derived(await attachmentsQuery);
 	let commentInput = $state<HTMLTextAreaElement>();
 	let descriptionInput = $state<HTMLTextAreaElement>();
+	let editCommentInput = $state<HTMLTextAreaElement>();
+	const mentionCandidates = $derived(
+		detail.assignees.filter((u) => !u.disabled).map(({ id, name }) => ({ id, name }))
+	);
 
 	async function deleteAttachment(attachmentId: string) {
 		try {
@@ -141,6 +146,7 @@
 						bind:this={descriptionInput}
 						{@attach autosize}
 						{@attach uploadable(ref.key)}></textarea>
+					<MentionMenu target={() => descriptionInput} candidates={mentionCandidates} />
 					<div class="flex items-center gap-2">
 						<p class="hint" style="flex: 1">
 							Markdown
@@ -266,8 +272,10 @@
 									rows="4"
 									required
 									aria-label="コメントを編集"
+									bind:this={editCommentInput}
 									{@attach autosize}
 									{@attach uploadable(ref.key)}></textarea>
+								<MentionMenu target={() => editCommentInput} candidates={mentionCandidates} />
 								<div class="flex justify-end gap-2">
 									<button
 										type="button"
@@ -315,6 +323,7 @@
 						bind:this={commentInput}
 						{@attach autosize}
 						{@attach uploadable(ref.key)}></textarea>
+					<MentionMenu target={() => commentInput} candidates={mentionCandidates} />
 					<div class="flex items-center justify-end gap-2">
 						<AttachButton projectKey={ref.key} target={() => commentInput} />
 						<button type="submit" class="btn btn-primary">コメントする</button>

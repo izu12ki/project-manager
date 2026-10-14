@@ -42,6 +42,7 @@
 			rows={10}
 			placeholder="課題の詳細"
 			projectKey={data.project.key}
+			mentionCandidates={data.mentionCandidates}
 		/>
 		<div class="props">
 			<div class="prop-list prop-list-wide">

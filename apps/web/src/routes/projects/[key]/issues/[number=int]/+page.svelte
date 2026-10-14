@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Paperclip, Pencil, Trash2 } from '@lucide/svelte';
+	import { untrack } from 'svelte';
 	import { formatBytes } from '$lib/attachment-rules';
 	import { uploadable } from '$lib/attachment-upload';
 	import { autosize } from '$lib/autosize';
@@ -35,8 +36,10 @@
 	let { data, params }: PageProps = $props();
 	const ref = $derived({ key: params.key, number: params.number });
 	// 開いた課題についての自分宛て未読を既読にする
+	// コマンドの内部状態を依存に含めないよう、課題が変わったときだけ走らせる
 	$effect(() => {
-		void readIssueNotifications({ key: ref.key, number: ref.number }).catch(() => {});
+		const { key, number } = ref;
+		untrack(() => void readIssueNotifications({ key, number }).catch(() => {}));
 	});
 	// 2つの query は同時に取得を始め、コメントの更新では課題側を取り直さない
 	const detailQuery = $derived(getIssueDetail(ref));

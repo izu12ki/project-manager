@@ -30,10 +30,10 @@
 | 担当者の変更 | `assigned` | ○ |
 | ステータスの変更 | `status_changed` | ○ |
 | コメント投稿 | `commented` | ○ |
-| メンション（説明・コメント） | `mentioned` | ―（コメント・作成の投稿内で `@名前` として表示） |
+| メンション（説明・コメント） | `mentioned` | 作成・コメント投稿時は、その投稿の抜粋内で `@名前` として表示する。説明・コメントの**編集で追加された**メンションは、追加分だけを 1 件投稿する |
 
 - 同じ status 内の並び替え（カンバンの位置だけの移動）は出来事として扱わない。
-- コメントの編集・削除、課題の削除は通知しない（編集で追加されたメンションのみ §4 に従い通知する）。
+- コメントの編集・削除、課題の削除は通知しない（編集で追加されたメンションだけを §4 に従い通知し、Webhook にも追加分を投稿する）。
 - アーカイブ中のプロジェクトは更新できないため出来事は発生しない。
 
 ## 3. データモデル
@@ -148,8 +148,8 @@ type ProjectEvent = {
   | { kind: 'assignee_changed'; assignee: { id: string; name: string } | null }
   | { kind: 'status_changed'; from: Status; to: Status }
   | { kind: 'commented'; comment: { id: string; body: string } }
-  // 説明・コメントの編集でメンションだけが増えた場合。Webhook には送らない
-  | { kind: 'mentions_added'; comment: { id: string } | null; mentionedIds: string[] }
+  // 説明・コメントの編集でメンションが増えた場合。mentioned は notify がアクセス可否で絞り込んだ後に名前を解決して埋める
+  | { kind: 'mentions_added'; comment: { id: string } | null; mentionedIds: string[]; mentioned?: { id: string; name: string }[] }
 );
 ```
 
@@ -160,7 +160,7 @@ type ProjectEvent = {
 
 1. services の更新処理（トランザクション）が確定した後に `await notify(ctx, events)` を呼ぶ。
 2. in-app: 受信者計算 → `notification` へ一括 insert。DB 往復は「関係者・アクセス可否の取得」1〜2 回 + insert 1 回に収める。
-3. webhook: `project_webhook` を取得し、各送信先について `provider.build(event)` → `deliver()` を `ctx.waitUntil` に渡す。
+3. webhook: `mentions_added` は 2 の受信者計算で絞り込んだ結果から `mentioned`（ID と名前）を埋める。`project_webhook` を取得し、各送信先について `provider.build(event)` → `deliver()` を `ctx.waitUntil` に渡す。
 4. 1〜3 のどこで例外が出ても `notify` は握りつぶして `console.error` に記録する。元の操作は成功のまま返す。
 
 ### WebhookProvider
@@ -188,7 +188,7 @@ interface WebhookProvider {
   - ステータス: `*<url|PM-12 タイトル>* 未着手 → 進行中（平野）`
   - コメント: `*<url|PM-12 タイトル>* に 平野 がコメントしました` + 抜粋
 - 抜粋はメンション記法を `@名前` に置き換え、Markdown 記号を除いたうえで 200 文字で切り、超えたら `…` を付ける。
-- `mentions_added` は `null` を返す（送らない）。
+- メンション追加: `*<url|PM-12 タイトル>* で 平野 が 田中、佐藤 をメンションしました（コメント）`（説明の編集なら「（説明）」）。対象は追加分のうち §4 の共通ルールを満たす人だけで、0 人なら `null` を返して送らない。
 
 ## 7. 画面
 

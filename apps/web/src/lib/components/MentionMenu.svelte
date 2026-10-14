@@ -27,16 +27,23 @@
 			open = null;
 			return;
 		}
-		if (open?.start !== q.start) active = 0;
+		if (open?.start !== q.start || open?.query !== q.query) active = 0;
 		open = q;
 		const r = caretRect(el, q.start);
 		pos = { left: Math.max(8, Math.min(r.left, window.innerWidth - 248)), top: r.bottom + 4 };
 	}
 
-	function pick(c: MentionCandidate) {
+	function pick(c: MentionCandidate | undefined) {
 		const el = target();
-		if (!el || !open) return;
-		el.setRangeText(`${mentionToken(c)} `, open.start, el.selectionStart, 'end');
+		if (!el || !c) return;
+		// キャッシュした open ではなく、現在のキャレットから範囲を求め直す
+		const q =
+			el.selectionStart === el.selectionEnd ? findMentionQuery(el.value, el.selectionStart) : null;
+		if (!q) {
+			open = null;
+			return;
+		}
+		el.setRangeText(`${mentionToken(c)} `, q.start, el.selectionStart, 'end');
 		// bind:value・autosize・remote form に変更を知らせる
 		el.dispatchEvent(new Event('input', { bubbles: true }));
 		open = null;
@@ -50,12 +57,18 @@
 			const d = e.key === 'ArrowDown' ? 1 : -1;
 			active = (active + d + items.length) % items.length;
 		} else if (e.key === 'Enter' || e.key === 'Tab') {
-			pick(items[active]);
+			pick(items[Math.min(active, items.length - 1)]);
 		} else if (e.key === 'Escape') {
 			open = null;
 		} else return;
 		e.preventDefault();
 		e.stopPropagation();
+	}
+
+	// 矢印・Home/End などキャレット移動で候補の状態を合わせ直す（メニュー操作のキーは除く）
+	function onkeyup(e: KeyboardEvent) {
+		if (e.isComposing || ['ArrowUp', 'ArrowDown', 'Enter', 'Tab', 'Escape'].includes(e.key)) return;
+		sync();
 	}
 
 	$effect(() => {
@@ -65,12 +78,16 @@
 		el.addEventListener('input', sync);
 		el.addEventListener('click', sync);
 		el.addEventListener('keydown', onkeydown, true);
+		el.addEventListener('keyup', onkeyup);
+		el.addEventListener('select', sync);
 		el.addEventListener('blur', close);
 		el.setAttribute('aria-autocomplete', 'list');
 		return () => {
 			el.removeEventListener('input', sync);
 			el.removeEventListener('click', sync);
 			el.removeEventListener('keydown', onkeydown, true);
+			el.removeEventListener('keyup', onkeyup);
+			el.removeEventListener('select', sync);
 			el.removeEventListener('blur', close);
 		};
 	});

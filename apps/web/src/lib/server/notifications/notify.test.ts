@@ -1,10 +1,9 @@
 import { eq } from 'drizzle-orm';
-import { uuidv7 } from 'uuidv7';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mentionToken } from '$lib/mentions';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
-import { comment, issue, notification, projectWebhook, user } from '../db/schema';
+import { comment, issue, notification, user, userIntegration } from '../db/schema';
 import { createIssue } from '../services/issues';
 import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
 import { notify, type NotifyInput } from '.';
@@ -118,30 +117,31 @@ describe('notify (in-app)', () => {
 	});
 });
 
-describe('notify (webhook)', () => {
+describe('notify (slack dm)', () => {
 	let db: DB;
 	let base: ReturnType<typeof createTestBase>;
-	let member: Actor, guest: Actor;
+	let member: Actor, guest: Actor, admin: Actor;
 	let input: Omit<NotifyInput, 'events'>;
 	const as = (a: Actor) => ctxOf(base, a);
-	const posted = async () => {
+	const sent = async () => {
 		await Promise.all(base.pending);
-		return base.fetched.map((f) => (f.body as { text: string }).text);
+		return base.fetched
+			.filter((f) => f.url.endsWith('chat.postMessage'))
+			.map((f) => {
+				const b = f.body as { channel: string; text: string };
+				return `${b.channel}:${b.text}`;
+			})
+			.sort();
 	};
 
 	beforeEach(async () => {
 		db = await createTestDb();
-		base = createTestBase(db);
+		base = createTestBase(db, { slackBotToken: 'xoxb-t' });
+		admin = await seedUser(db, 'admin', '管理');
 		member = await seedUser(db, 'member', '花子');
 		guest = await seedUser(db, 'guest', '太郎');
 		const p = await seedProject(db, { key: 'ACME', members: [member, guest] });
-		await db.insert(projectWebhook).values({
-			id: uuidv7(),
-			projectId: p.id,
-			provider: 'slack',
-			url: 'https://hooks.slack.com/services/T/B/X'
-		});
-		await createIssue(as(guest), 'ACME', { title: 'A' }); // issue_created が 1 件投稿される
+		await createIssue(as(guest), 'ACME', { title: 'A' });
 		await Promise.all(base.pending);
 		base.fetched.length = 0;
 		base.pending.length = 0;
@@ -150,68 +150,79 @@ describe('notify (webhook)', () => {
 			project: { id: p.id, key: 'ACME', name: 'Acme' },
 			issue: { id: i.id, number: 1, title: 'A' }
 		};
-	});
-
-	it('出来事ごとに登録先へ順に投稿する', async () => {
-		await notify(as(member), {
-			...input,
-			events: [
-				{ kind: 'assignee_changed', assigneeId: guest.id },
-				{ kind: 'status_changed', from: 'todo', to: 'done' }
-			]
-		});
-		expect(await posted()).toEqual([
-			'花子さんが 担当者を太郎さんに変更 しました。 ACME-1 A',
-			'花子さんが ステータスを変更 しました。 ACME-1 A'
+		await db.insert(userIntegration).values([
+			{ userId: member.id, provider: 'slack', externalId: 'U_MEMBER' },
+			{ userId: guest.id, provider: 'slack', externalId: 'U_GUEST' }
 		]);
-		expect(base.fetched[0].url).toBe('https://hooks.slack.com/services/T/B/X');
 	});
 
-	it('メンション追加は、増えた・受信できる・本人以外の人だけを並べ、いなければ投稿しない', async () => {
-		await notify(as(member), {
-			...input,
-			events: [
-				{
-					kind: 'mentions_added',
-					commentId: null,
-					before: '',
-					after: `${mentionToken(guest)} ${mentionToken(member)}`
-				}
-			]
-		});
-		expect(await posted()).toEqual(['花子さんが 太郎さんを メンション しました。 ACME-1 A']);
-		base.fetched.length = 0;
-		await notify(as(member), {
-			...input,
-			events: [
-				{
-					kind: 'mentions_added',
-					commentId: null,
-					before: mentionToken(guest),
-					after: `${mentionToken(guest)} 誤字修正`
-				}
-			]
-		});
-		expect(await posted()).toEqual([]);
-	});
-
-	it('Webhook がなければ fetch しない', async () => {
-		await db.delete(projectWebhook);
+	it('アプリ内通知の受信者のうち、オンにしている人にだけ送る（本人には送らない）', async () => {
+		await db.update(issue).set({ assigneeId: member.id });
 		await notify(as(member), {
 			...input,
 			events: [{ kind: 'status_changed', from: 'todo', to: 'done' }]
 		});
-		expect(await posted()).toEqual([]);
+		// 起票者 guest にだけ届く。操作した member には届かない
+		expect(await sent()).toEqual(['U_GUEST:花子さんが ステータスを変更 しました。 ACME-1 A']);
 	});
 
-	it('送信に失敗してもログだけ', async () => {
+	it('オンにしていない受信者には送らない', async () => {
+		await db.delete(userIntegration);
+		await notify(as(member), {
+			...input,
+			events: [{ kind: 'status_changed', from: 'todo', to: 'done' }]
+		});
+		expect(await sent()).toEqual([]);
+		expect(await db.select().from(notification)).toHaveLength(1);
+	});
+
+	it('コメント＋メンションは 1 人 1 通（mentioned を優先）', async () => {
+		const body = `${mentionToken(guest)} 見てください`;
+		await db
+			.insert(comment)
+			.values({ id: 'c1', issueId: input.issue.id, authorId: admin.id, body });
+		await notify(as(admin), { ...input, events: [{ kind: 'commented', commentId: 'c1', body }] });
+		expect(await sent()).toEqual(['U_GUEST:管理さんが あなたを メンション しました。 ACME-1 A']);
+		const dm = base.fetched.find((f) => f.url.endsWith('chat.postMessage'))!.body as {
+			blocks: { text?: { text: string } }[];
+		};
+		expect(dm.blocks[0].text!.text).toContain('/projects/ACME/issues/1#comment-c1');
+	});
+
+	it('担当になった通知の 2 行目は優先度', async () => {
+		await db.update(issue).set({ assigneeId: member.id, priority: 'high' });
+		await notify(as(admin), {
+			...input,
+			events: [{ kind: 'assignee_changed', assigneeId: member.id }]
+		});
+		const dm = base.fetched.find((f) => f.url.endsWith('chat.postMessage'))!.body as {
+			channel: string;
+			blocks: { elements?: { text: string }[] }[];
+		};
+		expect(dm.channel).toBe('U_MEMBER');
+		expect(dm.blocks[1].elements![0].text).toBe('優先度: 高');
+	});
+
+	it('トークン未設定なら送らない（アプリ内通知は作る）', async () => {
+		base.slackBotToken = null;
+		await notify(as(member), {
+			...input,
+			events: [{ kind: 'status_changed', from: 'todo', to: 'done' }]
+		});
+		expect(await sent()).toEqual([]);
+		expect(await db.select().from(notification)).toHaveLength(1);
+	});
+
+	it('送信に失敗してもログだけで、アプリ内通知は残る', async () => {
 		const err = vi.spyOn(console, 'error').mockImplementation(() => {});
-		base.fetch = async () => new Response('no', { status: 500 });
+		base.fetch = async () =>
+			new Response(JSON.stringify({ ok: false, error: 'channel_not_found' }));
 		await notify(as(member), {
 			...input,
 			events: [{ kind: 'status_changed', from: 'todo', to: 'done' }]
 		});
 		await Promise.all(base.pending);
-		expect(err).toHaveBeenCalledWith(expect.stringContaining('HTTP 500'));
+		expect(err).toHaveBeenCalledWith(expect.stringContaining('channel_not_found'));
+		expect(await db.select().from(notification)).toHaveLength(1);
 	});
 });

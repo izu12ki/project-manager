@@ -1,6 +1,6 @@
 import { mentionsToPlain } from '$lib/mentions';
 
-/** 通知・Webhook 用に Markdown をプレーンな 1 行にして max 文字で切る */
+/** 通知・外部通知用に Markdown をプレーンな 1 行にして max 文字で切る */
 export function excerpt(markdown: string, max: number): string {
 	const plain = mentionsToPlain(markdown)
 		.replace(/```[^\n]*\n?/g, ' ')

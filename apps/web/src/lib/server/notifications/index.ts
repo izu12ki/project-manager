@@ -1,14 +1,14 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import { extractMentionIds } from '$lib/mentions';
+import type { Priority } from '$lib/labels';
 import type { AppContext } from '../context';
 import type { DB } from '../db';
-import { comment, issue, notification, projectWebhook } from '../db/schema';
+import { comment, issue, notification, userIntegration } from '../db/schema';
 import { listAssignableUsers } from '../services/projects';
-import type { IssueEvent, NotifyInput, WebhookEvent } from './events';
-import { excerpt } from './format';
-import { planNotifications, type Change } from './recipients';
-import { deliver, providers } from './webhooks';
+import { channelConfig, providers, toDirectMessage, type DmSource } from './channels';
+import type { IssueEvent, NotifyInput } from './events';
+import { planNotifications, type Change, type PlannedNotification } from './recipients';
 
 export type { IssueEvent, NotifyInput } from './events';
 
@@ -50,22 +50,22 @@ function toChanges(e: IssueEvent): Change[] {
 	}
 }
 
-/** 受信者計算と Webhook に必要な事実を 1 回の往復（並列）で読む */
+/** 受信者計算と DM に必要な事実を 1 回の往復（並列）で読む */
 async function loadFacts(db: DB, input: NotifyInput) {
-	const [[cur], commenters, receivers, hooks] = await Promise.all([
+	const [[cur], commenters, receivers] = await Promise.all([
 		db
-			.select({ reporterId: issue.reporterId, assigneeId: issue.assigneeId })
+			.select({
+				reporterId: issue.reporterId,
+				assigneeId: issue.assigneeId,
+				priority: issue.priority
+			})
 			.from(issue)
 			.where(eq(issue.id, input.issue.id)),
 		db
 			.selectDistinct({ id: comment.authorId })
 			.from(comment)
 			.where(eq(comment.issueId, input.issue.id)),
-		listAssignableUsers(db, input.project.id),
-		db
-			.select({ provider: projectWebhook.provider, url: projectWebhook.url })
-			.from(projectWebhook)
-			.where(eq(projectWebhook.projectId, input.project.id))
+		listAssignableUsers(db, input.project.id)
 	]);
 	return {
 		participants: {
@@ -75,72 +75,46 @@ async function loadFacts(db: DB, input: NotifyInput) {
 		},
 		/** 通知を受け取れる人（無効化を除く admin + 参加者）。名前の解決にも使う */
 		names: new Map(receivers.map((u) => [u.id, u.name])),
-		hooks
+		priority: cur.priority
 	};
 }
 
-function toWebhookEvent(
+/** オンにしている受信者に DM を送る。送信はレスポンス後に行う */
+async function sendDirectMessages(
 	ctx: AppContext,
 	input: NotifyInput,
-	names: Map<string, string>,
-	e: IssueEvent
-): WebhookEvent {
-	const name = (id: string | null) => (id ? (names.get(id) ?? null) : null);
-	const shared = {
-		project: { key: input.project.key, name: input.project.name },
-		issue: {
-			number: input.issue.number,
-			title: input.issue.title,
-			url: `${ctx.baseUrl}/projects/${input.project.key}/issues/${input.issue.number}`
-		},
-		actor: { name: ctx.actor.name }
+	priority: Priority,
+	planned: PlannedNotification[]
+): Promise<void> {
+	const cfg = channelConfig(ctx, 'slack');
+	if (!cfg || planned.length === 0) return;
+	const links = await ctx.db
+		.select({ userId: userIntegration.userId, externalId: userIntegration.externalId })
+		.from(userIntegration)
+		.where(
+			and(
+				eq(userIntegration.provider, 'slack'),
+				inArray(
+					userIntegration.userId,
+					planned.map((n) => n.userId)
+				)
+			)
+		);
+	if (links.length === 0) return;
+	const byUser = new Map(planned.map((n) => [n.userId, n]));
+	const src: DmSource = {
+		baseUrl: ctx.baseUrl,
+		projectKey: input.project.key,
+		issue: { number: input.issue.number, title: input.issue.title, priority },
+		actorName: ctx.actor.name,
+		events: input.events
 	};
-	switch (e.kind) {
-		case 'issue_created':
-			return {
-				...shared,
-				detail: { kind: e.kind, assignee: name(e.assigneeId), priority: e.priority }
-			};
-		case 'assignee_changed':
-			return { ...shared, detail: { kind: e.kind, assignee: name(e.assigneeId) } };
-		case 'status_changed':
-			return { ...shared, detail: { kind: e.kind, from: e.from, to: e.to } };
-		case 'commented':
-			return { ...shared, detail: { kind: e.kind, excerpt: excerpt(e.body, 200) } };
-		case 'mentions_added':
-			return {
-				...shared,
-				detail: {
-					kind: e.kind,
-					where: e.commentId ? 'comment' : 'description',
-					// 通知と同じく、受信できる人・本人以外だけを並べる
-					mentioned: addedMentions(e)
-						.filter((id) => id !== ctx.actor.id && names.has(id))
-						.map((id) => names.get(id)!)
-				}
-			};
-	}
-}
-
-function sendWebhooks(
-	ctx: AppContext,
-	input: NotifyInput,
-	facts: Awaited<ReturnType<typeof loadFacts>>
-): void {
-	for (const hook of facts.hooks) {
-		const provider = providers[hook.provider];
-		const bodies = input.events
-			.map((e) => provider.build(toWebhookEvent(ctx, input, facts.names, e)))
-			.filter((b) => b !== null);
-		if (bodies.length === 0) continue;
-		// 同じ送信先には出来事の順に 1 件ずつ送る
+	for (const l of links) {
+		const m = toDirectMessage(src, byUser.get(l.userId)!);
 		ctx.waitUntil(
-			(async () => {
-				for (const body of bodies) {
-					const r = await deliver(ctx.fetch, hook.url, body);
-					if (!r.ok) console.error(`[webhook] ${hook.provider} ${input.project.key}: ${r.error}`);
-				}
-			})()
+			providers.slack.send(cfg, l.externalId, m).then((r) => {
+				if (!r.ok) console.error(`[dm] slack ${l.userId}: ${r.error}`);
+			})
 		);
 	}
 }
@@ -165,7 +139,7 @@ export async function notify(ctx: AppContext, input: NotifyInput): Promise<void>
 				}))
 			);
 		}
-		sendWebhooks(ctx, input, facts);
+		await sendDirectMessages(ctx, input, facts.priority, planned);
 	} catch (e) {
 		console.error('[notify] failed', e);
 	}

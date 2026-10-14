@@ -39,7 +39,7 @@ describe('schema', () => {
 });
 
 describe('notification', () => {
-	it('課題を消すと通知も消え', async () => {
+	it('課題を消すと通知も消える', async () => {
 		const db = await createTestDb();
 		const base = createTestBase(db);
 		const member = await seedUser(db, 'member');

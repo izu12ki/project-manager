@@ -21,7 +21,9 @@ async function call(cfg: ChannelConfig, path: string, body?: unknown): Promise<S
 			signal: AbortSignal.timeout(5000)
 		});
 		if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
-		return (await res.json()) as SlackResponse;
+		const json: unknown = await res.json();
+		if (typeof json !== 'object' || json === null) return { ok: false, error: 'invalid response' };
+		return json as SlackResponse;
 	} catch (e) {
 		if (e instanceof DOMException && e.name === 'TimeoutError')
 			return { ok: false, error: 'タイムアウト' };

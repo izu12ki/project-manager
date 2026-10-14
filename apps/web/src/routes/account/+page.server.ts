@@ -1,4 +1,4 @@
-import { fail } from '@sveltejs/kit';
+import { fail, isActionFailure } from '@sveltejs/kit';
 import { APIError } from 'better-auth/api';
 import * as v from 'valibot';
 import { appContext } from '$lib/server/context';
@@ -10,6 +10,16 @@ import type { Actions, PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ locals }) => ({
 	slack: await getSlackStatus(appContext(locals))
 });
+
+type FailData = { message: string; fields: Record<string, string[]> };
+
+/** Slack カード内にエラーを出すため、失敗結果に slack: true を付ける */
+async function slackAction<T>(fn: () => Promise<T>) {
+	const result = await handleAction(fn);
+	if (!isActionFailure(result)) return result;
+	const { message, fields } = result.data as unknown as FailData;
+	return fail(result.status, { message, fields, slack: true as const });
+}
 
 export const actions: Actions = {
 	updateName: async ({ request, locals }) =>
@@ -39,12 +49,12 @@ export const actions: Actions = {
 		});
 	},
 	enableSlack: async ({ locals }) =>
-		handleAction(async () => {
+		slackAction(async () => {
 			await enableSlack(appContext(locals));
 			return { slackEnabled: true };
 		}),
 	disableSlack: async ({ locals }) =>
-		handleAction(async () => {
+		slackAction(async () => {
 			await disableSlack(appContext(locals));
 			return { slackDisabled: true };
 		})

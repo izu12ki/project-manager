@@ -44,6 +44,14 @@ describe('slack.lookup', () => {
 		});
 	});
 
+	it('JSON が null などオブジェクトでなければ invalid response', async () => {
+		expect(await slack.lookup(cfgReturning(null).cfg, 'a@x')).toEqual({
+			ok: false,
+			reason: 'config',
+			error: 'invalid response'
+		});
+	});
+
 	it('invalid_auth や HTTP エラー・例外は config', async () => {
 		expect(
 			await slack.lookup(cfgReturning({ ok: false, error: 'invalid_auth' }).cfg, 'a@x')

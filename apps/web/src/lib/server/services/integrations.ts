@@ -29,7 +29,7 @@ export async function enableSlack(ctx: AppContext): Promise<void> {
 				'validation',
 				`Slack に ${email} のアカウントが見つかりませんでした。Slack のプロフィールのメールアドレスを確認してください。`
 			);
-		console.error(`[slack] lookup failed: ${found.error}`);
+		console.error(`[slack] lookup failed ${ctx.actor.id}: ${found.error}`);
 		throw new AppError(
 			'validation',
 			'Slack 連携の設定に問題があります。管理者に連絡してください。'

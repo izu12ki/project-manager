@@ -29,7 +29,7 @@
 		<p class="page-desc">{data.user?.email}</p>
 	</div>
 
-	{#if form?.message}<FormAlert message={form.message} />{/if}
+	{#if form?.message && !(form && 'slack' in form)}<FormAlert message={form.message} />{/if}
 
 	<form method="POST" action="?/updateName" use:enhance class="card">
 		<div class="card-head">
@@ -90,6 +90,7 @@
 				のプロフィールのメールアドレスが異なる場合は届きません。
 			</p>
 		</div>
+		{#if form && 'slack' in form && form.message}<FormAlert message={form.message} />{/if}
 		<form
 			method="POST"
 			action={data.slack.linked ? '?/disableSlack' : '?/enableSlack'}

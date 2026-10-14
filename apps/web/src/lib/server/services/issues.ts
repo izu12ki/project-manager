@@ -9,6 +9,7 @@ import type { AppContext } from '../context';
 import type { DB } from '../db';
 import { attachment, category, issue, milestone, project, user } from '../db/schema';
 import { AppError } from '../errors';
+import { notify, type IssueEvent } from '../notifications';
 import { emptyToNull, parse } from '../validation';
 import { linkAttachments } from './attachment-links';
 import { assertCategoryOf, assertMilestoneOf } from './issue-fields';
@@ -240,6 +241,13 @@ export async function createIssue(
 	await linkAttachments(ctx, { projectId: p.id, issueId: id }, data.description);
 	forgetProject(ctx, key); // nextIssueNumber が変わった
 	const [row] = await ctx.db.select({ number: issue.number }).from(issue).where(eq(issue.id, id));
+	await notify(ctx, {
+		project: p,
+		issue: { id, number: row.number, title: data.title },
+		events: [
+			{ kind: 'issue_created', assigneeId, priority: data.priority, description: data.description }
+		]
+	});
 	return { number: row.number };
 }
 
@@ -307,6 +315,28 @@ export async function updateIssue(
 	await ctx.db.update(issue).set(patch).where(eq(issue.id, cur.id));
 	if (patch.description !== undefined) {
 		await linkAttachments(ctx, { projectId: p.id, issueId: cur.id }, patch.description);
+	}
+	const events: IssueEvent[] = [];
+	if (patch.assigneeId !== undefined) {
+		events.push({ kind: 'assignee_changed', assigneeId: patch.assigneeId });
+	}
+	if (patch.status !== undefined) {
+		events.push({ kind: 'status_changed', from: cur.status, to: patch.status });
+	}
+	if (patch.description !== undefined) {
+		events.push({
+			kind: 'mentions_added',
+			commentId: null,
+			before: cur.description,
+			after: patch.description
+		});
+	}
+	if (events.length > 0) {
+		await notify(ctx, {
+			project: p,
+			issue: { id: cur.id, number: cur.number, title: patch.title ?? cur.title },
+			events
+		});
 	}
 }
 
@@ -378,6 +408,13 @@ export async function moveIssue(ctx: AppContext, key: string, input: unknown): P
 		throw new AppError('validation', STALE);
 	}
 	await ctx.db.update(issue).set({ status: data.status, position }).where(eq(issue.id, cur.id));
+	if (data.status !== cur.status) {
+		await notify(ctx, {
+			project: p,
+			issue: { id: cur.id, number: cur.number, title: cur.title },
+			events: [{ kind: 'status_changed', from: cur.status, to: data.status }]
+		});
+	}
 }
 
 export async function deleteIssue(ctx: AppContext, key: string, number: number): Promise<void> {

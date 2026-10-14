@@ -13,3 +13,4 @@ title: 環境変数
 | `MAIL_PROVIDER` | - | `smtp2go` / `resend` / `console`。未設定なら `console`（ログに出すだけ） |
 | `MAIL_API_KEY` | `MAIL_PROVIDER` が `console` 以外なら ○ | |
 | `MAIL_FROM` | `MAIL_PROVIDER` が `console` 以外なら ○ | 例 `Project Manager <noreply@example.com>` |
+| `SLACK_BOT_TOKEN` | - | Slack ボットのトークン（`xoxb-...`）。未設定なら Slack 通知は使えない。[Slack 連携](/guides/slack/) |

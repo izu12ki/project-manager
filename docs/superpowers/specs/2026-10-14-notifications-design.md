@@ -3,6 +3,8 @@
 日付: 2026-10-14
 前提: `2026-10-09-project-manager-design.md`（以下「本体設計書」）の権限・データモデル・エラー処理に従う。
 
+> **変更（2026-10-14）**: 外部連携（プロジェクト単位の Webhook チャンネル投稿）は `2026-10-14-slack-dm-design.md`（Slack 個人通知・DM）で置き換えた。本書の Webhook に関する記述（§2 の Webhook 列、§3 project_webhook、§6 WebhookProvider / Slack 実装、§7 外部連携タブ、§8 webhook:manage）は無効。
+
 ## 1. 目的とスコープ
 
 課題に関する出来事を関係者が見落とさないようにする。

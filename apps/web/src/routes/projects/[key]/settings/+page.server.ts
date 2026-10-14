@@ -26,13 +26,6 @@ import {
 	setProjectArchived,
 	updateProject
 } from '$lib/server/services/projects';
-import {
-	addWebhook,
-	listWebhooks,
-	removeWebhook,
-	testWebhook,
-	WEBHOOK_PROVIDER_OPTIONS
-} from '$lib/server/services/webhooks';
 import { listUsers } from '$lib/server/services/users';
 import { formObject } from '$lib/server/validation';
 import type { Actions, PageServerLoad } from './$types';
@@ -42,13 +35,12 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 	if (ctx.actor.role !== 'admin') error(404, 'Not found');
 	return handleLoad(async () => {
 		const p = await requireProject(ctx, params.key);
-		const [members, users, invitations, categories, milestones, webhooks] = await Promise.all([
+		const [members, users, invitations, categories, milestones] = await Promise.all([
 			listMembers(ctx, params.key),
 			listUsers(ctx),
 			listPendingInvitations(ctx, { projectId: p.id }),
 			listCategories(ctx, params.key),
-			listMilestones(ctx, params.key),
-			listWebhooks(ctx, params.key)
+			listMilestones(ctx, params.key)
 		]);
 		const memberIds = new Set(members.map((m) => m.id));
 		const candidates = users.filter(
@@ -59,9 +51,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			candidates,
 			invitations,
 			categories,
-			milestones,
-			webhooks,
-			providerOptions: WEBHOOK_PROVIDER_OPTIONS
+			milestones
 		};
 	});
 };
@@ -152,25 +142,6 @@ export const actions: Actions = {
 		const id = await idOf(request);
 		return handleAction(async () => {
 			await deleteMilestone(appContext(locals), params.key, id);
-		});
-	},
-	addWebhook: async ({ request, locals, params }) => {
-		const input = formObject(await request.formData());
-		return handleAction(async () => {
-			await addWebhook(appContext(locals), params.key, input);
-		});
-	},
-	removeWebhook: async ({ request, locals, params }) => {
-		const id = await idOf(request);
-		return handleAction(async () => {
-			await removeWebhook(appContext(locals), params.key, id);
-		});
-	},
-	testWebhook: async ({ request, locals, params }) => {
-		const id = await idOf(request);
-		return handleAction(async () => {
-			const result = await testWebhook(appContext(locals), params.key, id);
-			return { testResult: { id, ...result } };
 		});
 	},
 	revoke: async ({ request, locals }) => {

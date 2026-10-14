@@ -14,16 +14,3 @@ export interface NotifyInput {
 	issue: { id: string; number: number; title: string };
 	events: IssueEvent[];
 }
-
-/** プロバイダに渡す出来事。名前・URL・抜粋は解決済み */
-export interface WebhookEvent {
-	project: { key: string; name: string };
-	issue: { number: number; title: string; url: string };
-	actor: { name: string };
-	detail:
-		| { kind: 'issue_created'; assignee: string | null; priority: Priority }
-		| { kind: 'assignee_changed'; assignee: string | null }
-		| { kind: 'status_changed'; from: Status; to: Status }
-		| { kind: 'commented'; excerpt: string }
-		| { kind: 'mentions_added'; where: 'comment' | 'description'; mentioned: string[] };
-}

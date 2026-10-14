@@ -3,15 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createIssue } from '$lib/server/services/issues';
 import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '$lib/server/test-utils';
 import { uuidv7 } from 'uuidv7';
-import {
-	comment,
-	issue,
-	notification,
-	project,
-	projectWebhook,
-	user,
-	userIntegration
-} from './schema';
+import { comment, issue, notification, project, user, userIntegration } from './schema';
 
 describe('schema', () => {
 	it('マイグレーションが適用され、課題削除でコメントが連鎖削除される', async () => {
@@ -46,12 +38,12 @@ describe('schema', () => {
 	});
 });
 
-describe('notification / project_webhook', () => {
-	it('課題を消すと通知も消え、プロジェクトを消すと Webhook も消える', async () => {
+describe('notification', () => {
+	it('課題を消すと通知も消え', async () => {
 		const db = await createTestDb();
 		const base = createTestBase(db);
 		const member = await seedUser(db, 'member');
-		const p = await seedProject(db, { key: 'ACME', members: [member] });
+		await seedProject(db, { key: 'ACME', members: [member] });
 		await createIssue(ctxOf(base, member), 'ACME', { title: 'A' });
 		const [i] = await db.select().from(issue);
 		await db.insert(notification).values({
@@ -61,16 +53,8 @@ describe('notification / project_webhook', () => {
 			issueId: i.id,
 			type: 'assigned'
 		});
-		await db.insert(projectWebhook).values({
-			id: uuidv7(),
-			projectId: p.id,
-			provider: 'slack',
-			url: 'https://hooks.slack.com/services/T/B/X'
-		});
 		await db.delete(issue);
 		expect(await db.select().from(notification)).toHaveLength(0);
-		await db.delete(project);
-		expect(await db.select().from(projectWebhook)).toHaveLength(0);
 	});
 });
 

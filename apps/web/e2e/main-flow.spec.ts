@@ -326,23 +326,4 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	).toBeVisible();
 	await expect(page.getByRole('switch', { name: 'Slack 通知' })).toBeDisabled();
 	await expect(page.getByText('Slack 連携は未設定です（管理者に連絡してください）')).toBeVisible();
-
-	// 11. 管理者が Slack 連携を追加・削除する（実際の送信はしない）
-	await page.goto('/projects/ACME/settings');
-	await page.getByLabel('Webhook URL').fill('https://example.com/hook');
-	await addIn('Webhook URL').click();
-	await expect(page.getByText('Slack の Webhook URL を入力してください')).toBeVisible();
-	await page
-		.getByLabel('Webhook URL')
-		.fill('https://hooks.slack.com/services/T000/B000/abcdef123456');
-	await addIn('Webhook URL').click();
-	const hookRow = page.getByRole('listitem').filter({ hasText: '••••••••••••123456' });
-	await expect(hookRow).toBeVisible();
-	await expect(page.getByText('T000')).toBeHidden();
-	await hookRow.getByRole('button', { name: '削除' }).click();
-	await page
-		.getByRole('alertdialog', { name: '連携先の削除' })
-		.getByRole('button', { name: '削除する' })
-		.click();
-	await expect(hookRow).toBeHidden();
 });

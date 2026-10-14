@@ -288,23 +288,6 @@ export const notification = sqliteTable(
 	]
 );
 
-export const WEBHOOK_PROVIDERS = ['slack'] as const;
-export type WebhookProviderId = (typeof WEBHOOK_PROVIDERS)[number];
-
-export const projectWebhook = sqliteTable(
-	'project_webhook',
-	{
-		id: text().primaryKey(),
-		projectId: text('project_id')
-			.notNull()
-			.references(() => project.id, { onDelete: 'cascade' }),
-		provider: text({ enum: WEBHOOK_PROVIDERS }).notNull(),
-		url: text().notNull(),
-		createdAt: createdAt()
-	},
-	(t) => [index('project_webhook_project_idx').on(t.projectId)]
-);
-
 export const INTEGRATION_PROVIDERS = ['slack'] as const;
 export type IntegrationProviderId = (typeof INTEGRATION_PROVIDERS)[number];
 

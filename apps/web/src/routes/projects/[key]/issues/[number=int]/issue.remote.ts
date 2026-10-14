@@ -5,6 +5,7 @@ import { attachmentUrl, isSafeImage } from '$lib/attachment-rules';
 import { can } from '$lib/server/authz';
 import { user } from '$lib/server/db/schema';
 import { renderMarkdown } from '$lib/server/markdown';
+import { getUnreadCount } from '$lib/notifications.remote';
 import { remoteContext, runCommand, runForm, runQuery } from '$lib/server/remote-helpers';
 import { deleteAttachment, listAttachments } from '$lib/server/services/attachments';
 import {
@@ -15,6 +16,7 @@ import {
 } from '$lib/server/services/comments';
 import { listCategories, listMilestones } from '$lib/server/services/issue-fields';
 import { getIssue, updateIssue } from '$lib/server/services/issues';
+import { markIssueRead } from '$lib/server/services/notifications';
 import { listAssignableUsers, requireProject } from '$lib/server/services/projects';
 
 const IssueRef = v.object({
@@ -152,4 +154,11 @@ export const removeAttachment = command(
 			await deleteAttachment(remoteContext(), key, attachmentId);
 			void getAttachments({ key, number }).refresh();
 		})
+);
+
+export const readIssueNotifications = command(IssueRef, ({ key, number }) =>
+	runCommand(async () => {
+		await markIssueRead(remoteContext(), key, number);
+		void getUnreadCount().refresh();
+	})
 );

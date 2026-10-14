@@ -23,6 +23,7 @@
 		getComments,
 		getIssueDetail,
 		postComment,
+		readIssueNotifications,
 		removeAttachment,
 		removeComment,
 		saveIssue,
@@ -32,6 +33,10 @@
 
 	let { data, params }: PageProps = $props();
 	const ref = $derived({ key: params.key, number: params.number });
+	// 開いた課題についての自分宛て未読を既読にする
+	$effect(() => {
+		void readIssueNotifications({ key: ref.key, number: ref.number }).catch(() => {});
+	});
 	// 2つの query は同時に取得を始め、コメントの更新では課題側を取り直さない
 	const detailQuery = $derived(getIssueDetail(ref));
 	const commentsQuery = $derived(getComments(ref));
@@ -206,7 +211,7 @@
 				<p class="m-0 text-muted-foreground">まだコメントはありません</p>
 			{/if}
 			{#each comments as c (c.id)}
-				<article class="comment">
+				<article class="comment" id={`comment-${c.id}`}>
 					<span class="avatar" style:--c={colorFor(c.authorName)}>{c.authorName[0]}</span>
 					<div class="grid min-w-0 gap-1">
 						<div class="flex items-center gap-2">
@@ -477,9 +482,15 @@
 		padding: 20px 24px;
 	}
 	.comment {
+		scroll-margin-top: 80px;
 		display: grid;
 		grid-template-columns: 32px minmax(0, 1fr);
 		gap: 12px;
+	}
+	.comment:target {
+		outline: 2px solid var(--ring);
+		outline-offset: 4px;
+		border-radius: 4px;
 	}
 	.comment :global(.danger-hover:hover) {
 		color: var(--destructive);

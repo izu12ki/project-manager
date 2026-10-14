@@ -2,6 +2,7 @@
 	import { afterNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import {
+		Bell,
 		ChevronsUpDown,
 		CircleUser,
 		FolderKanban,
@@ -10,6 +11,7 @@
 		Users
 	} from '@lucide/svelte';
 	import { ROLE_LABEL, colorFor } from '$lib/labels';
+	import { getUnreadCount } from '$lib/notifications.remote';
 	import ThemeToggle from './ThemeToggle.svelte';
 
 	let {
@@ -32,9 +34,19 @@
 	const isCurrent = (key: string) =>
 		path === `/projects/${key}` || path.startsWith(`/projects/${key}/`);
 
+	const unread = getUnreadCount();
+	// 遷移ごとと、表示中は 60 秒ごとに取り直す
 	afterNavigate(() => {
 		menuOpen = false;
+		void unread.refresh();
 	});
+	$effect(() => {
+		const id = setInterval(() => {
+			if (document.visibilityState === 'visible') void unread.refresh();
+		}, 60_000);
+		return () => clearInterval(id);
+	});
+	const unreadLabel = $derived((unread.current ?? 0) > 99 ? '99+' : String(unread.current ?? 0));
 </script>
 
 <svelte:window
@@ -61,6 +73,18 @@
 		<div class="group">
 			<a href="/" class="item" aria-current={path === '/' ? 'page' : undefined}>
 				<LayoutGrid size={16} class="muted-icon" />すべてのプロジェクト
+			</a>
+			<a
+				href="/notifications"
+				class="item row"
+				aria-current={path === '/notifications' ? 'page' : undefined}
+			>
+				<Bell size={16} class="muted-icon" />通知
+				{#if (unread.current ?? 0) > 0}
+					<span class="badge" data-testid="unread-badge" aria-label={`未読 ${unreadLabel} 件`}
+						>{unreadLabel}</span
+					>
+				{/if}
 			</a>
 		</div>
 		<div class="group">
@@ -300,5 +324,17 @@
 		height: 1px;
 		margin: 4px -4px;
 		background: var(--border);
+	}
+	.badge {
+		margin-left: auto;
+		min-width: 20px;
+		padding: 0 6px;
+		border-radius: 999px;
+		background: var(--primary);
+		color: var(--primary-foreground);
+		font-size: 11px;
+		font-weight: 600;
+		line-height: 18px;
+		text-align: center;
 	}
 </style>

@@ -1,0 +1,26 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`slack.build > 作成: 文面・課題リンク・優先度と担当者 1`] = `
+{
+  "blocks": [
+    {
+      "text": {
+        "text": "平野さんが 課題を作成 しました。
+*<http://pm.example/projects/ACME/issues/12|ACME-12 ログイン画面>*",
+        "type": "mrkdwn",
+      },
+      "type": "section",
+    },
+    {
+      "elements": [
+        {
+          "text": "優先度: 高 ・ 担当者: 田中",
+          "type": "mrkdwn",
+        },
+      ],
+      "type": "context",
+    },
+  ],
+  "text": "平野さんが 課題を作成 しました。 ACME-12 ログイン画面",
+}
+`;

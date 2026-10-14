@@ -603,6 +603,14 @@
 		color: var(--primary-ink);
 		text-decoration: underline;
 	}
+	.markdown .mention {
+		padding: 0 4px;
+		border-radius: 4px;
+		background: var(--ring-soft);
+		color: var(--primary);
+		font-weight: 500;
+		white-space: nowrap;
+	}
 	.markdown p,
 	.markdown ul,
 	.markdown ol,

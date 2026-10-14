@@ -8,7 +8,8 @@
 		Mail,
 		Pencil,
 		RotateCcw,
-		Tag
+		Tag,
+		Webhook
 	} from '@lucide/svelte';
 	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
 	import FormAlert from '$lib/components/FormAlert.svelte';
@@ -25,6 +26,13 @@
 		if (form?.saved) toast.success('保存しました');
 	});
 
+	$effect(() => {
+		const r = form?.testResult;
+		if (!r) return;
+		if (r.ok) toast.success('テスト送信しました。チャンネルを確認してください');
+		else toast.error(`テスト送信に失敗しました（${r.error}）`);
+	});
+
 	/** 編集フォームを保存できたら、開いていた details を閉じる */
 	const closeOnSuccess: SubmitFunction =
 		({ formElement }) =>
@@ -35,7 +43,7 @@
 </script>
 
 <section class="grid w-full max-w-[800px] gap-6">
-	{#if form?.message}<FormAlert message={form.message} />{/if}
+	{#if form?.message && !form.fields?.url}<FormAlert message={form.message} />{/if}
 
 	<form
 		method="POST"
@@ -374,6 +382,77 @@
 				<button type="submit" class="btn btn-outline">追加</button>
 			</form>
 		{/if}
+	</div>
+
+	<div class="card">
+		<div class="card-head">
+			<h2 class="card-title">外部連携</h2>
+			<p class="card-desc">
+				課題の作成・担当者の変更・ステータスの変更・コメントをチャットに投稿します
+			</p>
+		</div>
+		<p class="hint m-0">
+			課題のタイトルとコメントの抜粋がこのチャンネルに投稿されます。ゲストに見せたくない内容がある場合はチャンネルの参加者に注意してください。
+		</p>
+		{#if data.webhooks.length > 0}
+			<ul class="list">
+				{#each data.webhooks as w (w.id)}
+					<li class="option-row">
+						<Webhook size={16} class="row-icon shrink-0 text-muted-foreground" />
+						<span class="min-w-0 flex-1 truncate"
+							>{w.providerLabel} <span class="text-muted-foreground">{w.maskedUrl}</span></span
+						>
+						<form
+							method="POST"
+							action="?/testWebhook"
+							use:enhance={() =>
+								async ({ update }) =>
+									update({ reset: false })}
+						>
+							<input type="hidden" name="id" value={w.id} />
+							<button type="submit" class="btn btn-ghost btn-xs">テスト送信</button>
+						</form>
+						<ConfirmAction
+							action="?/removeWebhook"
+							fields={{ id: w.id }}
+							title="連携先の削除"
+							description={`${w.providerLabel} への投稿を停止します。よろしいですか？`}
+							confirmLabel="削除する"
+							triggerClass="btn btn-ghost btn-xs"
+						>
+							{#snippet trigger()}削除{/snippet}
+						</ConfirmAction>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+		<form
+			method="POST"
+			action="?/addWebhook"
+			use:enhance
+			class="grid items-end gap-3"
+			style="grid-template-columns: auto minmax(0, 1fr) auto"
+		>
+			<div class="field">
+				<label class="label" for="webhook-provider">連携先</label>
+				<select class="input" id="webhook-provider" name="provider">
+					{#each data.providerOptions as o (o.id)}<option value={o.id}>{o.label}</option>{/each}
+				</select>
+			</div>
+			<div class="field">
+				<label class="label" for="webhook-url">Webhook URL</label>
+				<input
+					class="input"
+					id="webhook-url"
+					name="url"
+					required
+					placeholder="https://hooks.slack.com/services/..."
+					aria-invalid={form?.fields?.url ? 'true' : undefined}
+				/>
+			</div>
+			<button type="submit" class="btn btn-outline">追加</button>
+		</form>
+		{#if form?.fields?.url}<p class="field-error m-0">{form.fields.url[0]}</p>{/if}
 	</div>
 
 	<div

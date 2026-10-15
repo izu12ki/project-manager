@@ -177,22 +177,17 @@ export const setIssueDates = command(
 - 担当者別グループの見出しは課題の `assigneeName` で足りるため、参加者一覧は取得しない。
 - `+page.server.ts` は作らず、ボードと同じくリモート関数だけで読み込む。
 
-```ts
-export const getHolidays = query(
-	v.object({ from: v.string(), to: v.string() }), // YYYY-MM-DD
-	...
-);
-// → { date: string; name: string }[]（from 以上 to 以下）
-```
+### 祝日の判定（`src/lib/holidays.ts`）
 
-- 表示範囲（`from` / `scale`）だけが変わったときは課題を再取得せず、`getHolidays` だけを呼ぶ。祝日の取得に失敗しても土日の灰色だけで表示を続ける。
-
-### 祝日データ（`src/lib/server/holidays.ts`）
-
-- `@holiday-jp/holiday_jp`（MIT、2026-09 時点で保守されている。1970〜2050 年の内閣府の祝日・振替休日・国民の休日を収録）を `apps/web` の dependencies に追加する。
-- 収録データ（約 230KB）をクライアントのバンドルに入れないよう、サーバー側だけで使う。
-- `listHolidays(from, to)`: `holiday_jp.holidays`（キーが `YYYY-MM-DD` のオブジェクト）を文字列比較で絞り込む。`Date` を経由しないのでタイムゾーンの影響を受けない。範囲は最大 1 年に制限し、超えたら `validation`。
-- 祝日法の改正で新しい祝日が加わったときは、パッケージを更新して再デプロイすれば反映される（ドキュメントのアップデート手順に追記する）。
+- 外部パッケージを使わず、規則から計算する純関数として自前で実装する。クライアントで計算するため、サーバーへの問い合わせはない。
+- 参考: [osamutake/japanese-holidays-js](https://github.com/osamutake/japanese-holidays-js/blob/master/src/japanese-holidays.coffee)（MIT）。移植するので、ファイル先頭に出典と著作権表示をコメントで残す。
+- 計算するもの:
+  - 祝日の定義表（名前、算出方法、施行年、廃止年）。算出方法は「固定日」「第 n 月曜（ハッピーマンデー）」「春分・秋分（近似式）」の 3 種類。2019 年の即位の日や 2020・2021 年の五輪による移動など、1 回限りの祝日も表に入れる。
+  - 国民の休日（祝日に挟まれた平日。1988 年以降）。
+  - 振替休日（日曜の祝日の次の、祝日でない日。1973-04-30 以降。2007 年以降は連続した祝日の後ろまでずらす）。
+- 参考実装と違い、日付は `YYYY-MM-DD` の文字列と UTC の `Date` だけで扱い、JST への変換はしない（このアプリの日付は時刻を持たないため）。
+- 公開する関数: `holidaysOf(year): Map<string, string>`（`YYYY-MM-DD` → 祝日名。年ごとにメモ化する）、`holidayName(date): string | undefined`。
+- 祝日法の改正で祝日が加わったり変わったりしたら、定義表を直して再デプロイする（ドキュメントのアップデート手順に追記する）。
 
 ## 4. クライアント構成
 
@@ -200,7 +195,7 @@ export const getHolidays = query(
 |---|---|
 | `src/lib/timeline.ts` | 日付計算の純関数（DOM 非依存）。下表 |
 | `src/lib/timeline.test.ts` | 上の単体テスト |
-| `src/lib/server/holidays.ts` / `holidays.test.ts` | 祝日の取得（§3） |
+| `src/lib/holidays.ts` / `holidays.test.ts` | 祝日の判定（§3） |
 | `src/routes/projects/[key]/timeline/+page.svelte` | ツールバー、クエリ同期、`getTimeline` の読み込み、楽観更新とトースト |
 | `src/routes/projects/[key]/timeline/TimelineGrid.svelte` | 見出し、グループと行、バーの描画、ドラッグ処理 |
 | `src/routes/projects/[key]/timeline/timeline.remote.ts` | §3 |
@@ -215,7 +210,7 @@ export const getHolidays = query(
 | `barSpan(item, range)` | 表示用の `{ startCol, endCol, clippedStart, clippedEnd, missingStart, missingDue }`。範囲外なら `null` と方向 |
 | `applyDrag(item, mode, deltaDays)` | `mode`: `move` / `start` / `end`。新しい `{ startDate, dueDate }` を返す。開始日 ≦ 期限を保つよう丸める |
 | `groupItems(items, group, milestones)` | §2 の並び順でグループ化し、見出しの `done / total` を付ける。`group = 'none'` なら見出しなしの 1 グループを返す |
-| `isOffDay(date, holidays)` | 土日か祝日なら true（灰色表示用） |
+| `isOffDay(date)` | 土日か祝日（`holidayName` が値を返す日）なら true（灰色表示用） |
 
 ## 5. エラー処理
 
@@ -236,7 +231,9 @@ export const getHolidays = query(
   - `applyDrag` の各モード、開始日 ≦ 期限の丸め、欠けた日付の補完。
   - `groupItems` の並び順と「未割当」「マイルストーンなし」の位置、進捗の件数、`none` の 1 グループ化。
   - `isOffDay` の土日・祝日・平日。
-- **Vitest（祝日）** `holidays.test.ts`: 範囲内の祝日（例 2026-11-03 文化の日、振替休日を含む月）の取得、範囲の両端を含むこと、1 年超の範囲の拒否。
+- **Vitest（祝日）** `holidays.test.ts`:
+  - 2000〜2050 年の全日について、`@holiday-jp/holiday_jp`（devDependencies のみに追加。アプリのバンドルには入れない）の内閣府データと祝日かどうか・祝日名が一致すること。名前の表記差（「振替休日」など）は対応表で吸収する。
+  - 代表例: 振替休日（2026-05-06）、国民の休日（2026-09-22）、即位の日（2019-05-01）、五輪の移動（2021-07-22/23、2021-08-08 と振替 08-09）。
 - **E2E（Playwright）**:
   - member がバーを右へ 2 日ドラッグ → 課題詳細で開始日・期限が 2 日後になっている。
   - member が未スケジュール欄のチップをタイムラインへドロップ → 開始日・期限が設定され、欄から消える。
@@ -244,4 +241,4 @@ export const getHolidays = query(
 
 ## 7. ドキュメント（apps/docs）
 
-使い方のページに「タイムライン」を追加する。グループ切替（なしを含む）、土日祝の灰色表示（日本の祝日のみ、2050 年まで）、ドラッグでの日付変更、未スケジュール欄、権限（ゲストは自分が起票した課題だけ動かせる）を書く。
+使い方のページに「タイムライン」を追加する。グループ切替（なしを含む）、土日祝の灰色表示（日本の祝日のみ）、ドラッグでの日付変更、未スケジュール欄、権限（ゲストは自分が起票した課題だけ動かせる）を書く。

@@ -116,7 +116,12 @@
 	function end() {
 		const d = drag;
 		drag = null;
-		if (!d?.moved || !onsave) return;
+		if (!d) {
+			// Escape で中止した操作は、離した位置のリンクへ遷移させない
+			if (suppressClick) setTimeout(() => (suppressClick = false));
+			return;
+		}
+		if (!d.moved || !onsave) return;
 		suppressClick = true;
 		setTimeout(() => (suppressClick = false));
 		if (d.mode === 'place') {
@@ -144,7 +149,10 @@
 	onpointerup={end}
 	onpointercancel={() => (drag = null)}
 	onkeydown={(e) => {
-		if (e.key === 'Escape' && drag) drag = null;
+		if (e.key === 'Escape' && drag) {
+			suppressClick = true;
+			drag = null;
+		}
 	}}
 />
 

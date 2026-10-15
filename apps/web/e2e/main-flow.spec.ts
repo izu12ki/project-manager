@@ -49,6 +49,12 @@ const jstDay = (offset: number) =>
 		timeZone: 'Asia/Tokyo'
 	});
 
+/** リモート関数（command）への POST 応答。ドラッグより先に仕掛けて保存の完了を待つ */
+const savedResponse = (page: Page) =>
+	page.waitForResponse(
+		(r) => r.request().method() === 'POST' && r.url().includes('/_app/remote') && r.ok()
+	);
+
 /** 要素の中央を掴んで dx だけ横に動かす */
 async function dragBy(page: Page, target: Locator, dx: number) {
 	const b = await target.boundingBox();
@@ -211,14 +217,18 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	const bar2 = page.getByTestId('bar-2');
 	await expect(bar2).toHaveAttribute('data-start', jstDay(0));
 	// バーを右へ 2 日（1 日 = 32px）。ドラッグ後に課題詳細へ遷移しない
+	const saved2 = savedResponse(page);
 	await dragBy(page, bar2, 64);
+	await saved2;
 	await expect(bar2).toHaveAttribute('data-start', jstDay(2));
 	await expect(bar2).toHaveAttribute('data-due', jstDay(4));
 	await expect(page).toHaveURL(/\/projects\/ACME\/timeline$/);
 	// 未スケジュールの ACME-1 を明日の列へ置く
 	const chip1 = page.getByTestId('chip-1');
 	const tomorrow = page.locator(`[data-date="${jstDay(1)}"]`);
+	const saved1 = savedResponse(page);
 	await dragTo(page, chip1, tomorrow);
+	await saved1;
 	await expect(page.getByTestId('bar-1')).toHaveAttribute('data-start', jstDay(1));
 	await expect(page.getByTestId('bar-1')).toHaveAttribute('data-due', jstDay(1));
 	await expect(chip1).toBeHidden();

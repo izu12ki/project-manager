@@ -3,16 +3,18 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { milestoneLabel, todayJst } from '$lib/labels';
+	import { toast } from '$lib/toast.svelte';
 	import {
 		addDays,
 		groupItems,
 		parseView,
 		viewRange,
+		type Dated,
 		type GroupBy,
 		type Scale
 	} from '$lib/timeline';
 	import TimelineGrid from './TimelineGrid.svelte';
-	import { getTimeline } from './timeline.remote';
+	import { getTimeline, setIssueDates } from './timeline.remote';
 	import type { PageProps } from './$types';
 
 	let { params }: PageProps = $props();
@@ -22,8 +24,15 @@
 	const timeline = $derived(await getTimeline(ref));
 	const range = $derived(viewRange(view.from, view.scale));
 
-	const scheduled = $derived(timeline.scheduled);
-	const unscheduled = $derived(timeline.unscheduled);
+	/** 保存中の楽観的な日付（issue id → 日付）。保存が終われば消す */
+	let pending = $state<Record<string, Dated>>({});
+	const all = $derived(
+		[...timeline.scheduled, ...timeline.unscheduled].map((i) =>
+			pending[i.id] ? { ...i, ...pending[i.id] } : i
+		)
+	);
+	const scheduled = $derived(all.filter((i) => i.startDate || i.dueDate));
+	const unscheduled = $derived(all.filter((i) => !i.startDate && !i.dueDate));
 	const groups = $derived(groupItems(scheduled, view.group, timeline.milestones));
 
 	const GROUP_OPTIONS: [GroupBy, string][] = [
@@ -35,6 +44,34 @@
 		['day', '日'],
 		['week', '週']
 	];
+
+	/** 400/409 は業務エラーなのでサーバーのメッセージを出し、それ以外は汎用文言にする */
+	function failure(err: unknown): string {
+		const { status, body } = (err ?? {}) as { status?: number; body?: { message?: string } };
+		return (status === 400 || status === 409) && body?.message
+			? body.message
+			: 'この課題の日付は変更できません';
+	}
+
+	async function save(item: { id: string; number: number }, next: Dated) {
+		pending[item.id] = next;
+		try {
+			// 保存と最新の再取得を 1 往復で行う（サーバー側で getTimeline を refresh）
+			await setIssueDates({
+				...ref,
+				number: item.number,
+				startDate: next.startDate ?? '',
+				dueDate: next.dueDate ?? ''
+			});
+		} catch (err) {
+			toast.error(failure(err));
+			getTimeline(ref)
+				.refresh()
+				.catch(() => {});
+		} finally {
+			delete pending[item.id];
+		}
+	}
 
 	/** 値が '' のキーはクエリから消す（既定値に戻る） */
 	function setQuery(patch: Partial<Record<'group' | 'scale' | 'from' | 'milestone', string>>) {
@@ -121,6 +158,7 @@
 			{range}
 			{today}
 			onjump={(from) => setQuery({ from })}
+			onsave={save}
 		/>
 	{/if}
 </section>

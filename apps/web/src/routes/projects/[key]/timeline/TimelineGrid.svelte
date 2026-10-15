@@ -2,6 +2,8 @@
 	import { ChevronLeft, ChevronRight } from '@lucide/svelte';
 	import { STATUS_COLOR, STATUS_LABEL } from '$lib/labels';
 	import {
+		addDays,
+		applyDrag,
 		barSpan,
 		dayCells,
 		defaultFrom,
@@ -9,6 +11,7 @@
 		shortDate,
 		weekday,
 		type Dated,
+		type DragMode,
 		type IssueGroup,
 		type TimelineIssue,
 		type ViewRange
@@ -21,11 +24,9 @@
 		range: ViewRange;
 		today: string;
 		onjump: (from: string) => void;
-		// TODO(Task 5): ドラッグ編集で使う。今は受け取るだけ
 		onsave?: (item: T, next: Dated) => void;
 	}
-	// eslint-disable-next-line svelte/no-unused-props
-	let { projectKey, groups, unscheduled, range, today, onjump }: Props = $props();
+	let { projectKey, groups, unscheduled, range, today, onjump, onsave }: Props = $props();
 
 	const LABEL_W = 240;
 	const WEEKDAYS = '日月火水木金土';
@@ -59,10 +60,101 @@
 			`${STATUS_LABEL[item.status]} / ${item.assigneeName ?? '未割当'}`
 		].join('\n');
 	const href = (item: T) => `/projects/${projectKey}/issues/${item.number}`;
+
+	/** 'place' は未スケジュール欄からタイムラインへの配置 */
+	type Drag = {
+		item: T;
+		mode: DragMode | 'place';
+		startX: number;
+		startY: number;
+		x: number;
+		y: number;
+		delta: number;
+		moved: boolean;
+	};
+	let drag = $state<Drag | null>(null);
+	let canvas = $state<HTMLDivElement>();
+	/** ドラッグ直後のクリック（リンク遷移）を 1 回だけ止める */
+	let suppressClick = false;
+
+	function begin(e: PointerEvent, item: T, mode: Drag['mode']) {
+		if (!item.canEdit || !onsave || e.button !== 0) return;
+		// リンクのネイティブなドラッグと文字選択を止める（click は止まらない）
+		e.preventDefault();
+		e.stopPropagation();
+		drag = {
+			item,
+			mode,
+			startX: e.clientX,
+			startY: e.clientY,
+			x: e.clientX,
+			y: e.clientY,
+			delta: 0,
+			moved: false
+		};
+	}
+
+	function move(e: PointerEvent) {
+		if (!drag) return;
+		const dx = e.clientX - drag.startX;
+		const dy = e.clientY - drag.startY;
+		drag.moved ||= Math.hypot(dx, dy) >= 4;
+		drag.delta = Math.round(dx / range.dayWidth);
+		drag.x = e.clientX;
+		drag.y = e.clientY;
+	}
+
+	/** ポインタ位置の日付。タイムライン（見出しを含む）の外なら null */
+	function dateAt(x: number, y: number): string | null {
+		if (!canvas) return null;
+		const r = canvas.getBoundingClientRect();
+		if (y < r.top || y > r.bottom) return null;
+		const col = Math.floor((x - r.left - LABEL_W) / range.dayWidth);
+		return col >= 0 && col < range.days ? addDays(range.from, col) : null;
+	}
+
+	function end() {
+		const d = drag;
+		drag = null;
+		if (!d?.moved || !onsave) return;
+		suppressClick = true;
+		setTimeout(() => (suppressClick = false));
+		if (d.mode === 'place') {
+			const date = dateAt(d.x, d.y);
+			if (date) onsave(d.item, { startDate: date, dueDate: date });
+		} else if (d.delta !== 0) {
+			onsave(d.item, applyDrag(d.item, d.mode, d.delta));
+		}
+	}
+
+	function guardClick(e: MouseEvent) {
+		if (suppressClick) e.preventDefault();
+	}
+
+	/** ドラッグ中のバーは移動後の日付で描く */
+	const shown = (item: T): Dated =>
+		drag?.moved && drag.item.id === item.id && drag.mode !== 'place'
+			? applyDrag(item, drag.mode, drag.delta)
+			: item;
+	const canPlace = $derived(!!onsave && unscheduled.some((i) => i.canEdit));
 </script>
 
+<svelte:window
+	onpointermove={move}
+	onpointerup={end}
+	onpointercancel={() => (drag = null)}
+	onkeydown={(e) => {
+		if (e.key === 'Escape' && drag) drag = null;
+	}}
+/>
+
 <div class="scroller">
-	<div class="canvas" style:width="{LABEL_W + width}px" style:--label-w="{LABEL_W}px">
+	<div
+		class="canvas"
+		bind:this={canvas}
+		style:width="{LABEL_W + width}px"
+		style:--label-w="{LABEL_W}px"
+	>
 		<div class="head">
 			<div class="row months">
 				<div class="name"></div>
@@ -120,7 +212,8 @@
 						</div>
 					{/if}
 					{#each g.items as item (item.id)}
-						{@const span = barSpan(item, range)}
+						{@const dates = shown(item)}
+						{@const span = barSpan(dates, range)}
 						<div class="row">
 							<div class="name">
 								<a href={href(item)} class="mono key">{projectKey}-{item.number}</a>
@@ -140,9 +233,12 @@
 							</div>
 							<div class="track">
 								{#if span?.kind === 'in'}
+									<!-- svelte-ignore a11y_no_static_element_interactions -->
 									<a
 										href={href(item)}
 										class="bar"
+										class:editable={item.canEdit && !!onsave}
+										class:dragging={drag?.moved && drag.item.id === item.id}
 										class:done={item.status === 'done'}
 										class:clip-start={span.clippedStart}
 										class:clip-end={span.clippedEnd}
@@ -152,13 +248,36 @@
 										style:width={px(span.endCol - span.startCol + 1)}
 										style:--c={STATUS_COLOR[item.status]}
 										data-testid={`bar-${item.number}`}
-										data-start={item.startDate ?? ''}
-										data-due={item.dueDate ?? ''}
+										data-start={dates.startDate ?? ''}
+										data-due={dates.dueDate ?? ''}
 										title={tooltip(item)}
 										draggable="false"
+										onpointerdown={(e) => begin(e, item, 'move')}
+										onclick={guardClick}
 									>
+										{#if item.canEdit && onsave && !span.clippedStart}
+											<!-- svelte-ignore a11y_no_static_element_interactions -->
+											<span
+												class="handle start"
+												data-handle="start"
+												onpointerdown={(e) => begin(e, item, 'start')}
+											></span>
+										{/if}
 										<span class="bar-text">{projectKey}-{item.number}</span>
+										{#if item.canEdit && onsave && !span.clippedEnd}
+											<!-- svelte-ignore a11y_no_static_element_interactions -->
+											<span
+												class="handle end"
+												data-handle="end"
+												onpointerdown={(e) => begin(e, item, 'end')}
+											></span>
+										{/if}
 									</a>
+									{#if drag?.moved && drag.item.id === item.id}
+										<span class="drag-label" style:left={px(span.startCol)} style:top="-2px"
+											>{period(dates)}</span
+										>
+									{/if}
 								{/if}
 							</div>
 						</div>
@@ -181,17 +300,21 @@
 {#if unscheduled.length > 0}
 	<section class="unscheduled" aria-label="未スケジュール">
 		<h2>未スケジュール <span class="count">{unscheduled.length}</span></h2>
-		<p class="hint">タイムラインへドラッグすると、その日を開始日と期限に設定します。</p>
+		{#if canPlace}
+			<p class="hint">タイムラインへドラッグすると、その日を開始日と期限に設定します。</p>
+		{/if}
 		<ul>
 			{#each unscheduled as item (item.id)}
 				<li>
 					<a
 						href={href(item)}
 						class="chip"
-						class:editable={item.canEdit}
+						class:editable={item.canEdit && !!onsave}
 						data-testid={`chip-${item.number}`}
 						title={item.title}
 						draggable="false"
+						onpointerdown={(e) => begin(e, item, 'place')}
+						onclick={guardClick}
 					>
 						<span class="mono">{projectKey}-{item.number}</span>
 						<span class="truncate">{item.title}</span>
@@ -200,6 +323,13 @@
 			{/each}
 		</ul>
 	</section>
+{/if}
+
+{#if drag?.mode === 'place' && drag.moved}
+	{@const target = dateAt(drag.x, drag.y)}
+	<div class="ghost" style:left="{drag.x + 12}px" style:top="{drag.y + 12}px">
+		{projectKey}-{drag.item.number}{target ? ` → ${shortDate(target)}` : ''}
+	</div>
 {/if}
 
 <style>
@@ -418,5 +548,56 @@
 		flex-shrink: 0;
 		font-size: 12px;
 		color: var(--muted-foreground);
+	}
+	.bar.editable {
+		cursor: grab;
+		touch-action: none;
+	}
+	.bar.dragging {
+		cursor: grabbing;
+		box-shadow: 0 0 0 2px var(--ring-soft);
+	}
+	.handle {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		width: 8px;
+		cursor: ew-resize;
+		touch-action: none;
+	}
+	.handle.start {
+		left: 0;
+	}
+	.handle.end {
+		right: 0;
+	}
+	.drag-label {
+		position: absolute;
+		z-index: 4;
+		transform: translateY(-100%);
+		padding: 0 4px;
+		border-radius: 3px;
+		background: var(--foreground);
+		color: var(--card);
+		font-size: 11px;
+		white-space: nowrap;
+		pointer-events: none;
+	}
+	.chip.editable {
+		cursor: grab;
+		touch-action: none;
+	}
+	.ghost {
+		position: fixed;
+		z-index: 50;
+		padding: 2px 8px;
+		border: 1px solid var(--primary);
+		border-radius: 4px;
+		background: var(--card);
+		font-size: 12px;
+		pointer-events: none;
+	}
+	.unscheduled h2 .count {
+		margin-left: 0;
 	}
 </style>

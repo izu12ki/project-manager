@@ -6,6 +6,7 @@ import {
 	dayCells,
 	defaultFrom,
 	diffDays,
+	dragDelta,
 	groupItems,
 	isOffDay,
 	mondayOf,
@@ -123,6 +124,30 @@ describe('barSpan', () => {
 		});
 		expect(barSpan({ startDate: '2026-11-16', dueDate: null }, range)).toEqual({ kind: 'after' });
 		expect(barSpan({ startDate: null, dueDate: null }, range)).toBeNull();
+	});
+});
+
+describe('dragDelta', () => {
+	it('週表示（8px/日）ではクリック程度のぶれで日付が動かない', () => {
+		for (const dx of [0, 3, 4, -3, -4]) expect(dragDelta(dx, 8)).toBe(0);
+	});
+	it('週表示で 1 日分動かせば 1 日', () => {
+		expect(dragDelta(8, 8)).toBe(1);
+		expect(dragDelta(-8, 8)).toBe(-1);
+	});
+	it('日表示（32px/日）で複数日', () => {
+		expect(dragDelta(64, 32)).toBe(2);
+		expect(dragDelta(-96, 32)).toBe(-3);
+		expect(dragDelta(10, 32)).toBe(0);
+	});
+	it('正負で対称、-0 を返さない', () => {
+		for (const w of [8, 32]) {
+			for (let x = 0; x <= 200; x++) {
+				expect(dragDelta(-x, w)).toBe(-dragDelta(x, w) + 0);
+				expect(Object.is(dragDelta(-x, w), -0)).toBe(false);
+				expect(Object.is(dragDelta(x, w), -0)).toBe(false);
+			}
+		}
 	});
 });
 

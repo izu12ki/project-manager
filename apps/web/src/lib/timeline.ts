@@ -130,6 +130,19 @@ export function barSpan(item: Dated, range: ViewRange): BarSpan | null {
 
 export type DragMode = 'move' | 'start' | 'end';
 
+/** クリックとみなすポインタの移動量（px）。これ未満は日付を変えない */
+export const CLICK_SLOP = 4;
+
+/**
+ * 横方向の移動量 dx（px）を日数に丸める。クリックの許容量に半日分を足した距離を
+ * 超えるまでは 0 日。正負で対称で、-0 は返さない。
+ */
+export function dragDelta(dx: number, dayWidth: number): number {
+	const abs = Math.abs(dx);
+	if (abs < CLICK_SLOP + dayWidth / 2) return 0;
+	return Math.sign(dx) * Math.round(abs / dayWidth);
+}
+
 /**
  * ドラッグ後の日付。開始日 ≦ 期限を保つ。
  * - move: ある方の日付をすべて delta 日ずらす

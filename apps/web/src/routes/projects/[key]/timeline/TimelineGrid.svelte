@@ -7,7 +7,9 @@
 		barSpan,
 		dayCells,
 		defaultFrom,
+		CLICK_SLOP,
 		diffDays,
+		dragDelta,
 		shortDate,
 		weekday,
 		type Dated,
@@ -29,6 +31,8 @@
 	let { projectKey, groups, unscheduled, range, today, onjump, onsave }: Props = $props();
 
 	const LABEL_W = 240;
+	/** 伸縮ハンドル（左右 8px）の間に掴める中央が残る最小のバー幅 */
+	const MIN_GRIP_W = 24;
 	const WEEKDAYS = '日月火水木金土';
 	const cells = $derived(dayCells(range));
 	const width = $derived(range.days * range.dayWidth);
@@ -98,8 +102,8 @@
 		if (!drag) return;
 		const dx = e.clientX - drag.startX;
 		const dy = e.clientY - drag.startY;
-		drag.moved ||= Math.hypot(dx, dy) >= 4;
-		drag.delta = Math.round(dx / range.dayWidth);
+		drag.moved ||= Math.hypot(dx, dy) >= CLICK_SLOP;
+		drag.delta = dragDelta(dx, range.dayWidth);
 		drag.x = e.clientX;
 		drag.y = e.clientY;
 	}
@@ -147,7 +151,10 @@
 <svelte:window
 	onpointermove={move}
 	onpointerup={end}
-	onpointercancel={() => (drag = null)}
+	onpointercancel={() => {
+		drag = null;
+		suppressClick = false;
+	}}
 	onkeydown={(e) => {
 		if (e.key === 'Escape' && drag) {
 			suppressClick = true;
@@ -222,6 +229,11 @@
 					{#each g.items as item (item.id)}
 						{@const dates = shown(item)}
 						{@const span = barSpan(dates, range)}
+						{@const grip =
+							item.canEdit &&
+							!!onsave &&
+							span?.kind === 'in' &&
+							(span.endCol - span.startCol + 1) * range.dayWidth >= MIN_GRIP_W}
 						<div class="row">
 							<div class="name">
 								<a href={href(item)} class="mono key">{projectKey}-{item.number}</a>
@@ -263,7 +275,7 @@
 										onpointerdown={(e) => begin(e, item, 'move')}
 										onclick={guardClick}
 									>
-										{#if item.canEdit && onsave && !span.clippedStart}
+										{#if grip && !span.clippedStart}
 											<!-- svelte-ignore a11y_no_static_element_interactions -->
 											<span
 												class="handle start"
@@ -272,7 +284,7 @@
 											></span>
 										{/if}
 										<span class="bar-text">{projectKey}-{item.number}</span>
-										{#if item.canEdit && onsave && !span.clippedEnd}
+										{#if grip && !span.clippedEnd}
 											<!-- svelte-ignore a11y_no_static_element_interactions -->
 											<span
 												class="handle end"
@@ -511,6 +523,9 @@
 	}
 	.bar.clip-end {
 		clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 50%, calc(100% - 6px) 100%, 0 100%);
+	}
+	.bar.bar:focus-visible {
+		clip-path: none;
 	}
 	.bar.clip-start.clip-end {
 		clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 50%, calc(100% - 6px) 100%, 6px 100%, 0 50%);

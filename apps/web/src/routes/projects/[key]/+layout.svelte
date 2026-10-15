@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { Archive, List, Plus, Settings, SquareKanban } from '@lucide/svelte';
+	import { Archive, ChartGantt, List, Plus, Settings, SquareKanban } from '@lucide/svelte';
 	import { colorFor } from '$lib/labels';
 	import type { LayoutProps } from './$types';
 
@@ -9,6 +9,7 @@
 	const tabs = $derived([
 		{ href: base, label: '一覧', icon: List },
 		{ href: `${base}/board`, label: 'ボード', icon: SquareKanban },
+		{ href: `${base}/timeline`, label: 'タイムライン', icon: ChartGantt },
 		...(data.isAdmin ? [{ href: `${base}/settings`, label: '設定', icon: Settings }] : [])
 	]);
 	const current = $derived(tabs.find((t) => t.href === page.url.pathname));

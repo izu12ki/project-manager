@@ -25,4 +25,18 @@ describe('renderMarkdown', () => {
 			'<span class="md-img"><img src="/a.png" alt="shot"></span>'
 		);
 	});
+	it('メンションはバッジにし、リンクにしない', () => {
+		const id = '0192f0c1-0000-7000-8000-000000000001';
+		const html = renderMarkdown(`hi @[田中 太郎](user:${id}) さん`);
+		expect(html).toContain('<span class="mention">@田中 太郎</span>');
+		expect(html).not.toContain('user:');
+	});
+	it('メンションの表示名はエスケープする', () => {
+		const id = '0192f0c1-0000-7000-8000-000000000001';
+		expect(renderMarkdown(`@[<b>x</b>](user:${id})`)).toContain('@&lt;b&gt;x&lt;/b&gt;');
+	});
+	it('コード内のメンション記法はそのまま表示する', () => {
+		const id = '0192f0c1-0000-7000-8000-000000000001';
+		expect(renderMarkdown('`@[a](user:' + id + ')`')).not.toContain('class="mention"');
+	});
 });

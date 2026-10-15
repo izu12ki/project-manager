@@ -14,6 +14,13 @@
 		if (form?.passwordSaved)
 			toast.success('パスワードを変更しました。他の端末はログアウトされます');
 	});
+	$effect(() => {
+		if (form?.slackEnabled)
+			toast.success('Slack 通知をオンにしました。Slack に確認のメッセージを送りました。');
+	});
+	$effect(() => {
+		if (form?.slackDisabled) toast.success('Slack 通知をオフにしました');
+	});
 </script>
 
 <section class="grid w-full max-w-[640px] gap-6">
@@ -22,7 +29,7 @@
 		<p class="page-desc">{data.user?.email}</p>
 	</div>
 
-	{#if form?.message}<FormAlert message={form.message} />{/if}
+	{#if form?.message && !(form && 'slack' in form)}<FormAlert message={form.message} />{/if}
 
 	<form method="POST" action="?/updateName" use:enhance class="card">
 		<div class="card-head">
@@ -73,4 +80,37 @@
 		</div>
 		<div><button type="submit" class="btn btn-primary">保存</button></div>
 	</form>
+
+	<div class="card">
+		<div class="card-head">
+			<h2 class="card-title">Slack 通知</h2>
+			<p class="card-desc">
+				このアプリのログイン用メールアドレス（{data.user?.email}）と同じメールアドレスの Slack
+				アカウントに、DM で通知が届きます。Slack
+				のプロフィールのメールアドレスが異なる場合は届きません。
+			</p>
+		</div>
+		{#if form && 'slack' in form && form.message}<FormAlert message={form.message} />{/if}
+		<form
+			method="POST"
+			action={data.slack.linked ? '?/disableSlack' : '?/enableSlack'}
+			use:enhance
+			class="flex items-center gap-3"
+		>
+			<button
+				type="submit"
+				class="btn {data.slack.linked ? 'btn-outline' : 'btn-primary'}"
+				role="switch"
+				aria-checked={data.slack.linked}
+				aria-label="Slack 通知"
+				disabled={!data.slack.available && !data.slack.linked}
+			>
+				{data.slack.linked ? 'オフにする' : 'オンにする'}
+			</button>
+			<span class="text-sm text-muted-foreground">
+				{#if data.slack.linked}Slack に連携中{:else if !data.slack.available}Slack
+					連携は未設定です（管理者に連絡してください）{:else}オフ{/if}
+			</span>
+		</form>
+	</div>
 </section>

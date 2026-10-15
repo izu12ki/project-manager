@@ -43,6 +43,7 @@
 		if (path === '/admin/projects/new') return [home, { label: '新規プロジェクト' }];
 		if (path.startsWith('/admin/users')) return [{ label: '管理' }, { label: 'ユーザー' }];
 		if (path === '/account') return [{ label: 'アカウント' }];
+		if (path === '/notifications') return [{ label: '通知' }];
 		const project = page.data.project as { key: string; name: string } | undefined;
 		if (project) {
 			const base = `/projects/${project.key}`;

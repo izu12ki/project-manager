@@ -19,4 +19,8 @@ describe('readEnv', () => {
 			'https://pm.example.com'
 		);
 	});
+	it('SLACK_BOT_TOKEN は任意', () => {
+		expect(readEnv({ ...ok, SLACK_BOT_TOKEN: 'xoxb-1' }).SLACK_BOT_TOKEN).toBe('xoxb-1');
+		expect(readEnv(ok).SLACK_BOT_TOKEN).toBeUndefined();
+	});
 });

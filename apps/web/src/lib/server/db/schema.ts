@@ -259,6 +259,53 @@ export const attachment = sqliteTable(
 	]
 );
 
+export const NOTIFICATION_TYPES = ['assigned', 'commented', 'status_changed', 'mentioned'] as const;
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+export const notification = sqliteTable(
+	'notification',
+	{
+		id: text().primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id),
+		actorId: text('actor_id')
+			.notNull()
+			.references(() => user.id),
+		issueId: text('issue_id')
+			.notNull()
+			.references(() => issue.id, { onDelete: 'cascade' }),
+		type: text({ enum: NOTIFICATION_TYPES }).notNull(),
+		commentId: text('comment_id').references(() => comment.id, { onDelete: 'cascade' }),
+		fromStatus: text('from_status', { enum: STATUSES }),
+		toStatus: text('to_status', { enum: STATUSES }),
+		readAt: integer('read_at', { mode: 'timestamp_ms' }),
+		createdAt: createdAt()
+	},
+	(t) => [
+		index('notification_user_read_idx').on(t.userId, t.readAt),
+		index('notification_user_created_idx').on(t.userId, t.createdAt)
+	]
+);
+
+export const INTEGRATION_PROVIDERS = ['slack'] as const;
+export type IntegrationProviderId = (typeof INTEGRATION_PROVIDERS)[number];
+
+/** 個人の外部連携。行があればオン */
+export const userIntegration = sqliteTable(
+	'user_integration',
+	{
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		provider: text({ enum: INTEGRATION_PROVIDERS }).notNull(),
+		/** 連携先でのユーザー ID（Slack は U…） */
+		externalId: text('external_id').notNull(),
+		createdAt: createdAt()
+	},
+	(t) => [primaryKey({ columns: [t.userId, t.provider] })]
+);
+
 // better-auth の Drizzle アダプタ（relations-v2）が使う。アプリ側のクエリはコア API（select/join）で書く。
 export const relations = defineRelations(
 	{ user, session, account, verification, rateLimit },

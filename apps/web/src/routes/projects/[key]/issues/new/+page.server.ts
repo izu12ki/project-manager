@@ -13,8 +13,8 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 	return handleLoad(async () => {
 		const p = await requireProject(ctx, params.key);
 		const canAssign = can(ctx.actor, 'issue:assign');
-		const [assignees, categories, milestones] = await Promise.all([
-			canAssign ? listAssignableUsers(ctx.db, p.id) : [],
+		const [assignable, categories, milestones] = await Promise.all([
+			listAssignableUsers(ctx.db, p.id),
 			listCategories(ctx, params.key),
 			listMilestones(ctx, params.key)
 		]);
@@ -22,7 +22,8 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			canAssign,
 			// 担当者なしで起票するので、ステータスを選べるのは担当者でなくても変更できる人だけ
 			canSetStatus: can(ctx.actor, 'issue:changeStatus', { assigneeId: null }),
-			assignees,
+			assignees: canAssign ? assignable : [],
+			mentionCandidates: assignable.map(({ id, name }) => ({ id, name })),
 			categories,
 			milestones: milestones.filter((m) => !m.completedAt)
 		};

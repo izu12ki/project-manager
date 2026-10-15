@@ -2,13 +2,20 @@
 	import { Bold, Code, Link, List, ListChecks } from '@lucide/svelte';
 	import type { HTMLTextareaAttributes } from 'svelte/elements';
 	import { uploadable } from '$lib/attachment-upload';
+	import type { MentionCandidate } from '$lib/mentions';
 	import AttachButton from './AttachButton.svelte';
+	import MentionMenu from './MentionMenu.svelte';
 
 	let {
 		value = $bindable(''),
 		projectKey,
+		mentionCandidates,
 		...rest
-	}: HTMLTextareaAttributes & { value?: string; projectKey?: string } = $props();
+	}: HTMLTextareaAttributes & {
+		value?: string;
+		projectKey?: string;
+		mentionCandidates?: MentionCandidate[];
+	} = $props();
 	let textarea = $state<HTMLTextAreaElement>();
 
 	/** 選択範囲を before/after で囲む（未選択なら placeholder を入れて選択する） */
@@ -59,7 +66,9 @@
 	></textarea>
 	<div class="toolbar" role="toolbar" aria-label="書式">
 		<span class="hint"
-			>Markdown が使えます{projectKey ? '・ファイルは貼り付けかドロップでも添付できます' : ''}</span
+			>Markdown が使えます{mentionCandidates ? '・@ でメンション' : ''}{projectKey
+				? '・ファイルは貼り付けかドロップでも添付できます'
+				: ''}</span
 		>
 		<span style="flex: 1"></span>
 		{#each tools as t (t.label)}
@@ -71,6 +80,7 @@
 			<AttachButton {projectKey} target={() => textarea} />
 		{/if}
 	</div>
+	{#if mentionCandidates}<MentionMenu target={() => textarea} candidates={mentionCandidates} />{/if}
 </div>
 
 <style>

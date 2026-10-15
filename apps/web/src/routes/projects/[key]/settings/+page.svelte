@@ -35,7 +35,7 @@
 </script>
 
 <section class="grid w-full max-w-[800px] gap-6">
-	{#if form?.message}<FormAlert message={form.message} />{/if}
+	{#if form?.message && !form.fields?.url}<FormAlert message={form.message} />{/if}
 
 	<form
 		method="POST"

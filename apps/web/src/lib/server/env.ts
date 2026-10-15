@@ -11,6 +11,7 @@ const EnvSchema = v.object({
 	),
 	MAIL_PROVIDER: v.optional(v.picklist(['smtp2go', 'resend', 'console']), 'console'),
 	MAIL_API_KEY: v.optional(v.string()),
+	SLACK_BOT_TOKEN: v.optional(v.string()),
 	MAIL_FROM: v.optional(v.string())
 });
 

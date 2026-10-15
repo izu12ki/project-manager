@@ -164,10 +164,36 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page.getByLabel('マイルストーン').locator('option:checked')).toHaveText(
 		'v1.0（11/30 リリース）'
 	);
+
+	// 6b. メンバーが @ 補完でゲストをメンションしてコメント
+	const mentionBox = page.getByLabel('コメントを追加');
+	await mentionBox.click();
+	await mentionBox.pressSequentially('@顧客');
+	await page
+		.getByRole('listbox', { name: 'メンションする人' })
+		.getByRole('option', { name: '顧客 太郎' })
+		.click();
+	await mentionBox.pressSequentially('確認お願いします');
+	await expect(mentionBox).toHaveValue(/^@\[顧客 太郎\]\(user:[0-9a-f-]{36}\) 確認お願いします$/);
+	await page.getByRole('button', { name: 'コメントする' }).click();
+	await expect(page.locator('.markdown .mention', { hasText: '@顧客 太郎' })).toBeVisible();
 	await logout(page);
 
 	// 7. ゲストがカンバンで進行中へ移動
 	await login(page, 'guest@example.com');
+
+	// 7a. ゲストに「担当」と「メンション」の 2 件が届いている
+	const badge = page.getByTestId('unread-badge');
+	await expect(badge).toHaveText('2');
+	await page.getByRole('link', { name: /通知/ }).click();
+	await expect(page).toHaveURL(/\/notifications$/);
+	await expect(page.getByRole('button', { name: /担当者に設定しました/ })).toBeVisible();
+	await page
+		.getByRole('button', { name: /メンションしました: @顧客 太郎 確認お願いします/ })
+		.click();
+	await expect(page).toHaveURL(/\/projects\/ACME\/issues\/1#comment-[0-9a-f-]{36}$/);
+	// 課題を開くと、その課題の通知はすべて既読になる
+	await expect(badge).toBeHidden();
 	await page.goto('/projects/ACME/board');
 	await dragTo(
 		page,
@@ -292,4 +318,12 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(
 		page.getByLabel('マイルストーン').locator('option', { hasText: 'v1.0' })
 	).toHaveCount(0);
+
+	// 12. 個人設定の Slack 通知（E2E 環境はトークン未設定）
+	await page.goto('/account');
+	await expect(
+		page.getByText('と同じメールアドレスの Slack アカウントに、DM で通知が届きます')
+	).toBeVisible();
+	await expect(page.getByRole('switch', { name: 'Slack 通知' })).toBeDisabled();
+	await expect(page.getByText('Slack 連携は未設定です（管理者に連絡してください）')).toBeVisible();
 });

@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { Paperclip, Pencil, Trash2 } from '@lucide/svelte';
+	import { untrack } from 'svelte';
 	import { formatBytes } from '$lib/attachment-rules';
 	import { uploadable } from '$lib/attachment-upload';
 	import { autosize } from '$lib/autosize';
 	import AttachButton from '$lib/components/AttachButton.svelte';
 	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
+	import MentionMenu from '$lib/components/MentionMenu.svelte';
 	import FormAlert from '$lib/components/FormAlert.svelte';
 	import PriorityPill from '$lib/components/PriorityPill.svelte';
 	import StatusPill from '$lib/components/StatusPill.svelte';
@@ -23,6 +25,7 @@
 		getComments,
 		getIssueDetail,
 		postComment,
+		readIssueNotifications,
 		removeAttachment,
 		removeComment,
 		saveIssue,
@@ -32,6 +35,12 @@
 
 	let { data, params }: PageProps = $props();
 	const ref = $derived({ key: params.key, number: params.number });
+	// 開いた課題についての自分宛て未読を既読にする
+	// コマンドの内部状態を依存に含めないよう、課題が変わったときだけ走らせる
+	$effect(() => {
+		const { key, number } = ref;
+		untrack(() => void readIssueNotifications({ key, number }).catch(() => {}));
+	});
 	// 2つの query は同時に取得を始め、コメントの更新では課題側を取り直さない
 	const detailQuery = $derived(getIssueDetail(ref));
 	const commentsQuery = $derived(getComments(ref));
@@ -41,6 +50,10 @@
 	const attachments = $derived(await attachmentsQuery);
 	let commentInput = $state<HTMLTextAreaElement>();
 	let descriptionInput = $state<HTMLTextAreaElement>();
+	let editCommentInput = $state<HTMLTextAreaElement>();
+	const mentionCandidates = $derived(
+		detail.assignees.filter((u) => !u.disabled).map(({ id, name }) => ({ id, name }))
+	);
 
 	async function deleteAttachment(attachmentId: string) {
 		try {
@@ -136,6 +149,7 @@
 						bind:this={descriptionInput}
 						{@attach autosize}
 						{@attach uploadable(ref.key)}></textarea>
+					<MentionMenu target={() => descriptionInput} candidates={mentionCandidates} />
 					<div class="flex items-center gap-2">
 						<p class="hint" style="flex: 1">
 							Markdown
@@ -206,7 +220,7 @@
 				<p class="m-0 text-muted-foreground">まだコメントはありません</p>
 			{/if}
 			{#each comments as c (c.id)}
-				<article class="comment">
+				<article class="comment" id={`comment-${c.id}`}>
 					<span class="avatar" style:--c={colorFor(c.authorName)}>{c.authorName[0]}</span>
 					<div class="grid min-w-0 gap-1">
 						<div class="flex items-center gap-2">
@@ -261,8 +275,10 @@
 									rows="4"
 									required
 									aria-label="コメントを編集"
+									bind:this={editCommentInput}
 									{@attach autosize}
 									{@attach uploadable(ref.key)}></textarea>
+								<MentionMenu target={() => editCommentInput} candidates={mentionCandidates} />
 								<div class="flex justify-end gap-2">
 									<button
 										type="button"
@@ -310,6 +326,7 @@
 						bind:this={commentInput}
 						{@attach autosize}
 						{@attach uploadable(ref.key)}></textarea>
+					<MentionMenu target={() => commentInput} candidates={mentionCandidates} />
 					<div class="flex items-center justify-end gap-2">
 						<AttachButton projectKey={ref.key} target={() => commentInput} />
 						<button type="submit" class="btn btn-primary">コメントする</button>
@@ -477,9 +494,15 @@
 		padding: 20px 24px;
 	}
 	.comment {
+		scroll-margin-top: 80px;
 		display: grid;
 		grid-template-columns: 32px minmax(0, 1fr);
 		gap: 12px;
+	}
+	.comment:target {
+		outline: 2px solid var(--ring);
+		outline-offset: 4px;
+		border-radius: 4px;
 	}
 	.comment :global(.danger-hover:hover) {
 		color: var(--destructive);

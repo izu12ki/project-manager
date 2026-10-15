@@ -46,7 +46,13 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		const candidates = users.filter(
 			(u) => !u.disabledAt && u.role !== 'admin' && !memberIds.has(u.id)
 		);
-		return { members, candidates, invitations, categories, milestones };
+		return {
+			members,
+			candidates,
+			invitations,
+			categories,
+			milestones
+		};
 	});
 };
 

@@ -4,15 +4,18 @@ import type { DB } from '../db';
 import { eq } from 'drizzle-orm';
 import { issue as issueTable, user as userTable } from '../db/schema';
 import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
+import { createMilestone, listMilestones } from './issue-fields';
 import {
 	createIssue,
 	deleteIssue,
 	getIssue,
 	listBoard,
 	listIssues,
+	listTimeline,
 	moveIssue,
 	updateIssue
 } from './issues';
+import { setProjectArchived } from './projects';
 
 describe('issues', () => {
 	let db: DB;
@@ -287,6 +290,62 @@ describe('issues', () => {
 				moveIssue(as(member), 'ACME', { status: 'todo', ...build(ids) })
 			).rejects.toMatchObject({ code: 'validation' });
 			expect(await listBoard(as(member), 'ACME')).toEqual(before);
+		});
+	});
+
+	describe('listTimeline', () => {
+		it('日付のある課題と、日付がなく未完了の課題に分ける', async () => {
+			await createIssue(as(member), 'ACME', {
+				title: 'A',
+				startDate: '2026-10-06',
+				dueDate: '2026-10-08'
+			});
+			await createIssue(as(member), 'ACME', { title: 'B', dueDate: '2026-10-09' });
+			await createIssue(as(member), 'ACME', { title: 'C' });
+			await createIssue(as(member), 'ACME', { title: 'D', status: 'done' });
+			await createIssue(as(member), 'ACME', { title: 'E', status: 'done', dueDate: '2026-10-01' });
+			const t = await listTimeline(as(member), 'ACME');
+			expect(t.scheduled.map((i) => i.number)).toEqual([1, 2, 5]);
+			expect(t.scheduled[0]).toMatchObject({ startDate: '2026-10-06', dueDate: '2026-10-08' });
+			expect(t.unscheduled.map((i) => i.number)).toEqual([3]);
+		});
+
+		it('マイルストーンで絞り込める（none は未設定）', async () => {
+			await createMilestone(as(admin), 'ACME', { name: 'v1' });
+			const [v1] = await listMilestones(as(admin), 'ACME');
+			await createIssue(as(member), 'ACME', {
+				title: 'A',
+				dueDate: '2026-10-08',
+				milestoneId: v1.id
+			});
+			await createIssue(as(member), 'ACME', { title: 'B', dueDate: '2026-10-09' });
+			const only = await listTimeline(as(member), 'ACME', { milestoneId: v1.id });
+			expect(only.scheduled.map((i) => i.number)).toEqual([1]);
+			const none = await listTimeline(as(member), 'ACME', { milestoneId: 'none' });
+			expect(none.scheduled.map((i) => i.number)).toEqual([2]);
+		});
+
+		it('canEdit: ゲストは自分の起票だけ、アーカイブ済みは全員 false', async () => {
+			await createIssue(as(guest), 'ACME', { title: 'G', dueDate: '2026-10-10' });
+			await createIssue(as(member), 'ACME', { title: 'M', dueDate: '2026-10-10' });
+			const byGuest = await listTimeline(as(guest), 'ACME');
+			expect(byGuest.scheduled.map((i) => [i.number, i.canEdit])).toEqual([
+				[1, true],
+				[2, false]
+			]);
+			const byMember = await listTimeline(as(member), 'ACME');
+			expect(byMember.scheduled.every((i) => i.canEdit)).toBe(true);
+
+			await setProjectArchived(as(admin), 'ACME', true);
+			const archived = await listTimeline(as(admin), 'ACME');
+			expect(archived.scheduled.some((i) => i.canEdit)).toBe(false);
+		});
+
+		it('未参加者には存在を隠す', async () => {
+			const outsider = await seedUser(db, 'member', 'outsider');
+			await expect(listTimeline(as(outsider), 'ACME')).rejects.toMatchObject({
+				code: 'not_found'
+			});
 		});
 	});
 });

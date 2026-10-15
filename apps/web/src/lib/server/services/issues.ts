@@ -4,7 +4,7 @@ import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
 import { PRIORITIES, STATUSES, type Priority, type Status } from '$lib/labels';
-import { authorize } from '../authz';
+import { authorize, can } from '../authz';
 import type { AppContext } from '../context';
 import type { DB } from '../db';
 import { attachment, category, issue, milestone, project, user } from '../db/schema';
@@ -57,6 +57,7 @@ const listColumns = {
 	title: issue.title,
 	status: issue.status,
 	priority: issue.priority,
+	startDate: issue.startDate,
 	dueDate: issue.dueDate,
 	position: issue.position,
 	assigneeId: issue.assigneeId,
@@ -148,6 +149,33 @@ export async function listBoard(
 	>;
 	for (const r of rows) board[r.status].push(r);
 	return board;
+}
+
+export type TimelineItem = IssueListItem & { canEdit: boolean };
+
+/**
+ * タイムライン用。日付のある課題はすべて（完了を含む）、日付のない課題は未完了のものだけ返す。
+ * 表示範囲では絞らない（範囲外の課題にも行を出すため）。並べ替え・グループ化はクライアント側で行う。
+ */
+export async function listTimeline(
+	ctx: AppContext,
+	key: string,
+	filters: { milestoneId?: string } = {}
+): Promise<{ scheduled: TimelineItem[]; unscheduled: TimelineItem[] }> {
+	const p = await requireProject(ctx, key);
+	const rows = await selectIssues(ctx.db, filterConds(p, { milestoneId: filters.milestoneId }), [
+		asc(issue.number)
+	]);
+	const items = rows.map((r) => ({
+		...r,
+		canEdit:
+			!p.archivedAt &&
+			can(ctx.actor, 'issue:edit', { reporterId: r.reporterId, assigneeId: r.assigneeId })
+	}));
+	return {
+		scheduled: items.filter((i) => i.startDate || i.dueDate),
+		unscheduled: items.filter((i) => !i.startDate && !i.dueDate && i.status !== 'done')
+	};
 }
 
 export async function getIssue(ctx: AppContext, key: string, number: number) {

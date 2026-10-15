@@ -69,7 +69,7 @@
   - なし: グループ見出しを出さず、全課題を 1 つのリストとして上記「行の並び」で並べる。進捗表示もない。
   - マイルストーン別: リリース日の昇順（リリース日なしは後ろ、同順は名前順）、最後に「マイルストーンなし」。完了済みマイルストーンも課題があれば表示する。
 - 課題のないグループは出さない。
-- 「今日」は利用者のブラウザのローカル日付で決め、縦の点線で示す。
+- 「今日」は既存の `todayJst()`（`$lib/labels`。期限切れ判定と同じ日本時間の日付）で決め、縦の点線で示す。
 - 土日と祝日の列は灰色の背景にする（見出しの日付も灰色の文字）。祝日は見出しのセルに `title` 属性で祝日名を出す。`scale=week` でも 1 日ごとの列を灰色にする。
 - マイルストーン別のとき、リリース日のあるマイルストーンは、そのグループの範囲にリリース日の縦線（太線）と名前を出す。
 
@@ -205,7 +205,7 @@ export const setIssueDates = command(
 | 関数 | 内容 |
 |---|---|
 | `addDays(date, n)` / `diffDays(a, b)` | `YYYY-MM-DD` の加減算と差。UTC で計算し、タイムゾーンや夏時間の影響を受けない |
-| `mondayOf(date)` / `todayLocal()` | 週の月曜、ブラウザのローカル日付 |
+| `mondayOf(date)` / `weekday(date)` | 週の月曜、曜日（0 = 日曜） |
 | `viewRange(from, scale)` | `{ from, to, days, dayWidth, step }` |
 | `barSpan(item, range)` | 表示用の `{ startCol, endCol, clippedStart, clippedEnd, missingStart, missingDue }`。範囲外なら `null` と方向 |
 | `applyDrag(item, mode, deltaDays)` | `mode`: `move` / `start` / `end`。新しい `{ startDate, dueDate }` を返す。開始日 ≦ 期限を保つよう丸める |

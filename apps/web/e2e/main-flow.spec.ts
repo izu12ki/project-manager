@@ -336,6 +336,21 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.goto('/projects/ACME/timeline');
 	await expect(page.getByTestId('bar-2')).toHaveAttribute('data-start', jstDay(2));
 
+	// 8d. 課題名のクリックで右側のシートに詳細を出し、そこからコメントできる
+	await page.getByTestId('open-1').click();
+	const sheet = page.getByRole('complementary', { name: 'ACME-1' });
+	await expect(sheet.getByRole('heading', { name: 'ログインできない' })).toBeVisible();
+	await expect(page).toHaveURL(/\/projects\/ACME\/timeline$/);
+	await expect(sheet.getByRole('link', { name: '課題詳細を新しいタブで開く' })).toHaveAttribute(
+		'href',
+		'/projects/ACME/issues/1'
+	);
+	await sheet.getByLabel('コメントを追加').fill('シートからのコメント');
+	await sheet.getByRole('button', { name: 'コメントする' }).click();
+	await expect(sheet.getByText('シートからのコメント')).toBeVisible();
+	await sheet.getByRole('button', { name: '閉じる' }).click();
+	await expect(sheet).toBeHidden();
+
 	// 9. 管理者がゲストを無効化（確認ダイアログ）
 	await logout(page);
 	await login(page, 'admin@example.com');

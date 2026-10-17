@@ -27,8 +27,22 @@
 		today: string;
 		onjump: (from: string) => void;
 		onsave?: (item: T, next: Dated) => void;
+		/** 課題名のクリックで詳細をシート表示する。未指定なら詳細ページへ遷移する */
+		onopen?: (item: T) => void;
+		/** シートで開いている課題の番号（行を強調する） */
+		selected?: number | null;
 	}
-	let { projectKey, groups, unscheduled, range, today, onjump, onsave }: Props = $props();
+	let {
+		projectKey,
+		groups,
+		unscheduled,
+		range,
+		today,
+		onjump,
+		onsave,
+		onopen,
+		selected = null
+	}: Props = $props();
 
 	const LABEL_W = 240;
 	/** 伸縮ハンドル（左右 8px）の間に掴める中央が残る最小のバー幅 */
@@ -140,6 +154,13 @@
 		if (suppressClick) e.preventDefault();
 	}
 
+	/** 修飾キー付き・中クリックはブラウザの既定（新しいタブなど）に任せる */
+	function openSheet(e: MouseEvent, item: T) {
+		if (!onopen || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+		e.preventDefault();
+		onopen(item);
+	}
+
 	/** ドラッグ中のバーは移動後の日付で描く */
 	const shown = (item: T): Dated =>
 		drag?.moved && drag.item.id === item.id && drag.mode !== 'place'
@@ -235,10 +256,17 @@
 							!!onsave &&
 							span?.kind === 'in' &&
 							(span.endCol - span.startCol + 1) * range.dayWidth >= MIN_GRIP_W}
-						<div class="row">
+						<div class="row" class:selected={selected === item.number}>
 							<div class="name">
-								<a href={href(item)} class="mono key">{projectKey}-{item.number}</a>
-								<span class="truncate">{item.title}</span>
+								<a
+									href={href(item)}
+									class="open"
+									data-testid={`open-${item.number}`}
+									onclick={(e) => openSheet(e, item)}
+								>
+									<span class="mono key">{projectKey}-{item.number}</span>
+									<span class="truncate">{item.title}</span>
+								</a>
 								{#if span?.kind === 'before' || span?.kind === 'after'}
 									<button
 										type="button"
@@ -476,8 +504,21 @@
 		font-size: 12px;
 		color: var(--muted-foreground);
 	}
-	.key:hover {
+	.open {
+		display: flex;
+		flex: 1;
+		align-items: center;
+		gap: 6px;
+		align-self: stretch;
+		min-width: 0;
+		color: inherit;
+	}
+	.open:hover .truncate {
 		text-decoration: underline;
+	}
+	.row.selected .name {
+		background: color-mix(in oklch, var(--primary) 10%, var(--card));
+		box-shadow: inset 3px 0 0 var(--primary);
 	}
 	.truncate {
 		min-width: 0;

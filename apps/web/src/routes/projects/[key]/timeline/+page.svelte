@@ -14,6 +14,7 @@
 		type GroupBy,
 		type Scale
 	} from '$lib/timeline';
+	import IssueSheet from './IssueSheet.svelte';
 	import TimelineGrid from './TimelineGrid.svelte';
 	import { getTimeline, setIssueDates } from './timeline.remote';
 	import type { PageProps } from './$types';
@@ -23,6 +24,14 @@
 	const view = $derived(parseView(new URLSearchParams(page.url.search), today));
 	const timeline = $derived(await getTimeline(params.key));
 	const range = $derived(viewRange(view.from, view.scale));
+
+	/** 右側のシートで開いている課題の番号 */
+	let opened = $state<number | null>(null);
+	// プロジェクトを切り替えたらシートを閉じる
+	$effect.pre(() => {
+		void params.key;
+		opened = null;
+	});
 
 	/** 保存中の楽観的な日付（issue id → 日付）。保存が終われば消す */
 	let pending = $state<Record<string, Dated>>({});
@@ -248,6 +257,19 @@
 			{today}
 			onjump={(from) => setQuery({ from })}
 			onsave={save}
+			onopen={(item) => (opened = item.number)}
+			selected={opened}
+		/>
+	{/if}
+	{#if opened !== null}
+		<IssueSheet
+			projectKey={params.key}
+			number={opened}
+			onclose={() => (opened = null)}
+			onsaved={() =>
+				getTimeline(params.key)
+					.refresh()
+					.catch(() => {})}
 		/>
 	{/if}
 </section>

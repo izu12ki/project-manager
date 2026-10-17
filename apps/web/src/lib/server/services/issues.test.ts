@@ -4,7 +4,6 @@ import type { DB } from '../db';
 import { eq } from 'drizzle-orm';
 import { issue as issueTable, user as userTable } from '../db/schema';
 import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
-import { createMilestone, listMilestones } from './issue-fields';
 import {
 	createIssue,
 	deleteIssue,
@@ -308,21 +307,6 @@ describe('issues', () => {
 			expect(t.scheduled.map((i) => i.number)).toEqual([1, 2, 5]);
 			expect(t.scheduled[0]).toMatchObject({ startDate: '2026-10-06', dueDate: '2026-10-08' });
 			expect(t.unscheduled.map((i) => i.number)).toEqual([3]);
-		});
-
-		it('マイルストーンで絞り込める（none は未設定）', async () => {
-			await createMilestone(as(admin), 'ACME', { name: 'v1' });
-			const [v1] = await listMilestones(as(admin), 'ACME');
-			await createIssue(as(member), 'ACME', {
-				title: 'A',
-				dueDate: '2026-10-08',
-				milestoneId: v1.id
-			});
-			await createIssue(as(member), 'ACME', { title: 'B', dueDate: '2026-10-09' });
-			const only = await listTimeline(as(member), 'ACME', { milestoneId: v1.id });
-			expect(only.scheduled.map((i) => i.number)).toEqual([1]);
-			const none = await listTimeline(as(member), 'ACME', { milestoneId: 'none' });
-			expect(none.scheduled.map((i) => i.number)).toEqual([2]);
 		});
 
 		it('canEdit: ゲストは自分の起票だけ、アーカイブ済みは全員 false', async () => {

@@ -159,13 +159,10 @@ export type TimelineItem = IssueListItem & { canEdit: boolean };
  */
 export async function listTimeline(
 	ctx: AppContext,
-	key: string,
-	filters: { milestoneId?: string } = {}
+	key: string
 ): Promise<{ scheduled: TimelineItem[]; unscheduled: TimelineItem[] }> {
 	const p = await requireProject(ctx, key);
-	const rows = await selectIssues(ctx.db, filterConds(p, { milestoneId: filters.milestoneId }), [
-		asc(issue.number)
-	]);
+	const rows = await selectIssues(ctx.db, filterConds(p, {}), [asc(issue.number)]);
 	const items = rows.map((r) => ({
 		...r,
 		canEdit:

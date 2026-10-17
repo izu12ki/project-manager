@@ -169,6 +169,7 @@
 		bind:this={canvas}
 		style:width="{LABEL_W + width}px"
 		style:--label-w="{LABEL_W}px"
+		style:--day-w="{range.dayWidth}px"
 	>
 		<div class="head">
 			<div class="row months">
@@ -183,7 +184,7 @@
 			</div>
 			<div class="row days">
 				<div class="name"></div>
-				<div class="track">
+				<div class="track gridlines" class:fine={!wide}>
 					{#each cells as c (c.date)}
 						<div
 							class="day"
@@ -206,7 +207,7 @@
 		</div>
 
 		<div class="body">
-			<div class="overlay" aria-hidden="true">
+			<div class="overlay gridlines" class:fine={!wide} aria-hidden="true">
 				{#each cells as c (c.date)}
 					{#if c.off}<div class="offday" style:left={px(c.col)} style:width={px(1)}></div>{/if}
 				{/each}
@@ -432,6 +433,18 @@
 		left: var(--label-w);
 		right: 0;
 		pointer-events: none;
+	}
+	/* 日の仕切り。各日の左端に 1px の線を引く（週スケールは細かいので薄く） */
+	.gridlines {
+		--line: var(--border);
+		background-image: repeating-linear-gradient(
+			to right,
+			var(--line) 0 1px,
+			transparent 1px var(--day-w)
+		);
+	}
+	.gridlines.fine {
+		--line: color-mix(in oklch, var(--border) 55%, transparent);
 	}
 	.offday {
 		position: absolute;

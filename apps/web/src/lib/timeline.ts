@@ -1,5 +1,5 @@
 import { holidayName } from './holidays';
-import type { Status } from './labels';
+import { STATUSES, type Status } from './labels';
 
 /** タイムラインの日付計算・グループ化（DOM 非依存）。日付はすべて 'YYYY-MM-DD'、計算は UTC。 */
 
@@ -57,8 +57,7 @@ export interface ViewRange {
 
 export function viewRange(from: string, scale: Scale): ViewRange {
 	const s = SCALE_SPEC[scale];
-	const start = mondayOf(from);
-	return { from: start, to: addDays(start, s.days - 1), ...s };
+	return { from, to: addDays(from, s.days - 1), ...s };
 }
 
 /** 既定の表示開始日: 今日を含む週の月曜の 1 週間前 */
@@ -70,13 +69,22 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const isValidDate = (s: string | null): s is string =>
 	s !== null && ISO_DATE.test(s) && !Number.isNaN(Date.parse(s)) && addDays(s, 0) === s;
 
+/** '' は絞り込みなし。status の 'open' は完了以外、それ以外の 'none' は未設定 */
+export interface TimelineFilters {
+	status: '' | 'open' | Status;
+	assignee: string;
+	category: string;
+	milestone: string;
+}
+
 export interface ViewParams {
 	group: GroupBy;
 	scale: Scale;
 	from: string;
-	/** マイルストーン ID / 'none' / ''（絞り込みなし） */
-	milestone: string;
+	filters: TimelineFilters;
 }
+
+const STATUS_FILTERS = ['open', ...STATUSES] as const;
 
 /** URL クエリを読み、不正な値は既定に戻す */
 export function parseView(q: URLSearchParams, today: string): ViewParams {
@@ -86,9 +94,28 @@ export function parseView(q: URLSearchParams, today: string): ViewParams {
 	return {
 		group: pick(q.get('group'), GROUPS, 'assignee'),
 		scale: pick(q.get('scale'), SCALES, 'day'),
-		from: mondayOf(isValidDate(from) ? from : defaultFrom(today)),
-		milestone: q.get('milestone') ?? ''
+		from: isValidDate(from) ? from : defaultFrom(today),
+		filters: {
+			status: pick(q.get('status'), STATUS_FILTERS, '' as const),
+			assignee: q.get('assignee') ?? '',
+			category: q.get('category') ?? '',
+			milestone: q.get('milestone') ?? ''
+		}
 	};
+}
+
+const matches = (value: string | null, want: string) =>
+	!want || (want === 'none' ? value === null : value === want);
+
+/** 絞り込み条件をすべて満たす課題 */
+export function filterItems<T extends TimelineIssue>(items: T[], f: TimelineFilters): T[] {
+	return items.filter(
+		(i) =>
+			(!f.status || (f.status === 'open' ? i.status !== 'done' : i.status === f.status)) &&
+			matches(i.assigneeId, f.assignee) &&
+			matches(i.categoryId, f.category) &&
+			matches(i.milestoneId, f.milestone)
+	);
 }
 
 export interface Dated {
@@ -172,6 +199,7 @@ export interface TimelineIssue extends Dated {
 	status: Status;
 	assigneeId: string | null;
 	assigneeName: string | null;
+	categoryId: string | null;
 	milestoneId: string | null;
 	milestoneName: string | null;
 }

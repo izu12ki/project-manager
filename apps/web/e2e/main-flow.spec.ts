@@ -238,9 +238,18 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page.getByTestId('bar-2')).toHaveAttribute('data-due', jstDay(4));
 	await expect(page.getByTestId('bar-1')).toHaveAttribute('data-start', jstDay(1));
 	// グループ切替（なし）
-	await page.getByRole('button', { name: 'なし' }).click();
+	await page.getByLabel('グルーピング').selectOption('none');
 	await expect(page).toHaveURL(/group=none/);
 	await expect(page.getByTestId('bar-2')).toBeVisible();
+	// 絞り込み: 未完了の ACME-1 は「完了」で消え、「すべて」で戻る
+	await page.getByLabel('状態').selectOption('done');
+	await expect(page.getByTestId('bar-1')).toBeHidden();
+	await page.getByLabel('状態').selectOption('');
+	await expect(page.getByTestId('bar-1')).toBeVisible();
+	// 開始日を選ぶと、その日から表示する
+	await page.getByLabel('開始日').fill(jstDay(1));
+	await expect(page).toHaveURL(new RegExp(`from=${jstDay(1)}`));
+	await expect(page.locator('.days [data-date]').first()).toHaveAttribute('data-date', jstDay(1));
 	await logout(page);
 
 	// 7. ゲストがカンバンで進行中へ移動

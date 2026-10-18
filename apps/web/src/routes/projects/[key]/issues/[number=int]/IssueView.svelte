@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Paperclip, Pencil, Trash2 } from '@lucide/svelte';
+	import { Paperclip, Pencil, Trash2, X } from '@lucide/svelte';
 	import { untrack } from 'svelte';
 	import { formatBytes } from '$lib/attachment-rules';
 	import { uploadable } from '$lib/attachment-upload';
@@ -227,12 +227,18 @@
 				/>
 			</div>
 		</div>
-		{#if canSave || (perms.edit && !editing)}
+		{#if canSave || perms.edit}
 			<div class="flex flex-wrap items-center gap-2">
 				{#if canSave}<button type="submit" class="btn btn-primary">保存</button>{/if}
-				{#if perms.edit && !editing}
-					<button type="button" class="btn btn-outline btn-sm" onclick={() => (editing = true)}>
-						<Pencil />タイトル・本文を編集
+				{#if perms.edit}
+					<!-- 同じ位置で「編集」と「編集をやめる」を切り替える -->
+					<button
+						type="button"
+						class="btn btn-outline btn-sm"
+						aria-pressed={editing}
+						onclick={() => (editing = !editing)}
+					>
+						{#if editing}<X />編集をやめる{:else}<Pencil />タイトル・本文を編集{/if}
 					</button>
 				{/if}
 			</div>
@@ -288,16 +294,12 @@
 					<MentionMenu target={() => descriptionInput} candidates={mentionCandidates} />
 					<div class="flex items-center gap-2">
 						<p class="hint" style="flex: 1">
-							Markdown
-							が使えます。ファイルは貼り付け・ドロップでも添付できます。右の「保存」で反映されます。
+							Markdown が使えます。ファイルは貼り付け・ドロップでも添付できます。{variant === 'page'
+								? '右'
+								: '上'}の「保存」で反映されます。
 						</p>
 						<AttachButton projectKey={ref.key} target={() => descriptionInput} />
 					</div>
-				</div>
-				<div>
-					<button type="button" class="btn btn-outline btn-sm" onclick={() => (editing = false)}>
-						編集をやめる
-					</button>
 				</div>
 			</div>
 		{:else}

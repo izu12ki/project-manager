@@ -348,7 +348,18 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await sheet.getByLabel('コメントを追加').fill('シートからのコメント');
 	await sheet.getByRole('button', { name: 'コメントする' }).click();
 	await expect(sheet.getByText('シートからのコメント')).toBeVisible();
+	// 編集ボタンは同じ位置で「編集をやめる」に切り替わる
+	await sheet.getByRole('button', { name: 'タイトル・本文を編集' }).click();
+	await expect(sheet.getByLabel('本文')).toBeVisible();
+	await sheet.getByRole('button', { name: '編集をやめる' }).click();
+	await expect(sheet.getByLabel('本文')).toBeHidden();
 	await sheet.getByRole('button', { name: '閉じる' }).click();
+	await expect(sheet).toBeHidden();
+	// バーのクリックでも開く
+	await page.getByTestId('bar-1').click();
+	await expect(sheet).toBeVisible();
+	await expect(page).toHaveURL(/\/projects\/ACME\/timeline$/);
+	await page.keyboard.press('Escape');
 	await expect(sheet).toBeHidden();
 
 	// 9. 管理者がゲストを無効化（確認ダイアログ）

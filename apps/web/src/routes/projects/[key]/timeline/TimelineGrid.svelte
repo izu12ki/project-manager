@@ -27,7 +27,7 @@
 		today: string;
 		onjump: (from: string) => void;
 		onsave?: (item: T, next: Dated) => void;
-		/** 課題名のクリックで詳細をシート表示する。未指定なら詳細ページへ遷移する */
+		/** 課題名・バー・未スケジュールのチップのクリックで詳細をシート表示する。未指定なら詳細ページへ遷移する */
 		onopen?: (item: T) => void;
 		/** シートで開いている課題の番号（行を強調する） */
 		selected?: number | null;
@@ -150,12 +150,12 @@
 		}
 	}
 
-	function guardClick(e: MouseEvent) {
-		if (suppressClick) e.preventDefault();
-	}
-
-	/** 修飾キー付き・中クリックはブラウザの既定（新しいタブなど）に任せる */
+	/** 修飾キー付き・中クリックはブラウザの既定（新しいタブなど）に任せる。ドラッグ直後のクリックは無視する */
 	function openSheet(e: MouseEvent, item: T) {
+		if (suppressClick) {
+			e.preventDefault();
+			return;
+		}
 		if (!onopen || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
 		e.preventDefault();
 		onopen(item);
@@ -302,7 +302,7 @@
 										title={tooltip(item)}
 										draggable="false"
 										onpointerdown={(e) => begin(e, item, 'move')}
-										onclick={guardClick}
+										onclick={(e) => openSheet(e, item)}
 									>
 										{#if grip && !span.clippedStart}
 											<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -363,7 +363,7 @@
 						title={item.title}
 						draggable="false"
 						onpointerdown={(e) => begin(e, item, 'place')}
-						onclick={guardClick}
+						onclick={(e) => openSheet(e, item)}
 					>
 						<span class="mono">{projectKey}-{item.number}</span>
 						<span class="truncate">{item.title}</span>

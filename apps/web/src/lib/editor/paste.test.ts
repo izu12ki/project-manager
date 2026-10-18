@@ -1,8 +1,16 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
 import { $generateNodesFromDOM } from '@lexical/html';
-import { $getRoot, $insertNodes, $isTextNode, $nodesOfType, TextNode } from 'lexical';
+import {
+	$getRoot,
+	$insertNodes,
+	$isTextNode,
+	$nodesOfType,
+	PASTE_COMMAND,
+	TextNode
+} from 'lexical';
 import { createMarkdownEditor } from './create-editor';
+import { $isRawMarkdownNode } from './nodes';
 
 /** 外から貼られた HTML を、貼り付けと同じ経路でエディタに入れて Markdown を返す */
 function paste(html: string): string {
@@ -77,10 +85,54 @@ describe('外からの貼り付け', () => {
 	});
 	it('外部の画像は取り込まない', () =>
 		expect(paste('<p>a<img src="https://evil.test/x.png">b</p>')).toBe('ab'));
-	it('表はテキストになる', () => {
-		const md = paste('<table><tr><td>1</td><td>2</td></tr></table>');
-		expect(md).not.toContain('<table');
-		expect(md).toContain('1');
-		expect(md).toContain('2');
+	it('HTML の表（Excel・スプレッドシート・Web）は Markdown の表にする', () => {
+		expect(
+			paste(
+				'<p>前</p><table><tr><td>列1</td><td>列2</td></tr><tr><td>データ1</td><td>データ2</td></tr></table><p>後</p>'
+			)
+		).toBe('前\n\n| 列1 | 列2 |\n| --- | --- |\n| データ1 | データ2 |\n\n後');
+	});
+});
+
+describe('Markdown の表を文字のまま貼り付ける', () => {
+	const table = '| 列1 | 列2 |\n| ---- | ---- |\n| データ1 | データ2 |';
+
+	/** 文字（と HTML）の貼り付けを、ブラウザの貼り付けと同じく PASTE_COMMAND で送る */
+	function pastePlain(text: string, html = '') {
+		const h = createMarkdownEditor({});
+		h.setMarkdown('');
+		h.editor.update(() => $getRoot().selectEnd(), { discrete: true });
+		const data = {
+			types: html ? ['text/plain', 'text/html'] : ['text/plain'],
+			files: [] as File[],
+			getData: (t: string) => (t === 'text/plain' ? text : t === 'text/html' ? html : '')
+		};
+		const event = { clipboardData: data, preventDefault: () => {} };
+		h.editor.update(
+			() => {
+				h.editor.dispatchCommand(PASTE_COMMAND, event as unknown as ClipboardEvent);
+			},
+			{ discrete: true }
+		);
+		return h;
+	}
+	const hasTable = (h: ReturnType<typeof pastePlain>) =>
+		h.editor.read(() => $getRoot().getChildren().some($isRawMarkdownNode));
+
+	it('表を含む文字は Markdown として取り込み、表にする', () => {
+		const h = pastePlain(`説明\n\n${table}`);
+		expect(h.getMarkdown()).toBe(`説明\n\n${table}`);
+		expect(hasTable(h)).toBe(true);
+	});
+
+	it('表を含まない文字は今までどおり文字のまま貼る', () => {
+		const h = pastePlain('ただの **文字**');
+		expect(h.getMarkdown()).toBe('ただの \\*\\*文字\\*\\*');
+		expect(hasTable(h)).toBe(false);
+	});
+
+	it('HTML に表があるときは HTML の表を取り込む', () => {
+		const h = pastePlain(table, '<table><tr><td>1</td><td>2</td></tr></table>');
+		expect(h.getMarkdown()).toBe('| 1 | 2 |\n| --- | --- |');
 	});
 });

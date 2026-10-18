@@ -727,8 +727,12 @@
 		background: var(--muted);
 		font-weight: 600;
 	}
-	/* エディタで編集できない表（元の Markdown のまま保つ） */
-	.markdown pre.raw-md {
+	/* エディタで編集できない表（元の Markdown のまま保つ）。直すときはソースのまま編集する */
+	.markdown .raw-md {
+		cursor: default;
+		user-select: none;
+	}
+	.markdown .raw-md pre {
 		font-family: var(--font-mono);
 		font-size: 13px;
 		white-space: pre;

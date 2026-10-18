@@ -27,6 +27,7 @@ import {
 	mentionToMarkdown,
 	type MentionMdast
 } from '$lib/markdown/mention-mdast';
+import { renderTable, tableToMarkdown } from './table';
 
 /** 表など、エディタでは編集せず元の Markdown をそのまま書き出すブロック */
 export interface RawMarkdownMdast {
@@ -199,12 +200,24 @@ export function $isImageNode(node: LexicalNode | null | undefined): node is Imag
 
 /* ---------------------------------------------------------------- 表（生の Markdown） */
 
-/** 編集できないブロック。読み込んだ Markdown の文字列をそのまま持ち、そのまま書き出す */
+/**
+ * 編集できないブロック。読み込んだ Markdown の文字列をそのまま持ち、そのまま書き出す。
+ * 表として表示し、外から貼った HTML の表もこのノードとして取り込む
+ */
 export class RawMarkdownNode extends DecoratorNode<null> {
 	$config() {
 		return this.config('raw-markdown', {
 			extends: DecoratorNode,
-			stateConfigs: [{ flat: true, stateConfig: markdownState }]
+			stateConfigs: [{ flat: true, stateConfig: markdownState }],
+			importDOM: {
+				table: () => ({
+					conversion: (el) => {
+						const md = tableToMarkdown(el as HTMLTableElement);
+						return { node: md ? $createRawMarkdownNode(md) : null };
+					},
+					priority: 1
+				})
+			}
 		});
 	}
 
@@ -213,14 +226,17 @@ export class RawMarkdownNode extends DecoratorNode<null> {
 	}
 
 	createDOM(): HTMLElement {
-		const el = $getDocument().createElement('pre');
+		const doc = $getDocument();
+		const el = doc.createElement('div');
 		el.className = 'raw-md';
-		el.textContent = this.getMarkdown();
+		el.title = '表は「Markdown ソースのまま編集」で直せます';
+		el.appendChild(renderTable(this.getMarkdown(), doc));
 		return el;
 	}
 
 	updateDOM(prev: this, dom: HTMLElement): boolean {
-		if (prev.getMarkdown() !== this.getMarkdown()) dom.textContent = this.getMarkdown();
+		if (prev.getMarkdown() !== this.getMarkdown())
+			dom.replaceChildren(renderTable(this.getMarkdown(), $getDocument()));
 		return false;
 	}
 

@@ -13,6 +13,8 @@
 		milestoneLabel,
 		type Status
 	} from '$lib/labels';
+	import IssueSheet from '../IssueSheet.svelte';
+	import { getIssueDetail } from '../issues/[number=int]/issue.remote';
 	import { getBoard, moveCard } from './board.remote';
 	import type { PageProps } from './$types';
 
@@ -33,6 +35,17 @@
 	let snapshot: Columns | null = null;
 	let message = $state<string | null>(null);
 	let pending = $state(false);
+	let opened = $state<number | null>(null);
+
+	/** 修飾キー付き・中クリックはブラウザの既定（新しいタブなど）に任せる */
+	function openSheet(e: MouseEvent, card: Card) {
+		if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+		e.preventDefault();
+		opened = card.number;
+		// シートに隠れる位置のカードは見える位置までスクロールする（.board の scroll-padding を使う）
+		const el = e.currentTarget as HTMLElement;
+		requestAnimationFrame(() => el.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
+	}
 
 	function consider(status: Status, e: CustomEvent<DndEvent<Card>>) {
 		message = null;
@@ -65,6 +78,12 @@
 				beforeId: items[idx - 1]?.id ?? '',
 				afterId: items[idx + 1]?.id ?? ''
 			});
+			// シートで開いている課題なら、表示中のステータスも取り直す
+			if (items[idx].number === opened) {
+				getIssueDetail({ key: ref.key, number: opened })
+					.refresh()
+					.catch(() => {});
+			}
 		} catch (err) {
 			if (before) columns = before;
 			message = failure(err);
@@ -114,7 +133,7 @@
 		</div>
 	{/if}
 
-	<div class="board">
+	<div class="board" class:with-sheet={opened !== null}>
 		{#each STATUSES as status (status)}
 			<section
 				class="column"
@@ -138,7 +157,14 @@
 					onfinalize={(e) => finalize(status, e)}
 				>
 					{#each columns[status] as card (card.id)}
-						<li class="card-item" data-testid={`card-${card.number}`}>
+						<!-- キーボードではタイトルのリンクから開ける -->
+						<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+						<li
+							class="card-item"
+							class:selected={opened === card.number}
+							data-testid={`card-${card.number}`}
+							onclick={(e) => openSheet(e, card)}
+						>
 							<div class="flex items-center justify-between gap-2">
 								<span class="mono text-xs text-muted-foreground"
 									>{data.project.key}-{card.number}</span
@@ -178,6 +204,18 @@
 			</section>
 		{/each}
 	</div>
+
+	{#if opened !== null}
+		<IssueSheet
+			projectKey={data.project.key}
+			number={opened}
+			onclose={() => (opened = null)}
+			onsaved={() =>
+				getBoard(ref)
+					.refresh()
+					.catch(() => {})}
+		/>
+	{/if}
 </section>
 
 <style>
@@ -187,6 +225,11 @@
 		gap: 12px;
 		overflow-x: auto;
 		padding-bottom: 8px;
+	}
+	/* シート（IssueSheet と同じ幅）に隠れる右端の列もスクロールして見えるようにする */
+	.board.with-sheet {
+		padding-right: min(680px, 100vw);
+		scroll-padding-right: min(680px, 100vw);
 	}
 	.column {
 		background: var(--col);
@@ -242,6 +285,11 @@
 	}
 	.card-item:hover {
 		border-color: var(--primary);
+	}
+	.card-item.selected {
+		border-color: var(--primary);
+		background: color-mix(in oklch, var(--primary) 8%, var(--card));
+		box-shadow: inset 3px 0 0 var(--primary);
 	}
 	.title {
 		font-weight: 500;

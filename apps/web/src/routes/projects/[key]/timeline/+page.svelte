@@ -15,7 +15,7 @@
 		type GroupBy,
 		type Scale
 	} from '$lib/timeline';
-	import IssueSheet from './IssueSheet.svelte';
+	import IssueSheet from '../IssueSheet.svelte';
 	import TimelineGrid from './TimelineGrid.svelte';
 	import { getTimeline, setIssueDates } from './timeline.remote';
 	import type { PageProps } from './$types';

@@ -423,6 +423,13 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page.getByTestId('column-in_progress').getByTestId('card-1')).toBeVisible();
 	await page.reload();
 	await expect(page.getByTestId('column-in_progress').getByTestId('card-1')).toBeVisible();
+	// カードのクリックで右側のシートに詳細を出す（ページは遷移しない）
+	await page.getByTestId('card-1').click();
+	const boardSheet = page.getByRole('complementary', { name: 'ACME-1' });
+	await expect(boardSheet.getByRole('heading', { name: 'ログインできない' })).toBeVisible();
+	await expect(page).toHaveURL(/\/projects\/ACME\/board$/);
+	await page.keyboard.press('Escape');
+	await expect(boardSheet).toBeHidden();
 
 	// 8. ゲストがコメント（PDF を添付）。テキストの貼り付けは横取りしない
 	// 「Markdown ソースのまま編集」（textarea）でも今までどおり添付・送信できる

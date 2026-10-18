@@ -664,6 +664,119 @@
 	.markdown pre code {
 		padding: 0;
 	}
+	/* エディタ（Lexical）のコードブロックは <code> 1 つで描かれる */
+	.markdown code.md-code-block {
+		display: block;
+		margin: 8px 0;
+		padding: 12px;
+		overflow-x: auto;
+		white-space: pre;
+	}
+	.markdown del,
+	.markdown .md-strike {
+		text-decoration: line-through;
+	}
+	.markdown h1,
+	.markdown h2,
+	.markdown h3,
+	.markdown h4,
+	.markdown h5,
+	.markdown h6 {
+		margin: 16px 0 8px;
+		font-weight: 700;
+		line-height: 1.4;
+	}
+	.markdown h1 {
+		font-size: 1.5em;
+	}
+	.markdown h2 {
+		font-size: 1.3em;
+	}
+	.markdown h3 {
+		font-size: 1.15em;
+	}
+	.markdown h4,
+	.markdown h5,
+	.markdown h6 {
+		font-size: 1em;
+	}
+	.markdown blockquote {
+		margin: 8px 0;
+		padding-left: 12px;
+		border-left: 3px solid var(--border);
+		color: var(--muted-foreground);
+	}
+	.markdown hr {
+		margin: 16px 0;
+		border: none;
+		border-top: 1px solid var(--border);
+	}
+	.markdown table {
+		display: block;
+		max-width: 100%;
+		margin: 8px 0;
+		overflow-x: auto;
+		border-collapse: collapse;
+	}
+	.markdown th,
+	.markdown td {
+		padding: 4px 10px;
+		border: 1px solid var(--border);
+	}
+	.markdown th {
+		background: var(--muted);
+		font-weight: 600;
+	}
+	/* エディタで編集できない表（元の Markdown のまま保つ） */
+	.markdown pre.raw-md {
+		font-family: var(--font-mono);
+		font-size: 13px;
+		white-space: pre;
+	}
+	/* チェックリスト。表示は <input type="checkbox">、エディタは ::before で描く */
+	.markdown .contains-task-list {
+		list-style: none;
+		padding-left: 4px;
+	}
+	.markdown .task-list-item {
+		list-style: none;
+	}
+	.markdown .task-list-item > input[type='checkbox'] {
+		margin: 0 6px 0 0;
+		vertical-align: -2px;
+	}
+	.markdown .md-checked,
+	.markdown .md-unchecked {
+		position: relative;
+		padding-left: 24px;
+		outline: none;
+	}
+	.markdown .md-checked::before,
+	.markdown .md-unchecked::before {
+		content: '';
+		position: absolute;
+		top: 0.3em;
+		left: 0;
+		width: 16px;
+		height: 16px;
+		border: 1px solid var(--input);
+		border-radius: 3px;
+		background: var(--card);
+		cursor: pointer;
+	}
+	.markdown .md-checked::before {
+		border-color: var(--primary);
+		background: var(--primary)
+			url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
+			center / 12px no-repeat;
+	}
+	.markdown .md-checked {
+		color: var(--muted-foreground);
+	}
+	/* ネストしたリストを包む li には記号を付けない */
+	.markdown li.md-nested {
+		list-style: none;
+	}
 	/* 画像は ImageLightbox で拡大できる。ホバーで右上に虫眼鏡を出す */
 	.markdown .md-img {
 		position: relative;

@@ -119,15 +119,47 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.getByRole('link', { name: '新規課題' }).click();
 	await page.getByLabel('タイトル').fill('ログインできない');
 	await page.getByLabel('カテゴリー').selectOption({ label: 'フロントエンド' });
+	// 本文は見たまま編集。「Markdown で編集」との往復で内容が二重にならない
+	const body = page.getByRole('textbox', { name: '本文' });
+	const bodySource = page.locator('textarea[name="description"]');
+	const sourceToggle = page.getByRole('button', { name: 'Markdown で編集' });
+	// エディタの読み込みが終わるまでは textarea が「本文」になる
+	await expect(body).toHaveAttribute('contenteditable', 'true');
+	await body.click();
+	await page.keyboard.type('abc');
+	await sourceToggle.click();
+	await expect(sourceToggle).toHaveAttribute('aria-pressed', 'true');
+	await expect(bodySource).toBeVisible();
+	await expect(bodySource).toHaveValue('abc');
+	await bodySource.press('End');
+	await bodySource.pressSequentially('d');
+	await sourceToggle.click();
+	await expect(sourceToggle).toHaveAttribute('aria-pressed', 'false');
+	await expect(bodySource).toBeHidden();
+	await expect(body).toHaveText('abcd');
+	// ネストした箇条書き（Tab）と太字ボタン
+	// 戻したときはエディタの末尾にキャレットがある
+	await expect(body).toBeFocused();
+	await page.keyboard.press('Enter');
+	await page.keyboard.type('- 親');
+	await page.keyboard.press('Enter');
+	await page.keyboard.press('Tab');
+	await page.keyboard.type('子');
+	await page.getByRole('button', { name: '太字' }).click();
+	await expect(page.getByRole('button', { name: '太字' })).toHaveAttribute('aria-pressed', 'true');
+	await page.keyboard.type('強調');
 	await page
 		.getByTestId('attach-input')
 		.setInputFiles({ name: 'screen.png', mimeType: 'image/png', buffer: PNG });
-	await expect(page.getByLabel('本文')).toHaveValue(
+	await expect(bodySource).toHaveValue(
 		/!\[screen\.png\]\(\/projects\/ACME\/attachments\/[0-9a-f-]{36}\)/
 	);
 	await page.getByRole('button', { name: '起票する' }).first().click();
 	await expect(page.getByRole('heading', { name: 'ログインできない' })).toBeVisible();
 	await expect(page.getByRole('main').getByText('ACME-1')).toBeVisible();
+	await expect(page.locator('.markdown p', { hasText: 'abcd' })).toHaveText('abcd');
+	await expect(page.locator('.markdown ul ul li', { hasText: '子' })).toBeVisible();
+	await expect(page.locator('.markdown ul ul li strong')).toHaveText('強調');
 	const shot = page.locator('.markdown img[alt="screen.png"]');
 	await expect(shot).toBeVisible();
 	expect(await shot.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1);

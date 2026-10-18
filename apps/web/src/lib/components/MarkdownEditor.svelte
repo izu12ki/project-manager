@@ -1,22 +1,200 @@
 <script lang="ts">
-	import { Bold, Code, Link, List, ListChecks } from '@lucide/svelte';
+	import { onMount, tick } from 'svelte';
+	import { Bold, Code, FileCode, Link, List, ListChecks, Strikethrough } from '@lucide/svelte';
+	import type { Attachment } from 'svelte/attachments';
 	import type { HTMLTextareaAttributes } from 'svelte/elements';
 	import { uploadable } from '$lib/attachment-upload';
+	import type { Format } from '$lib/editor/commands';
+	import type { MarkdownEditorHandle } from '$lib/editor/create-editor';
 	import type { MentionCandidate } from '$lib/mentions';
 	import AttachButton from './AttachButton.svelte';
 	import MentionMenu from './MentionMenu.svelte';
+
+	type Commands = typeof import('$lib/editor/commands');
+	type Mode = 'rich' | 'source';
 
 	let {
 		value = $bindable(''),
 		projectKey,
 		mentionCandidates,
+		label,
 		...rest
 	}: HTMLTextareaAttributes & {
 		value?: string;
 		projectKey?: string;
 		mentionCandidates?: MentionCandidate[];
+		/** 見たまま編集の領域の aria-label */
+		label: string;
 	} = $props();
+
+	const MODE_KEY = 'md-editor-mode';
+
 	let textarea = $state<HTMLTextAreaElement>();
+	let body = $state<HTMLDivElement>();
+	let mode = $state<Mode>('rich');
+	// Lexical は動的 import で読み込む。読み込みが終わるまでは textarea で編集する
+	let handle = $state.raw<MarkdownEditorHandle | null>(null);
+	let commands = $state.raw<Commands | null>(null);
+	let active = $state.raw(new Set<Format>());
+	let invalid = $state(false);
+	let linkOpen = $state(false);
+	let linkUrl = $state('');
+
+	const rich = $derived(mode === 'rich' && handle !== null);
+	const minRows = $derived(Number(rest.rows) || 2);
+
+	/** エディタが表している Markdown（textarea の値と比べて、外からの変更を見分ける） */
+	let synced = '';
+	/** エディタからの書き込みで発火した input を無視するためのフラグ */
+	let selfInput = false;
+
+	/** エディタの変更を textarea に書き、bind:value・remote form に知らせる */
+	function onEditorChange(md: string) {
+		const el = textarea!;
+		invalid = false;
+		synced = md;
+		if (el.value === md) return;
+		el.value = md;
+		selfInput = true;
+		try {
+			el.dispatchEvent(new Event('input', { bubbles: true }));
+		} finally {
+			selfInput = false;
+		}
+	}
+
+	/** textarea の値がエディタと違えば読み込み直す（見たまま編集のときだけ） */
+	function syncFromTextarea() {
+		const el = textarea;
+		if (!el || !handle || mode !== 'rich' || el.value === synced) return;
+		synced = el.value;
+		handle.setMarkdown(synced);
+	}
+
+	function focusEditor() {
+		handle?.editor.focus(undefined, { defaultSelection: 'rootEnd' });
+	}
+
+	onMount(() => {
+		try {
+			if (localStorage.getItem(MODE_KEY) === 'source') mode = 'source';
+		} catch {
+			// localStorage が使えない環境では見たまま編集のまま
+		}
+
+		let disposed = false;
+		let cleanup = () => {};
+
+		async function load() {
+			const [{ createMarkdownEditor }, cmds] = await Promise.all([
+				import('$lib/editor/create-editor'),
+				import('$lib/editor/commands')
+			]);
+			if (disposed || !body || !textarea) return;
+			const hadFocus = document.activeElement === textarea;
+			// Lexical は contenteditable を付けないので、root にする前に付ける
+			body.contentEditable = 'true';
+			const h = createMarkdownEditor({ root: body, onChange: onEditorChange });
+			synced = textarea.value;
+			h.setMarkdown(synced);
+			const offTab = cmds.registerListTab(h.editor);
+			const offActive = h.editor.registerUpdateListener(() => {
+				active = cmds.activeFormats(h.editor);
+			});
+			cleanup = () => {
+				offTab();
+				offActive();
+				h.destroy();
+			};
+			commands = cmds;
+			handle = h;
+			if (hadFocus && mode === 'rich') {
+				await tick();
+				focusEditor();
+			}
+		}
+
+		const start = () => void load();
+		const idle = 'requestIdleCallback' in window;
+		const id = idle ? requestIdleCallback(start) : setTimeout(start, 200);
+		return () => {
+			disposed = true;
+			if (idle) cancelIdleCallback(id as number);
+			else clearTimeout(id);
+			cleanup();
+		};
+	});
+
+	// 外から value が書き換わったとき（呼び出し側のリセットなど）もエディタに反映する
+	$effect(() => {
+		void value;
+		void handle;
+		syncFromTextarea();
+	});
+
+	// form.reset() は input を発火しないので、値が戻った後に読み込み直す
+	$effect(() => {
+		const form = textarea?.form;
+		if (!form) return;
+		const onReset = () => requestAnimationFrame(syncFromTextarea);
+		// 隠れた textarea には required の吹き出しが出ないので、代わりにエディタで知らせる
+		const onSubmit = (e: SubmitEvent) => {
+			if (!rich || !textarea?.required || textarea.value !== '') return;
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			showInvalid();
+		};
+		form.addEventListener('reset', onReset);
+		form.addEventListener('submit', onSubmit, true);
+		return () => {
+			form.removeEventListener('reset', onReset);
+			form.removeEventListener('submit', onSubmit, true);
+		};
+	});
+
+	function showInvalid() {
+		invalid = true;
+		focusEditor();
+	}
+
+	/** 隠れた textarea の検証に失敗したとき（ブラウザは submit を発火せずに止める） */
+	function oninvalid(e: Event) {
+		if (!rich) return;
+		e.preventDefault();
+		showInvalid();
+	}
+
+	function oninput() {
+		if (selfInput) return;
+		invalid = false;
+		syncFromTextarea();
+	}
+
+	// rest の oninput（呼び出し側のもの）を上書きしないよう、属性ではなく addEventListener で受ける
+	const listen: Attachment<HTMLTextAreaElement> = (el) => {
+		el.addEventListener('input', oninput);
+		el.addEventListener('invalid', oninvalid);
+		return () => {
+			el.removeEventListener('input', oninput);
+			el.removeEventListener('invalid', oninvalid);
+		};
+	};
+
+	async function toggleMode() {
+		mode = mode === 'rich' ? 'source' : 'rich';
+		linkOpen = false;
+		try {
+			localStorage.setItem(MODE_KEY, mode);
+		} catch {
+			// 覚えられなくても切り替えはできる
+		}
+		syncFromTextarea();
+		await tick();
+		if (rich) focusEditor();
+		else textarea?.focus();
+	}
+
+	// ---- 「Markdown で編集」のモード（textarea）での書式 ----
 
 	/** 選択範囲を before/after で囲む（未選択なら placeholder を入れて選択する） */
 	function wrap(before: string, after: string, placeholder: string) {
@@ -53,17 +231,93 @@
 	}
 
 	const tools = [
-		{ label: '太字', icon: Bold, run: () => wrap('**', '**', '太字') },
-		{ label: '箇条書き', icon: List, run: () => prefixLines('- ') },
-		{ label: 'チェックリスト', icon: ListChecks, run: () => prefixLines('- [ ] ') },
-		{ label: 'コード', icon: Code, run: code },
-		{ label: 'リンク', icon: Link, run: () => wrap('[', '](https://)', 'リンク') }
-	];
+		{ f: 'bold', label: '太字', icon: Bold, source: () => wrap('**', '**', '太字') },
+		{
+			f: 'strikethrough',
+			label: '打ち消し線',
+			icon: Strikethrough,
+			source: () => wrap('~~', '~~', '打ち消し線')
+		},
+		{ f: 'code', label: 'コード', icon: Code, source: code },
+		{ f: 'link', label: 'リンク', icon: Link, source: () => wrap('[', '](https://)', 'リンク') },
+		{ f: 'bullet', label: '箇条書き', icon: List, source: () => prefixLines('- ') },
+		{ f: 'check', label: 'チェックリスト', icon: ListChecks, source: () => prefixLines('- [ ] ') }
+	] as const;
+
+	function runTool(t: (typeof tools)[number]) {
+		if (!rich || !handle || !commands) return t.source();
+		if (t.f === 'link' && !active.has('link')) {
+			linkUrl = '';
+			linkOpen = true;
+			return;
+		}
+		commands.runFormat(handle.editor, t.f);
+		focusEditor();
+	}
+
+	function onLinkKeydown(e: KeyboardEvent) {
+		if (e.isComposing) return;
+		if (e.key === 'Enter') {
+			// フォームを送信させない
+			e.preventDefault();
+			const url = linkUrl.trim();
+			if (url && handle && commands) commands.setLink(handle.editor, url);
+			closeLink();
+		} else if (e.key === 'Escape') {
+			e.preventDefault();
+			e.stopPropagation();
+			closeLink();
+		}
+	}
+
+	function closeLink() {
+		linkOpen = false;
+		focusEditor();
+	}
+
+	/** ツールバーのボタンを押してもエディタの選択を失わないようにする */
+	const keepFocus = (e: MouseEvent) => e.preventDefault();
 </script>
 
-<div class="editor">
-	<textarea bind:this={textarea} bind:value {...rest} {@attach projectKey && uploadable(projectKey)}
-	></textarea>
+<div class="editor" style:--rows={minRows}>
+	<textarea
+		bind:this={textarea}
+		bind:value
+		{...rest}
+		hidden={rich}
+		{@attach listen}
+		{@attach projectKey && uploadable(projectKey)}></textarea>
+	<div class="body-wrap" hidden={!rich}>
+		<div
+			bind:this={body}
+			role="textbox"
+			tabindex="-1"
+			aria-multiline="true"
+			aria-label={label}
+			aria-invalid={invalid || undefined}
+			class="markdown editor-body"
+		></div>
+		{#if !value && rest.placeholder}
+			<div class="placeholder" aria-hidden="true">{rest.placeholder}</div>
+		{/if}
+		{#if invalid}
+			<p class="invalid" role="alert">入力してください</p>
+		{/if}
+		{#if linkOpen}
+			<div class="link-pop">
+				<input
+					class="input"
+					type="url"
+					placeholder="https://"
+					aria-label="リンクの URL"
+					bind:value={linkUrl}
+					onkeydown={onLinkKeydown}
+					onblur={() => (linkOpen = false)}
+					{@attach (el) => el.focus()}
+				/>
+			</div>
+		{/if}
+	</div>
 	<div class="toolbar" role="toolbar" aria-label="書式">
 		<span class="hint"
 			>Markdown が使えます{mentionCandidates ? '・@ でメンション' : ''}{projectKey
@@ -71,14 +325,36 @@
 				: ''}</span
 		>
 		<span style="flex: 1"></span>
-		{#each tools as t (t.label)}
-			<button type="button" class="icon-btn" aria-label={t.label} title={t.label} onclick={t.run}>
+		{#each tools as t (t.f)}
+			{@const on = rich && active.has(t.f)}
+			<button
+				type="button"
+				class="icon-btn"
+				class:active={on}
+				aria-label={t.label}
+				title={t.label}
+				aria-pressed={rich ? on : undefined}
+				onmousedown={keepFocus}
+				onclick={() => runTool(t)}
+			>
 				<t.icon />
 			</button>
 		{/each}
 		{#if projectKey}
 			<AttachButton {projectKey} target={() => textarea} />
 		{/if}
+		<button
+			type="button"
+			class="icon-btn"
+			class:active={mode === 'source'}
+			aria-label="Markdown で編集"
+			title="Markdown で編集"
+			aria-pressed={mode === 'source'}
+			onmousedown={keepFocus}
+			onclick={toggleMode}
+		>
+			<FileCode />
+		</button>
 	</div>
 	{#if mentionCandidates}<MentionMenu target={() => textarea} candidates={mentionCandidates} />{/if}
 </div>
@@ -107,6 +383,56 @@
 		resize: vertical;
 		outline: none;
 	}
+	.body-wrap {
+		position: relative;
+	}
+	.editor-body {
+		min-height: calc(var(--rows) * 1.7em + 20px);
+		/* 今の .textarea.autosize と同じ上限。超えたらスクロールする */
+		max-height: 60vh;
+		overflow-y: auto;
+		padding: 10px 12px;
+		line-height: 1.7;
+		outline: none;
+		color: var(--foreground);
+	}
+	.placeholder {
+		position: absolute;
+		top: 10px;
+		left: 12px;
+		right: 12px;
+		line-height: 1.7;
+		color: var(--muted-foreground);
+		pointer-events: none;
+		user-select: none;
+	}
+	.invalid {
+		position: absolute;
+		top: 6px;
+		right: 8px;
+		margin: 0;
+		padding: 2px 8px;
+		border-radius: 4px;
+		background: var(--destructive, #dc2626);
+		color: white;
+		font-size: 12px;
+		pointer-events: none;
+	}
+	.link-pop {
+		position: absolute;
+		right: 8px;
+		bottom: 8px;
+		z-index: 10;
+		width: min(320px, calc(100% - 16px));
+		padding: 6px;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		background: var(--popover, var(--background));
+		box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+	}
+	.link-pop .input {
+		width: 100%;
+	}
 	.toolbar {
 		display: flex;
 		align-items: center;
@@ -115,6 +441,10 @@
 		border-top: 1px solid var(--border);
 		background: var(--muted);
 		color: var(--muted-foreground);
+	}
+	.toolbar .active {
+		background: var(--accent);
+		color: var(--foreground);
 	}
 	.hint {
 		font-size: 12px;

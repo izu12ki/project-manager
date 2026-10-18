@@ -39,6 +39,7 @@
 		<MarkdownEditor
 			id="issue-description"
 			name="description"
+			label="本文"
 			rows={10}
 			placeholder="課題の詳細"
 			projectKey={data.project.key}

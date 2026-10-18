@@ -59,6 +59,7 @@
 	"dependencies": {
 		"@better-auth/drizzle-adapter": "1.7.7",
 		"@lexical/clipboard": "0.52.0",
+		"@lexical/code-core": "0.52.0",
 		"@lexical/extension": "0.52.0",
 		"@lexical/history": "0.52.0",
 		"@lexical/html": "0.52.0",

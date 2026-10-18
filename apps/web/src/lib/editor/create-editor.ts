@@ -1,5 +1,7 @@
 import { buildEditorFromExtensions } from '@lexical/extension';
 import { HistoryExtension } from '@lexical/history';
+import { LinkExtension } from '@lexical/link';
+import { CheckListExtension, ListExtension } from '@lexical/list';
 import {
 	$convertFromMarkdownString,
 	$convertToMarkdownString,
@@ -15,7 +17,7 @@ import {
 	MdastTaskListExtension
 } from '@lexical/mdast';
 import { RichTextExtension } from '@lexical/rich-text';
-import { CLEAR_HISTORY_COMMAND, defineExtension, type LexicalEditor } from 'lexical';
+import { $setSelection, CLEAR_HISTORY_COMMAND, defineExtension, type LexicalEditor } from 'lexical';
 import { MarkdownNodesExtension } from './nodes';
 
 export interface MarkdownEditorHandle {
@@ -42,6 +44,10 @@ export function createMarkdownEditor(opts: {
 			dependencies: [
 				RichTextExtension,
 				HistoryExtension,
+				// ツールバーのコマンド（リスト・チェックリスト・リンク）の処理を登録する
+				ListExtension,
+				CheckListExtension,
+				LinkExtension,
 				MdastExtension,
 				MdastHeadingExtension,
 				MdastBlockquoteExtension,
@@ -54,6 +60,17 @@ export function createMarkdownEditor(opts: {
 				MdastShortcutsExtension,
 				MarkdownNodesExtension
 			],
+			// layout.css の .markdown で表示側と同じ見た目にするためのクラス
+			theme: {
+				text: { strikethrough: 'md-strike' },
+				code: 'md-code-block',
+				list: {
+					checklist: 'contains-task-list',
+					listitemChecked: 'task-list-item md-checked',
+					listitemUnchecked: 'task-list-item md-unchecked',
+					nested: { listitem: 'md-nested' }
+				}
+			},
 			onError: (error: Error) => {
 				throw error;
 			}
@@ -71,7 +88,14 @@ export function createMarkdownEditor(opts: {
 	};
 
 	const setMarkdown = (md: string) => {
-		editor.update(() => $convertFromMarkdownString(md), { discrete: true, tag: LOAD_TAG });
+		editor.update(
+			() => {
+				$convertFromMarkdownString(md);
+				// 読み込み後のフォーカスで末尾にキャレットを置く（editor.focus の defaultSelection）
+				$setSelection(null);
+			},
+			{ discrete: true, tag: LOAD_TAG }
+		);
 		source = md;
 		baseline = exportMarkdown();
 		editor.dispatchCommand(CLEAR_HISTORY_COMMAND, undefined);

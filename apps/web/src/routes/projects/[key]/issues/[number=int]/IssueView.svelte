@@ -88,7 +88,7 @@
 	async function copyIssueKey(e: MouseEvent) {
 		const key = `${projectKey}-${issue.number}`;
 		try {
-			await navigator.clipboard.writeText(e.shiftKey ? key : `${key} ${issue.title}`);
+			await navigator.clipboard.writeText(e.shiftKey ? `${key} ${issue.title}` : key);
 			toast.success('コピーしました');
 		} catch {
 			toast.error('コピーできませんでした');
@@ -260,16 +260,15 @@
 				<StatusPill status={issue.status} />
 				<PriorityPill priority={issue.priority} />
 			</div>
-			<div class="flex items-start gap-1">
+			<div class="flex items-start gap-2">
 				<h1 class="page-title" style="font-size: 22px; text-wrap: pretty">{issue.title}</h1>
 				<button
 					type="button"
-					class="icon-btn mt-0.5 shrink-0"
-					title="課題キーと件名をクリップボードにコピーします。Shiftキーを押しながらクリックすると課題キーのみコピーします。"
-					aria-label="課題キーと件名をコピー"
+					class="btn btn-outline btn-sm mt-0.5 shrink-0"
+					title="課題キーをクリップボードにコピーします。Shiftキーを押しながらクリックすると課題キーと件名をコピーします。"
 					onclick={copyIssueKey}
 				>
-					<Copy />
+					<Copy />課題キーをコピー
 				</button>
 			</div>
 			<p class="m-0 text-[13px] text-muted-foreground">

@@ -8,6 +8,7 @@
 		addDays,
 		filterItems,
 		groupItems,
+		lastDate,
 		parseView,
 		viewRange,
 		type Dated,
@@ -23,7 +24,6 @@
 	const today = todayJst();
 	const view = $derived(parseView(new URLSearchParams(page.url.search), today));
 	const timeline = $derived(await getTimeline(params.key));
-	const range = $derived(viewRange(view.from, view.scale));
 
 	/** 右側のシートで開いている課題の番号 */
 	let opened = $state<number | null>(null);
@@ -47,6 +47,8 @@
 	const scheduled = $derived(all.filter((i) => i.startDate || i.dueDate));
 	const unscheduled = $derived(all.filter((i) => !i.startDate && !i.dueDate));
 	const groups = $derived(groupItems(scheduled, view.group, timeline.milestones));
+	// 最後の期限日の課題まで右に広げる
+	const range = $derived(viewRange(view.from, view.scale, lastDate(scheduled)));
 
 	const GROUP_OPTIONS: [GroupBy, string][] = [
 		['assignee', '担当者'],

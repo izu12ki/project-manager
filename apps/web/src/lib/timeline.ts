@@ -55,9 +55,25 @@ export interface ViewRange {
 	step: number;
 }
 
-export function viewRange(from: string, scale: Scale): ViewRange {
+/** 表示日数の上限。日付の誤入力で列が膨れすぎないようにする */
+const MAX_DAYS = 731;
+
+/** 既定の日数を基本に、until（最後の期限日など）が後ろにあればそこまで広げる */
+export function viewRange(from: string, scale: Scale, until?: string | null): ViewRange {
 	const s = SCALE_SPEC[scale];
-	return { from, to: addDays(from, s.days - 1), ...s };
+	const need = until ? diffDays(from, until) + 1 : 0;
+	const days = Math.max(s.days, Math.min(need, MAX_DAYS));
+	return { from, to: addDays(from, days - 1), ...s, days };
+}
+
+/** 課題の中で最も遅い日付（期限、なければ開始日）。日付のある課題がなければ null */
+export function lastDate(items: Dated[]): string | null {
+	let last: string | null = null;
+	for (const i of items) {
+		const d = i.dueDate ?? i.startDate;
+		if (d && (!last || d > last)) last = d;
+	}
+	return last;
 }
 
 /** 既定の表示開始日: 今日を含む週の月曜の 1 週間前 */

@@ -16,6 +16,7 @@ export default defineConfig({
 						{ label: 'デプロイ手順', slug: 'guides/deploy' },
 						{ label: 'メール送信の設定', slug: 'guides/mail' },
 						{ label: 'Slack 連携', slug: 'guides/slack' },
+						{ label: 'タイムライン', slug: 'guides/timeline' },
 						{ label: 'アップデート', slug: 'guides/update' }
 					]
 				},

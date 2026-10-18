@@ -43,6 +43,28 @@ async function dragTo(page: Page, source: Locator, target: Locator) {
 	await page.mouse.up();
 }
 
+/** 今日（日本時間）から offset 日後の 'YYYY-MM-DD' */
+const jstDay = (offset: number) =>
+	new Date(Date.now() + offset * 86_400_000).toLocaleDateString('sv-SE', {
+		timeZone: 'Asia/Tokyo'
+	});
+
+/** リモート関数（command）への POST 応答。ドラッグより先に仕掛けて保存の完了を待つ */
+const savedResponse = (page: Page) =>
+	page.waitForResponse(
+		(r) => r.request().method() === 'POST' && r.url().includes('/_app/remote') && r.ok()
+	);
+
+/** 要素の中央を掴んで dx だけ横に動かす */
+async function dragBy(page: Page, target: Locator, dx: number) {
+	const b = await target.boundingBox();
+	if (!b) throw new Error('drag target is not visible');
+	await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(b.x + b.width / 2 + dx, b.y + b.height / 2, { steps: 8 });
+	await page.mouse.up();
+}
+
 test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 → コメント', async ({ page }) => {
 	// 1. 初期セットアップ
 	await page.goto('/login');
@@ -177,6 +199,57 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(mentionBox).toHaveValue(/^@\[顧客 太郎\]\(user:[0-9a-f-]{36}\) 確認お願いします$/);
 	await page.getByRole('button', { name: 'コメントする' }).click();
 	await expect(page.locator('.markdown .mention', { hasText: '@顧客 太郎' })).toBeVisible();
+
+	// 6c. メンバーがタイムラインで日付を調整する
+	await page.goto('/projects/ACME/issues/new');
+	await page.getByLabel('タイトル').fill('トップページ改修');
+	await page.getByLabel('開始日').fill(jstDay(0));
+	await page.getByLabel('期限日').fill(jstDay(2));
+	// 手順 10 の「マイルストーン未設定」の絞り込みで 0 件になるよう v1.0 に入れる
+	await page.getByLabel('マイルストーン').selectOption({ label: 'v1.0（11/30 リリース）' });
+	await page.getByRole('button', { name: '起票する' }).first().click();
+	await expect(page.getByRole('heading', { name: 'トップページ改修' })).toBeVisible();
+
+	// 課題詳細にはプロジェクトのタブがないので、一覧から入る
+	await page.goto('/projects/ACME');
+	await page.getByRole('link', { name: 'タイムライン' }).click();
+	await expect(page).toHaveURL(/\/projects\/ACME\/timeline$/);
+	const bar2 = page.getByTestId('bar-2');
+	await expect(bar2).toHaveAttribute('data-start', jstDay(0));
+	// バーを右へ 2 日（1 日 = 32px）。ドラッグ後に課題詳細へ遷移しない
+	const saved2 = savedResponse(page);
+	await dragBy(page, bar2, 64);
+	await saved2;
+	await expect(bar2).toHaveAttribute('data-start', jstDay(2));
+	await expect(bar2).toHaveAttribute('data-due', jstDay(4));
+	await expect(page).toHaveURL(/\/projects\/ACME\/timeline$/);
+	// 未スケジュールの ACME-1 を明日の列へ置く
+	const chip1 = page.getByTestId('chip-1');
+	const tomorrow = page.locator(`[data-date="${jstDay(1)}"]`);
+	const saved1 = savedResponse(page);
+	await dragTo(page, chip1, tomorrow);
+	await saved1;
+	await expect(page.getByTestId('bar-1')).toHaveAttribute('data-start', jstDay(1));
+	await expect(page.getByTestId('bar-1')).toHaveAttribute('data-due', jstDay(1));
+	await expect(chip1).toBeHidden();
+	// 保存されている
+	await page.reload();
+	await expect(page.getByTestId('bar-2')).toHaveAttribute('data-start', jstDay(2));
+	await expect(page.getByTestId('bar-2')).toHaveAttribute('data-due', jstDay(4));
+	await expect(page.getByTestId('bar-1')).toHaveAttribute('data-start', jstDay(1));
+	// グループ切替（なし）
+	await page.getByLabel('グルーピング').selectOption('none');
+	await expect(page).toHaveURL(/group=none/);
+	await expect(page.getByTestId('bar-2')).toBeVisible();
+	// 絞り込み: 未完了の ACME-1 は「完了」で消え、「すべて」で戻る
+	await page.getByLabel('状態').selectOption('done');
+	await expect(page.getByTestId('bar-1')).toBeHidden();
+	await page.getByLabel('状態').selectOption('');
+	await expect(page.getByTestId('bar-1')).toBeVisible();
+	// 開始日を選ぶと、その日から表示する
+	await page.getByLabel('開始日').fill(jstDay(1));
+	await expect(page).toHaveURL(new RegExp(`from=${jstDay(1)}`));
+	await expect(page.locator('.days [data-date]').first()).toHaveAttribute('data-date', jstDay(1));
 	await logout(page);
 
 	// 7. ゲストがカンバンで進行中へ移動
@@ -253,6 +326,41 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(deleteDialog).toContainText('「spec.pdf」を削除してよろしいですか？');
 	await deleteDialog.getByRole('button', { name: '添付ファイルを削除する' }).click();
 	await expect(attachmentList.getByRole('link', { name: 'spec.pdf' })).toBeHidden();
+
+	// 8c. ゲストは自分が起票した課題だけタイムラインで動かせる
+	await page.goto('/projects/ACME/timeline');
+	await expect(page.getByTestId('bar-1').locator('[data-handle]')).toHaveCount(2);
+	const guestBar2 = page.getByTestId('bar-2');
+	await expect(guestBar2.locator('[data-handle]')).toHaveCount(0);
+	await dragBy(page, guestBar2, 64);
+	await page.goto('/projects/ACME/timeline');
+	await expect(page.getByTestId('bar-2')).toHaveAttribute('data-start', jstDay(2));
+
+	// 8d. 課題名のクリックで右側のシートに詳細を出し、そこからコメントできる
+	await page.getByTestId('open-1').click();
+	const sheet = page.getByRole('complementary', { name: 'ACME-1' });
+	await expect(sheet.getByRole('heading', { name: 'ログインできない' })).toBeVisible();
+	await expect(page).toHaveURL(/\/projects\/ACME\/timeline$/);
+	await expect(sheet.getByRole('link', { name: '課題詳細を新しいタブで開く' })).toHaveAttribute(
+		'href',
+		'/projects/ACME/issues/1'
+	);
+	await sheet.getByLabel('コメントを追加').fill('シートからのコメント');
+	await sheet.getByRole('button', { name: 'コメントする' }).click();
+	await expect(sheet.getByText('シートからのコメント')).toBeVisible();
+	// 編集ボタンは同じ位置で「編集をやめる」に切り替わる
+	await sheet.getByRole('button', { name: 'タイトル・本文を編集' }).click();
+	await expect(sheet.getByLabel('本文')).toBeVisible();
+	await sheet.getByRole('button', { name: '編集をやめる' }).click();
+	await expect(sheet.getByLabel('本文')).toBeHidden();
+	await sheet.getByRole('button', { name: '閉じる' }).click();
+	await expect(sheet).toBeHidden();
+	// バーのクリックでも開く
+	await page.getByTestId('bar-1').click();
+	await expect(sheet).toBeVisible();
+	await expect(page).toHaveURL(/\/projects\/ACME\/timeline$/);
+	await page.keyboard.press('Escape');
+	await expect(sheet).toBeHidden();
 
 	// 9. 管理者がゲストを無効化（確認ダイアログ）
 	await logout(page);

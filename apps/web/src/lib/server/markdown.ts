@@ -9,7 +9,7 @@ import { normalizeUri } from 'micromark-util-sanitize-uri';
 import { toHast } from 'mdast-util-to-hast';
 import { toHtml } from 'hast-util-to-html';
 import type { Element, ElementContent, Parents as HastParents } from 'hast';
-import type { Nodes, PhrasingContent, Root } from 'mdast';
+import type { Definition, Nodes, PhrasingContent, Root } from 'mdast';
 import { mentionFromMarkdown, type MentionMdast } from '$lib/markdown/mention-mdast';
 import { isAllowedUrl, linkifyMdast } from './linkify-mdast';
 
@@ -31,6 +31,44 @@ function htmlToText(node: Nodes): void {
 			htmlToText(child);
 		}
 	}
+}
+
+/**
+ * 参照形式のリンク・画像を、定義を引いて link / image に置き換える。
+ * これで通常のリンクと同じ許可リスト・属性付与の処理を通る。定義がない参照は書かれたままの文字にする
+ */
+function resolveReferences(tree: Root, src: string): void {
+	const defs = new Map<string, Definition>();
+	const collect = (node: Nodes): void => {
+		if (node.type === 'definition' && !defs.has(node.identifier)) defs.set(node.identifier, node);
+		if ('children' in node) (node.children as Nodes[]).forEach(collect);
+	};
+	collect(tree);
+	const walk = (node: Nodes): void => {
+		if (!('children' in node)) return;
+		const children = node.children as Nodes[];
+		for (let i = 0; i < children.length; i++) {
+			const child = children[i];
+			if (child.type === 'linkReference' || child.type === 'imageReference') {
+				const def = defs.get(child.identifier);
+				if (def) {
+					children[i] =
+						child.type === 'linkReference'
+							? { type: 'link', url: def.url, title: def.title, children: child.children }
+							: { type: 'image', url: def.url, title: def.title, alt: child.alt };
+				} else {
+					const start = child.position?.start.offset;
+					const end = child.position?.end.offset;
+					children[i] = {
+						type: 'text',
+						value: start !== undefined && end !== undefined ? src.slice(start, end) : ''
+					};
+				}
+			}
+			walk(children[i]);
+		}
+	};
+	walk(tree);
 }
 
 /** コード以外の text の改行を break に変える（markdown-it の breaks: true 相当） */
@@ -80,6 +118,7 @@ export function renderMarkdown(src: string): string {
 		]
 	});
 	htmlToText(tree);
+	resolveReferences(tree, src);
 	linkifyMdast(tree);
 	breakNewlines(tree);
 

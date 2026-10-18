@@ -59,6 +59,7 @@ function splitText(value: string): PhrasingContent[] | null {
 		if (start === pos || !isAlpha(value[start])) continue;
 		const link = linkify.matchAtStart(value.slice(start));
 		if (!link) continue;
+		// markdown-it のインライン規則と同じく、URL 末尾の `*` は強調の記号として URL に含めない
 		const url = link.url.replace(/\*+$/, '');
 		if (url.length <= pos - start || !isAllowedUrl(url)) continue;
 		splitByMatch(value.slice(from, start), out);

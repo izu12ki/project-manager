@@ -71,4 +71,34 @@ describe('renderMarkdown', () => {
 	])('自動リンクは markdown-it と同じ: %s', (src) => {
 		expect(hrefs(renderMarkdown(src))).toEqual(hrefs(legacy.render(src)));
 	});
+
+	describe('参照形式のリンクと画像', () => {
+		it('javascript: のリンクはリンクにしない', () => {
+			const html = renderMarkdown('[x][r]\n\n[r]: javascript:alert(1)');
+			expect(html).not.toContain('javascript:');
+			expect(html).not.toContain('<a');
+		});
+		it('javascript: の画像は出さない', () =>
+			expect(renderMarkdown('![x][r]\n\n[r]: javascript:alert(1)')).not.toContain('javascript:'));
+		it('data: のショートカット参照リンクはリンクにしない', () => {
+			const html = renderMarkdown('[x]\n\n[x]: data:text/html,hi');
+			expect(html).not.toContain('data:');
+			expect(html).not.toContain('<a');
+		});
+		it('安全な参照リンクには rel と target を付ける', () => {
+			const html = renderMarkdown('[x][r]\n\n[r]: https://example.com');
+			expect(html).toContain('href="https://example.com"');
+			expect(html).toContain('rel="noopener noreferrer nofollow"');
+			expect(html).toContain('target="_blank"');
+		});
+		it('参照画像は .md-img で包む', () =>
+			expect(renderMarkdown('![shot][r]\n\n[r]: /a.png')).toContain(
+				'<span class="md-img"><img src="/a.png" alt="shot"></span>'
+			));
+		it('定義のない参照は書かれたまま文字にする', () => {
+			const html = renderMarkdown('[x][nope]');
+			expect(html).toContain('[x][nope]');
+			expect(html).not.toContain('<a');
+		});
+	});
 });

@@ -125,7 +125,10 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	const sourceToggle = page.getByRole('button', { name: 'Markdown で編集' });
 	// エディタの読み込みが終わるまでは textarea が「本文」になる
 	await expect(body).toHaveAttribute('contenteditable', 'true');
-	await body.click();
+	// タイトルから Tab で本文の編集領域に入れる
+	await page.getByLabel('タイトル').focus();
+	await page.keyboard.press('Tab');
+	await expect(body).toBeFocused();
 	await page.keyboard.type('abc');
 	await sourceToggle.click();
 	await expect(sourceToggle).toHaveAttribute('aria-pressed', 'true');

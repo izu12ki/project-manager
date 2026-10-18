@@ -114,7 +114,10 @@
 			}
 		}
 
-		const start = () => void load();
+		const start = () => {
+			// チャンクの読み込みに失敗しても textarea のまま編集・送信できる
+			load().catch((e) => console.error('エディタの読み込みに失敗しました', e));
+		};
 		const idle = 'requestIdleCallback' in window;
 		const id = idle ? requestIdleCallback(start) : setTimeout(start, 200);
 		return () => {
@@ -291,7 +294,7 @@
 		<div
 			bind:this={body}
 			role="textbox"
-			tabindex="-1"
+			tabindex="0"
 			aria-multiline="true"
 			aria-label={label}
 			aria-invalid={invalid || undefined}
@@ -406,17 +409,12 @@
 		pointer-events: none;
 		user-select: none;
 	}
+	/* 本文に重ならないよう、編集領域の下に並べる */
 	.invalid {
-		position: absolute;
-		top: 6px;
-		right: 8px;
 		margin: 0;
-		padding: 2px 8px;
-		border-radius: 4px;
-		background: var(--destructive, #dc2626);
-		color: white;
+		padding: 2px 12px 6px;
+		color: var(--destructive, #dc2626);
 		font-size: 12px;
-		pointer-events: none;
 	}
 	.link-pop {
 		position: absolute;

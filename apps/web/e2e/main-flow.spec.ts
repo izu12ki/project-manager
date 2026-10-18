@@ -119,15 +119,63 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.getByRole('link', { name: '新規課題' }).click();
 	await page.getByLabel('タイトル').fill('ログインできない');
 	await page.getByLabel('カテゴリー').selectOption({ label: 'フロントエンド' });
+	// 本文は見たまま編集。「Markdown ソースのまま編集」との往復で内容が二重にならない
+	const body = page.getByRole('textbox', { name: '本文' });
+	const bodySource = page.locator('textarea[name="description"]');
+	const sourceToggle = page.getByRole('button', { name: 'Markdown ソースのまま編集' });
+	// エディタの読み込みが終わるまでは textarea が「本文」になる
+	await expect(body).toHaveAttribute('contenteditable', 'true');
+	// タイトルから Tab で本文の編集領域に入れる
+	await page.getByLabel('タイトル').focus();
+	await page.keyboard.press('Tab');
+	await expect(body).toBeFocused();
+	await page.keyboard.type('abc');
+	await sourceToggle.click();
+	await expect(sourceToggle).toHaveAttribute('aria-pressed', 'true');
+	await expect(bodySource).toBeVisible();
+	await expect(bodySource).toHaveValue('abc');
+	await bodySource.press('End');
+	await bodySource.pressSequentially('d');
+	await sourceToggle.click();
+	await expect(sourceToggle).toHaveAttribute('aria-pressed', 'false');
+	await expect(bodySource).toBeHidden();
+	await expect(body).toHaveText('abcd');
+	// ネストした箇条書き（Tab）と太字ボタン
+	// 戻したときはエディタの末尾にキャレットがある
+	await expect(body).toBeFocused();
+	await page.keyboard.press('Enter');
+	await page.keyboard.type('- 親');
+	await page.keyboard.press('Enter');
+	await page.keyboard.press('Tab');
+	await page.keyboard.type('子');
+	await page.getByRole('button', { name: '太字' }).click();
+	await expect(page.getByRole('button', { name: '太字' })).toHaveAttribute('aria-pressed', 'true');
+	await page.keyboard.type('強調');
 	await page
 		.getByTestId('attach-input')
 		.setInputFiles({ name: 'screen.png', mimeType: 'image/png', buffer: PNG });
-	await expect(page.getByLabel('本文')).toHaveValue(
+	await expect(bodySource).toHaveValue(
 		/!\[screen\.png\]\(\/projects\/ACME\/attachments\/[0-9a-f-]{36}\)/
 	);
+	// ソースで書いた引用と表は、見たまま編集に戻すと引用と表として表示される
+	await sourceToggle.click();
+	await bodySource.press('ControlOrMeta+End');
+	await bodySource.pressSequentially(
+		'\n\n> 引用文\n\n| 列1 | 列2 |\n| ---- | ---- |\n| データ1 | データ2 |'
+	);
+	await sourceToggle.click();
+	await expect(body.locator('blockquote')).toHaveText('引用文');
+	await expect(body.locator('table th')).toHaveText(['列1', '列2']);
+	await expect(body.locator('table td')).toHaveText(['データ1', 'データ2']);
+	await expect(page.getByRole('button', { name: '引用' })).toBeVisible();
 	await page.getByRole('button', { name: '起票する' }).first().click();
 	await expect(page.getByRole('heading', { name: 'ログインできない' })).toBeVisible();
 	await expect(page.getByRole('main').getByText('ACME-1')).toBeVisible();
+	await expect(page.locator('.markdown p', { hasText: 'abcd' })).toHaveText('abcd');
+	await expect(page.locator('.markdown ul ul li', { hasText: '子' })).toBeVisible();
+	await expect(page.locator('.markdown ul ul li strong')).toHaveText('強調');
+	await expect(page.locator('.markdown blockquote')).toHaveText('引用文');
+	await expect(page.locator('.markdown table td')).toHaveText(['データ1', 'データ2']);
 	const shot = page.locator('.markdown img[alt="screen.png"]');
 	await expect(shot).toBeVisible();
 	expect(await shot.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1);
@@ -188,27 +236,126 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	);
 
 	// 6b. メンバーが @ 補完でゲストをメンションしてコメント
-	const mentionBox = page.getByLabel('コメントを追加');
-	await mentionBox.click();
-	await mentionBox.pressSequentially('@顧客');
+	const mentionBox = page.getByRole('textbox', { name: 'コメントを追加' });
+	const commentSource = page.locator('#new-comment');
+	const postedComments = page.locator('article.comment:not(.pending)');
+	await expect(mentionBox).toHaveAttribute('contenteditable', 'true');
+	const commentCount = await postedComments.count();
+	// 空のまま送ると、投稿せずにエディタで知らせる
+	await page.getByRole('button', { name: 'コメントする' }).click();
+	await expect(page.locator('form.new-comment').getByText('入力してください')).toBeVisible();
+	await expect(mentionBox).toBeFocused();
+	await expect(mentionBox).toHaveAttribute('aria-invalid', 'true');
+	await page.keyboard.type('@顧客');
 	await page
 		.getByRole('listbox', { name: 'メンションする人' })
 		.getByRole('option', { name: '顧客 太郎' })
 		.click();
-	await mentionBox.pressSequentially('確認お願いします');
-	await expect(mentionBox).toHaveValue(/^@\[顧客 太郎\]\(user:[0-9a-f-]{36}\) 確認お願いします$/);
+	await page.keyboard.type('確認お願いします');
+	await expect(page.locator('form.new-comment').getByText('入力してください')).toBeHidden();
+	await expect(commentSource).toHaveValue(
+		/^@\[顧客 太郎\]\(user:[0-9a-f-]{36}\) 確認お願いします$/
+	);
 	await page.getByRole('button', { name: 'コメントする' }).click();
 	await expect(page.locator('.markdown .mention', { hasText: '@顧客 太郎' })).toBeVisible();
+	// 空で送ったときは投稿されていない（増えたのはこの 1 件だけ）
+	await expect(postedComments).toHaveCount(commentCount + 1);
+	// 投稿すると編集領域は空に戻る
+	await expect(commentSource).toHaveValue('');
+	await expect(mentionBox).toHaveText('');
+	// 自分のコメントは見たまま編集で開き、直さずに更新しても内容は変わらない
+	const myComment = postedComments.last();
+	await myComment.getByRole('button', { name: 'コメントを編集' }).click();
+	const editBox = myComment.getByRole('textbox', { name: 'コメントを編集' });
+	await expect(editBox).toHaveAttribute('contenteditable', 'true');
+	await expect(editBox.locator('.mention')).toHaveText('@顧客 太郎');
+	await myComment.getByRole('button', { name: '更新' }).click();
+	await expect(editBox).toBeHidden();
+	await expect(myComment.locator('.markdown .mention')).toHaveText('@顧客 太郎');
+	await expect(myComment.locator('.markdown')).toHaveText('@顧客 太郎 確認お願いします');
 
 	// 6c. メンバーがタイムラインで日付を調整する
 	await page.goto('/projects/ACME/issues/new');
 	await page.getByLabel('タイトル').fill('トップページ改修');
+	// 見たまま編集でも @ 補完でメンションできる
+	const mentionBody = page.getByRole('textbox', { name: '本文' });
+	await expect(mentionBody).toHaveAttribute('contenteditable', 'true');
+	await page.getByLabel('タイトル').focus();
+	await page.keyboard.press('Tab');
+	await expect(mentionBody).toBeFocused();
+	await page.keyboard.type('@顧客');
+	await page
+		.getByRole('listbox', { name: 'メンションする人' })
+		.getByRole('option', { name: '顧客 太郎' })
+		.click();
+	await page.keyboard.type('お願いします');
+	await expect(mentionBody.locator('.mention')).toHaveText('@顧客 太郎');
+	await expect(page.locator('textarea[name="description"]')).toHaveValue(
+		/^@\[顧客 太郎\]\(user:[0-9a-f-]{36}\) お願いします$/
+	);
+	// 通知の件数を変えないよう、確認できたら本文を消してから起票する
+	await page.keyboard.press('ControlOrMeta+a');
+	await page.keyboard.press('Backspace');
+	await expect(page.locator('textarea[name="description"]')).toHaveValue('');
+	// 見たまま編集でも、ドロップしたファイルはエディタに添付する（ブラウザがファイルを開かない）
+	const descSource = page.locator('textarea[name="description"]');
+	const dropAccepted = await mentionBody.evaluate((el, png) => {
+		const data = new DataTransfer();
+		const bytes = Uint8Array.from(atob(png), (c) => c.charCodeAt(0));
+		data.items.add(new File([bytes], 'drop.png', { type: 'image/png' }));
+		const r = el.getBoundingClientRect();
+		const init = {
+			dataTransfer: data,
+			bubbles: true,
+			cancelable: true,
+			clientX: r.left + 20,
+			clientY: r.top + 20
+		};
+		const over = new DragEvent('dragover', init);
+		el.dispatchEvent(over);
+		const drop = new DragEvent('drop', init);
+		el.dispatchEvent(drop);
+		return over.defaultPrevented && drop.defaultPrevented;
+	}, PNG.toString('base64'));
+	expect(dropAccepted).toBe(true);
+	await expect(descSource).toHaveValue(
+		/^!\[drop\.png\]\(\/projects\/ACME\/attachments\/[0-9a-f-]{36}\)$/
+	);
+	// アップロードが終わるまで送信させない。仮の要素は本文（textarea）に入らない
+	let releaseDescUpload!: () => void;
+	const descUploadHeld = new Promise<void>((r) => (releaseDescUpload = r));
+	await page.route('**/projects/ACME/attachments', async (route) => {
+		await descUploadHeld;
+		await route.continue();
+	});
+	await page.getByTestId('attach-input').setInputFiles({
+		name: 'spec.pdf',
+		mimeType: 'application/pdf',
+		buffer: Buffer.from('%PDF-1.4\n%%EOF\n')
+	});
+	await expect(mentionBody.locator('.upload-placeholder')).toHaveText('アップロード中: spec.pdf');
+	await expect(page.getByRole('button', { name: 'Markdown ソースのまま編集' })).toBeDisabled();
+	await expect(descSource).not.toHaveValue(/アップロード中/);
+	await page.getByRole('button', { name: '起票する' }).first().click();
+	await expect(page.getByText('アップロードが終わってから送信してください')).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'トップページ改修' })).toBeHidden();
+	releaseDescUpload();
+	await expect(descSource).toHaveValue(
+		/!\[drop\.png\]\(\/projects\/ACME\/attachments\/[0-9a-f-]{36}\)\\?\n\[spec\.pdf\]\(\/projects\/ACME\/attachments\/[0-9a-f-]{36}\)$/
+	);
+	await expect(mentionBody.locator('.upload-placeholder')).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Markdown ソースのまま編集' })).toBeEnabled();
+	await page.unroute('**/projects/ACME/attachments');
 	await page.getByLabel('開始日').fill(jstDay(0));
 	await page.getByLabel('期限日').fill(jstDay(2));
 	// 手順 10 の「マイルストーン未設定」の絞り込みで 0 件になるよう v1.0 に入れる
 	await page.getByLabel('マイルストーン').selectOption({ label: 'v1.0（11/30 リリース）' });
 	await page.getByRole('button', { name: '起票する' }).first().click();
 	await expect(page.getByRole('heading', { name: 'トップページ改修' })).toBeVisible();
+	await expect(page.locator('.markdown img[alt="drop.png"]')).toBeVisible();
+	await expect(
+		page.getByRole('region', { name: '添付ファイル' }).getByRole('link', { name: 'spec.pdf' })
+	).toBeVisible();
 
 	// 課題詳細にはプロジェクトのタブがないので、一覧から入る
 	await page.goto('/projects/ACME');
@@ -278,8 +425,32 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page.getByTestId('column-in_progress').getByTestId('card-1')).toBeVisible();
 
 	// 8. ゲストがコメント（PDF を添付）。テキストの貼り付けは横取りしない
+	// 「Markdown ソースのまま編集」（textarea）でも今までどおり添付・送信できる
 	await page.goto('/projects/ACME/issues/1');
-	const commentBox = page.getByLabel('コメントを追加');
+	const newComment = page.locator('form.new-comment');
+	const commentToggle = newComment.getByRole('button', { name: 'Markdown ソースのまま編集' });
+	await expect(newComment.getByRole('textbox', { name: 'コメントを追加' })).toHaveAttribute(
+		'contenteditable',
+		'true'
+	);
+	await commentToggle.click();
+	await expect(commentToggle).toHaveAttribute('aria-pressed', 'true');
+	const commentBox = page.locator('#new-comment');
+	await expect(commentBox).toBeVisible();
+	// 「Markdown ソースのまま編集」の textarea は内容に合わせて伸びる
+	const emptyHeight = (await commentBox.boundingBox())!.height;
+	await commentBox.fill('1\n2\n3\n4\n5\n6');
+	await expect
+		.poll(async () => (await commentBox.boundingBox())!.height)
+		.toBeGreaterThan(emptyHeight);
+	const grownHeight = (await commentBox.boundingBox())!.height;
+	// 見たまま編集を挟んで戻しても（隠れている間は測れない）、表示したときに測り直す
+	await commentToggle.click();
+	await expect(commentBox).toBeHidden();
+	await commentToggle.click();
+	await expect(commentBox).toBeVisible();
+	expect((await commentBox.boundingBox())!.height).toBe(grownHeight);
+	await commentBox.fill('');
 	const textPastePrevented = await commentBox.evaluate((el) => {
 		const data = new DataTransfer();
 		data.setData('text/plain', 'hello');
@@ -309,14 +480,20 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 			buffer: Buffer.from('%PDF-1.4\n%%EOF\n')
 		});
 	await expect(commentBox).toHaveValue(/アップロード中: spec\.pdf/);
+	// 切り替えるとプレースホルダがエスケープされて結果を差し込めないので、終わるまで切り替えさせない
+	await expect(commentToggle).toBeDisabled();
 	await page.getByRole('button', { name: 'コメントする' }).click();
 	await expect(page.getByText('アップロードが終わってから送信してください')).toBeVisible();
 	await expect(commentBox).toHaveValue(/アップロード中: spec\.pdf/);
 	releaseUpload();
 	await expect(commentBox).toHaveValue(/\[spec\.pdf\]\(\/projects\/ACME\/attachments\//);
+	await expect(commentToggle).toBeEnabled();
 	await page.unroute('**/projects/ACME/attachments');
 	await page.getByRole('button', { name: 'コメントする' }).click();
 	await expect(page.locator('.markdown').getByText('確認しました')).toBeVisible();
+	// モードは localStorage に残るので、後の手順のために見たまま編集へ戻す
+	await commentToggle.click();
+	await expect(commentToggle).toHaveAttribute('aria-pressed', 'false');
 	const attachmentList = page.getByRole('region', { name: '添付ファイル' });
 	await expect(attachmentList.getByRole('link', { name: 'spec.pdf' })).toBeVisible();
 
@@ -345,14 +522,21 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 		'href',
 		'/projects/ACME/issues/1'
 	);
-	await sheet.getByLabel('コメントを追加').fill('シートからのコメント');
+	const sheetComment = sheet.getByRole('textbox', { name: 'コメントを追加' });
+	await expect(sheetComment).toHaveAttribute('contenteditable', 'true');
+	await sheetComment.fill('シートからのコメント');
 	await sheet.getByRole('button', { name: 'コメントする' }).click();
 	await expect(sheet.getByText('シートからのコメント')).toBeVisible();
 	// 編集ボタンは同じ位置で「編集をやめる」に切り替わる
 	await sheet.getByRole('button', { name: 'タイトル・本文を編集' }).click();
-	await expect(sheet.getByLabel('本文')).toBeVisible();
+	// 既存の本文がそのままエディタに読み込まれる
+	await expect(sheet.getByRole('textbox', { name: '本文' })).toHaveAttribute(
+		'contenteditable',
+		'true'
+	);
+	await expect(sheet.getByRole('textbox', { name: '本文' }).locator('strong')).toHaveText('強調');
 	await sheet.getByRole('button', { name: '編集をやめる' }).click();
-	await expect(sheet.getByLabel('本文')).toBeHidden();
+	await expect(sheet.getByRole('textbox', { name: '本文' })).toBeHidden();
 	await sheet.getByRole('button', { name: '閉じる' }).click();
 	await expect(sheet).toBeHidden();
 	// バーのクリックでも開く
@@ -434,4 +618,69 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	).toBeVisible();
 	await expect(page.getByRole('switch', { name: 'Slack 通知' })).toBeDisabled();
 	await expect(page.getByText('Slack 連携は未設定です（管理者に連絡してください）')).toBeVisible();
+
+	// 13. 見たまま編集で開いて中身を変えずに保存しても、本文の Markdown は 1 文字も変わらない
+	// 書き出すと形が変わる書き方（番号の振り直し・Setext 見出し・参照リンク）を含める
+	const rawBody = '* a\n* b\n\n1) x\n1) y\n\nSetext\n===\n\n[x][l]\n\n[l]: https://example.com';
+	await page.goto('/projects/ACME/issues/new');
+	await page.getByLabel('タイトル').fill('書き方を保つ');
+	const newToggle = page.getByRole('button', { name: 'Markdown ソースのまま編集' });
+	await expect(page.getByRole('textbox', { name: '本文' })).toHaveAttribute(
+		'contenteditable',
+		'true'
+	);
+	await newToggle.click();
+	await page.locator('textarea[name="description"]').fill(rawBody);
+	await newToggle.click();
+	await expect(newToggle).toHaveAttribute('aria-pressed', 'false');
+	await page.getByRole('button', { name: '起票する' }).first().click();
+	await expect(page.getByRole('heading', { name: '書き方を保つ' })).toBeVisible();
+	const editBody = async () => {
+		await page.getByRole('button', { name: 'タイトル・本文を編集' }).click();
+		const box = page.getByRole('textbox', { name: '本文' });
+		await expect(box).toHaveAttribute('contenteditable', 'true');
+		return box;
+	};
+	const rawBox = page.locator('textarea#issue-description');
+	// 起票時点で変わっていないことを先に確かめる
+	await editBody();
+	await expect(rawBox).toHaveValue(rawBody);
+	await page.getByRole('button', { name: '編集をやめる' }).click();
+	await (await editBody()).click();
+	// 1 文字入れて消す（書き出しは元と同じになるので、元の文字列のまま送る）
+	await page.keyboard.type('z');
+	await page.keyboard.press('Backspace');
+	await page.getByRole('button', { name: '保存', exact: true }).click();
+	await expect(page.getByText('保存しました')).toBeVisible();
+	await page.reload();
+	await editBody();
+	await expect(rawBox).toHaveValue(rawBody);
+	await page.getByRole('button', { name: '編集をやめる' }).click();
+
+	// 14. 1 行が長い本文（コードブロック・段落）は折り返し、右の欄に重ならず横スクロールも出ない
+	await page.setViewportSize({ width: 1280, height: 900 });
+	const long = 'x'.repeat(400);
+	await page.goto('/projects/ACME/issues/new');
+	await page.getByLabel('タイトル').fill('長い行');
+	await expect(page.getByRole('textbox', { name: '本文' })).toHaveAttribute(
+		'contenteditable',
+		'true'
+	);
+	await newToggle.click();
+	await page
+		.locator('textarea[name="description"]')
+		.fill(`${long}\n\n\`\`\`\n${long} ${'word '.repeat(80)}\n\`\`\``);
+	await newToggle.click();
+	await page.getByRole('button', { name: '起票する' }).first().click();
+	await expect(page.getByRole('heading', { name: '長い行' })).toBeVisible();
+	const bodyCard = page.locator('.card.body');
+	const side = page.locator('aside.side');
+	const cardBox = (await bodyCard.boundingBox())!;
+	const sideBox = (await side.boundingBox())!;
+	expect(cardBox.x + cardBox.width).toBeLessThanOrEqual(sideBox.x);
+	const codeScrolls = await bodyCard
+		.locator('pre')
+		.evaluate((el) => el.scrollWidth > el.clientWidth);
+	expect(codeScrolls).toBe(false);
+	expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
 });

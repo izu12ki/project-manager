@@ -2,11 +2,8 @@
 	import { Paperclip, Pencil, Trash2, X } from '@lucide/svelte';
 	import { untrack } from 'svelte';
 	import { formatBytes } from '$lib/attachment-rules';
-	import { uploadable } from '$lib/attachment-upload';
-	import { autosize } from '$lib/autosize';
-	import AttachButton from '$lib/components/AttachButton.svelte';
 	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
-	import MentionMenu from '$lib/components/MentionMenu.svelte';
+	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
 	import FormAlert from '$lib/components/FormAlert.svelte';
 	import PriorityPill from '$lib/components/PriorityPill.svelte';
 	import StatusPill from '$lib/components/StatusPill.svelte';
@@ -60,9 +57,6 @@
 	const detail = $derived(await detailQuery);
 	const comments = $derived(await commentsQuery);
 	const attachments = $derived(await attachmentsQuery);
-	let commentInput = $state<HTMLTextAreaElement>();
-	let descriptionInput = $state<HTMLTextAreaElement>();
-	let editCommentInput = $state<HTMLTextAreaElement>();
 	const mentionCandidates = $derived(
 		detail.assignees.filter((u) => !u.disabled).map(({ id, name }) => ({ id, name }))
 	);
@@ -249,7 +243,7 @@
 {/snippet}
 
 <section class="detail" class:sheet={variant === 'sheet'}>
-	<div class="grid min-w-0 gap-6">
+	<div class="grid min-w-0 grid-cols-1 gap-6">
 		<header class="grid gap-2">
 			<div class="flex flex-wrap items-center gap-2">
 				<span class="mono text-[13px] text-muted-foreground">{projectKey}-{issue.number}</span>
@@ -282,24 +276,16 @@
 				</div>
 				<div class="field">
 					<label class="label" for="issue-description">本文</label>
-					<textarea
-						class="textarea autosize"
+					<MarkdownEditor
 						id="issue-description"
 						{...save.fields.description.as('text', issue.description)}
 						form={attrFormId}
-						rows="10"
-						bind:this={descriptionInput}
-						{@attach autosize}
-						{@attach uploadable(ref.key)}></textarea>
-					<MentionMenu target={() => descriptionInput} candidates={mentionCandidates} />
-					<div class="flex items-center gap-2">
-						<p class="hint" style="flex: 1">
-							Markdown が使えます。ファイルは貼り付け・ドロップでも添付できます。{variant === 'page'
-								? '右'
-								: '上'}の「保存」で反映されます。
-						</p>
-						<AttachButton projectKey={ref.key} target={() => descriptionInput} />
-					</div>
+						rows={10}
+						label="本文"
+						projectKey={ref.key}
+						{mentionCandidates}
+					/>
+					<p class="hint">{variant === 'page' ? '右' : '上'}の「保存」で反映されます。</p>
 				</div>
 			</div>
 		{:else}
@@ -348,7 +334,7 @@
 			</section>
 		{/if}
 
-		<section class="grid gap-4">
+		<section class="grid grid-cols-1 gap-4">
 			<h2 class="m-0 text-base font-bold">
 				コメント <span class="font-medium text-muted-foreground"
 					>{comments.length + pendingComments.length}</span
@@ -360,7 +346,7 @@
 			{#each comments as c (c.id)}
 				<article class="comment" id={`comment-${c.id}`}>
 					<span class="avatar" style:--c={colorFor(c.authorName)}>{c.authorName[0]}</span>
-					<div class="grid min-w-0 gap-1">
+					<div class="grid min-w-0 grid-cols-1 gap-1">
 						<div class="flex items-center gap-2">
 							<span class="font-medium">{c.authorName}</span>
 							<span class="text-xs text-muted-foreground">{formatDateTime(c.createdAt)}</span>
@@ -407,16 +393,15 @@
 								<input {...edit.fields.key.as('hidden', ref.key)} />
 								<input {...edit.fields.number.as('hidden', ref.number)} />
 								<input {...edit.fields.commentId.as('hidden', c.id)} />
-								<textarea
-									class="textarea autosize"
+								<MarkdownEditor
 									{...edit.fields.body.as('text', c.body)}
-									rows="4"
+									rows={4}
 									required
 									aria-label="コメントを編集"
-									bind:this={editCommentInput}
-									{@attach autosize}
-									{@attach uploadable(ref.key)}></textarea>
-								<MentionMenu target={() => editCommentInput} candidates={mentionCandidates} />
+									label="コメントを編集"
+									projectKey={ref.key}
+									{mentionCandidates}
+								/>
 								<div class="flex justify-end gap-2">
 									<button
 										type="button"
@@ -436,7 +421,7 @@
 			{#each pendingComments as c (c.id)}
 				<article class="comment pending" aria-busy="true">
 					<span class="avatar" style:--c={colorFor(me?.name ?? '')}>{me?.name[0]}</span>
-					<div class="grid min-w-0 gap-1">
+					<div class="grid min-w-0 grid-cols-1 gap-1">
 						<div class="flex items-center gap-2">
 							<span class="font-medium">{me?.name}</span>
 							<span class="text-xs text-muted-foreground">送信中…</span>
@@ -453,18 +438,16 @@
 					{#each post.fields.allIssues() ?? [] as i (i.message)}<FormAlert
 							message={i.message}
 						/>{/each}
-					<textarea
-						class="textarea autosize"
+					<MarkdownEditor
 						id="new-comment"
 						{...post.fields.body.as('text')}
-						rows="3"
+						rows={3}
 						required
-						bind:this={commentInput}
-						{@attach autosize}
-						{@attach uploadable(ref.key)}></textarea>
-					<MentionMenu target={() => commentInput} candidates={mentionCandidates} />
+						label="コメントを追加"
+						projectKey={ref.key}
+						{mentionCandidates}
+					/>
 					<div class="flex items-center justify-end gap-2">
-						<AttachButton projectKey={ref.key} target={() => commentInput} />
 						<button type="submit" class="btn btn-primary">コメントする</button>
 					</div>
 				</form>

@@ -243,7 +243,7 @@
 {/snippet}
 
 <section class="detail" class:sheet={variant === 'sheet'}>
-	<div class="grid min-w-0 gap-6">
+	<div class="grid min-w-0 grid-cols-1 gap-6">
 		<header class="grid gap-2">
 			<div class="flex flex-wrap items-center gap-2">
 				<span class="mono text-[13px] text-muted-foreground">{projectKey}-{issue.number}</span>
@@ -334,7 +334,7 @@
 			</section>
 		{/if}
 
-		<section class="grid gap-4">
+		<section class="grid grid-cols-1 gap-4">
 			<h2 class="m-0 text-base font-bold">
 				コメント <span class="font-medium text-muted-foreground"
 					>{comments.length + pendingComments.length}</span
@@ -346,7 +346,7 @@
 			{#each comments as c (c.id)}
 				<article class="comment" id={`comment-${c.id}`}>
 					<span class="avatar" style:--c={colorFor(c.authorName)}>{c.authorName[0]}</span>
-					<div class="grid min-w-0 gap-1">
+					<div class="grid min-w-0 grid-cols-1 gap-1">
 						<div class="flex items-center gap-2">
 							<span class="font-medium">{c.authorName}</span>
 							<span class="text-xs text-muted-foreground">{formatDateTime(c.createdAt)}</span>
@@ -421,7 +421,7 @@
 			{#each pendingComments as c (c.id)}
 				<article class="comment pending" aria-busy="true">
 					<span class="avatar" style:--c={colorFor(me?.name ?? '')}>{me?.name[0]}</span>
-					<div class="grid min-w-0 gap-1">
+					<div class="grid min-w-0 grid-cols-1 gap-1">
 						<div class="flex items-center gap-2">
 							<span class="font-medium">{me?.name}</span>
 							<span class="text-xs text-muted-foreground">送信中…</span>

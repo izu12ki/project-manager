@@ -590,6 +590,8 @@
 
 	/* markdown */
 	.markdown {
+		/* flex / grid の子として置かれても、長い行で親の幅を押し広げない */
+		min-width: 0;
 		line-height: 1.75;
 		overflow-wrap: anywhere;
 	}
@@ -655,11 +657,14 @@
 		font-family: var(--font-mono);
 		font-size: 13px;
 	}
+	/* 長い行は横スクロールさせずに折り返す */
 	.markdown pre {
 		overflow-x: auto;
 		border-radius: 4px;
 		background: var(--muted);
 		padding: 12px;
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
 	}
 	.markdown pre code {
 		padding: 0;
@@ -670,7 +675,8 @@
 		margin: 8px 0;
 		padding: 12px;
 		overflow-x: auto;
-		white-space: pre;
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
 	}
 	.markdown del,
 	.markdown .md-strike {
@@ -735,7 +741,6 @@
 	.markdown .raw-md pre {
 		font-family: var(--font-mono);
 		font-size: 13px;
-		white-space: pre;
 	}
 	/* チェックリスト。表示は <input type="checkbox">、エディタは ::before で描く */
 	.markdown .contains-task-list {

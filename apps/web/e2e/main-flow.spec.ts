@@ -655,4 +655,32 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.reload();
 	await editBody();
 	await expect(rawBox).toHaveValue(rawBody);
+	await page.getByRole('button', { name: '編集をやめる' }).click();
+
+	// 14. 1 行が長い本文（コードブロック・段落）は折り返し、右の欄に重ならず横スクロールも出ない
+	await page.setViewportSize({ width: 1280, height: 900 });
+	const long = 'x'.repeat(400);
+	await page.goto('/projects/ACME/issues/new');
+	await page.getByLabel('タイトル').fill('長い行');
+	await expect(page.getByRole('textbox', { name: '本文' })).toHaveAttribute(
+		'contenteditable',
+		'true'
+	);
+	await newToggle.click();
+	await page
+		.locator('textarea[name="description"]')
+		.fill(`${long}\n\n\`\`\`\n${long} ${'word '.repeat(80)}\n\`\`\``);
+	await newToggle.click();
+	await page.getByRole('button', { name: '起票する' }).first().click();
+	await expect(page.getByRole('heading', { name: '長い行' })).toBeVisible();
+	const bodyCard = page.locator('.card.body');
+	const side = page.locator('aside.side');
+	const cardBox = (await bodyCard.boundingBox())!;
+	const sideBox = (await side.boundingBox())!;
+	expect(cardBox.x + cardBox.width).toBeLessThanOrEqual(sideBox.x);
+	const codeScrolls = await bodyCard
+		.locator('pre')
+		.evaluate((el) => el.scrollWidth > el.clientWidth);
+	expect(codeScrolls).toBe(false);
+	expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
 });

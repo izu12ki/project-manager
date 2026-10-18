@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Paperclip, Pencil, Trash2, X } from '@lucide/svelte';
+	import { Copy, Paperclip, Pencil, Trash2, X } from '@lucide/svelte';
 	import { untrack } from 'svelte';
 	import { formatBytes } from '$lib/attachment-rules';
 	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
@@ -84,6 +84,16 @@
 	}
 
 	const failed = () => toast.error('エラーが発生しました。時間をおいて再度お試しください');
+
+	async function copyIssueKey(e: MouseEvent) {
+		const key = `${projectKey}-${issue.number}`;
+		try {
+			await navigator.clipboard.writeText(e.shiftKey ? `${key} ${issue.title}` : key);
+			toast.success('コピーしました');
+		} catch {
+			toast.error('コピーできませんでした');
+		}
+	}
 
 	// 送信直後に自分のコメントを仮表示し、サーバーの結果で本物に置き換える
 	type PendingComment = { id: number; body: string };
@@ -250,7 +260,17 @@
 				<StatusPill status={issue.status} />
 				<PriorityPill priority={issue.priority} />
 			</div>
-			<h1 class="page-title" style="font-size: 22px; text-wrap: pretty">{issue.title}</h1>
+			<div class="flex items-start gap-2">
+				<h1 class="page-title" style="font-size: 22px; text-wrap: pretty">{issue.title}</h1>
+				<button
+					type="button"
+					class="btn btn-outline btn-sm mt-0.5 shrink-0"
+					title="課題キーをクリップボードにコピーします。Shiftキーを押しながらクリックすると課題キーと件名をコピーします。"
+					onclick={copyIssueKey}
+				>
+					<Copy />課題キーをコピー
+				</button>
+			</div>
 			<p class="m-0 text-[13px] text-muted-foreground">
 				{issue.reporterName} が {formatDateTime(issue.createdAt)} に起票
 			</p>

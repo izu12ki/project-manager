@@ -19,6 +19,7 @@ import {
 import { RichTextExtension } from '@lexical/rich-text';
 import { $setSelection, CLEAR_HISTORY_COMMAND, defineExtension, type LexicalEditor } from 'lexical';
 import { MarkdownNodesExtension } from './nodes';
+import { PasteCleanupExtension } from './paste';
 
 export interface MarkdownEditorHandle {
 	editor: LexicalEditor;
@@ -58,7 +59,8 @@ export function createMarkdownEditor(opts: {
 				MdastStrikethroughExtension,
 				MdastTaskListExtension,
 				MdastShortcutsExtension,
-				MarkdownNodesExtension
+				MarkdownNodesExtension,
+				PasteCleanupExtension
 			],
 			// layout.css の .markdown で表示側と同じ見た目にするためのクラス
 			theme: {

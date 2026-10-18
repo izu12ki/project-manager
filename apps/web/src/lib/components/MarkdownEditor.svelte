@@ -4,6 +4,7 @@
 	import type { Attachment } from 'svelte/attachments';
 	import type { HTMLTextareaAttributes } from 'svelte/elements';
 	import { insertUploads, uploadable } from '$lib/attachment-upload';
+	import { autosize } from '$lib/autosize';
 	import type { Format } from '$lib/editor/commands';
 	import type { MarkdownEditorHandle } from '$lib/editor/create-editor';
 	import type { MentionCandidate } from '$lib/mentions';
@@ -202,6 +203,12 @@
 		};
 	};
 
+	// 「Markdown で編集」のときだけ高さを内容に合わせる。隠れている間は測れないので、
+	// rich が変わるたびに付け直し、表示されたときに測り直す
+	const fitSource: Attachment<HTMLTextAreaElement> = (el) => {
+		if (!rich) return autosize(el);
+	};
+
 	/** 添付ボタンのファイル。見たまま編集ならキャレット位置に、そうでなければ textarea に入れる */
 	function onFiles(files: File[]) {
 		if (!projectKey || !textarea) return;
@@ -317,6 +324,7 @@
 		{...rest}
 		hidden={rich}
 		{@attach listen}
+		{@attach fitSource}
 		{@attach projectKey && uploadable(projectKey)}></textarea>
 	<div class="body-wrap" hidden={!rich}>
 		<div
@@ -372,7 +380,7 @@
 			</button>
 		{/each}
 		{#if projectKey}
-			<AttachButton {projectKey} {onFiles} />
+			<AttachButton {onFiles} />
 		{/if}
 		<button
 			type="button"
@@ -418,7 +426,10 @@
 		background: transparent;
 		color: var(--foreground);
 		line-height: 1.7;
-		resize: vertical;
+		/* 高さは autosize で内容に合わせる。.editor-body と同じ上限を超えたらスクロールする */
+		max-height: 60vh;
+		overflow-y: auto;
+		resize: none;
 		outline: none;
 	}
 	.body-wrap {

@@ -1,10 +1,8 @@
 <script lang="ts">
 	import { Paperclip } from '@lucide/svelte';
 
-	// どこに入れるか（textarea かエディタか）は呼び出し側が onFiles で決める。
-	// projectKey は呼び出し側との取り決め（どのプロジェクトへの添付か）として受け取るが、使うのは onFiles 側
-	// eslint-disable-next-line svelte/no-unused-props
-	let props: { projectKey: string; onFiles: (files: File[]) => void } = $props();
+	// どこに入れるか（textarea かエディタか）・どのプロジェクトへの添付かは、呼び出し側が onFiles で決める
+	let props: { onFiles: (files: File[]) => void } = $props();
 	let input = $state<HTMLInputElement>();
 
 	function onchange() {

@@ -223,17 +223,43 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	);
 
 	// 6b. メンバーが @ 補完でゲストをメンションしてコメント
-	const mentionBox = page.getByLabel('コメントを追加');
-	await mentionBox.click();
-	await mentionBox.pressSequentially('@顧客');
+	const mentionBox = page.getByRole('textbox', { name: 'コメントを追加' });
+	const commentSource = page.locator('#new-comment');
+	const postedComments = page.locator('article.comment:not(.pending)');
+	await expect(mentionBox).toHaveAttribute('contenteditable', 'true');
+	const commentCount = await postedComments.count();
+	// 空のまま送ると、投稿せずにエディタで知らせる
+	await page.getByRole('button', { name: 'コメントする' }).click();
+	await expect(page.locator('form.new-comment').getByText('入力してください')).toBeVisible();
+	await expect(mentionBox).toBeFocused();
+	await expect(mentionBox).toHaveAttribute('aria-invalid', 'true');
+	await page.keyboard.type('@顧客');
 	await page
 		.getByRole('listbox', { name: 'メンションする人' })
 		.getByRole('option', { name: '顧客 太郎' })
 		.click();
-	await mentionBox.pressSequentially('確認お願いします');
-	await expect(mentionBox).toHaveValue(/^@\[顧客 太郎\]\(user:[0-9a-f-]{36}\) 確認お願いします$/);
+	await page.keyboard.type('確認お願いします');
+	await expect(page.locator('form.new-comment').getByText('入力してください')).toBeHidden();
+	await expect(commentSource).toHaveValue(
+		/^@\[顧客 太郎\]\(user:[0-9a-f-]{36}\) 確認お願いします$/
+	);
 	await page.getByRole('button', { name: 'コメントする' }).click();
 	await expect(page.locator('.markdown .mention', { hasText: '@顧客 太郎' })).toBeVisible();
+	// 空で送ったときは投稿されていない（増えたのはこの 1 件だけ）
+	await expect(postedComments).toHaveCount(commentCount + 1);
+	// 投稿すると編集領域は空に戻る
+	await expect(commentSource).toHaveValue('');
+	await expect(mentionBox).toHaveText('');
+	// 自分のコメントは見たまま編集で開き、直さずに更新しても内容は変わらない
+	const myComment = postedComments.last();
+	await myComment.getByRole('button', { name: 'コメントを編集' }).click();
+	const editBox = myComment.getByRole('textbox', { name: 'コメントを編集' });
+	await expect(editBox).toHaveAttribute('contenteditable', 'true');
+	await expect(editBox.locator('.mention')).toHaveText('@顧客 太郎');
+	await myComment.getByRole('button', { name: '更新' }).click();
+	await expect(editBox).toBeHidden();
+	await expect(myComment.locator('.markdown .mention')).toHaveText('@顧客 太郎');
+	await expect(myComment.locator('.markdown')).toHaveText('@顧客 太郎 確認お願いします');
 
 	// 6c. メンバーがタイムラインで日付を調整する
 	await page.goto('/projects/ACME/issues/new');
@@ -386,8 +412,32 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page.getByTestId('column-in_progress').getByTestId('card-1')).toBeVisible();
 
 	// 8. ゲストがコメント（PDF を添付）。テキストの貼り付けは横取りしない
+	// 「Markdown で編集」（textarea）でも今までどおり添付・送信できる
 	await page.goto('/projects/ACME/issues/1');
-	const commentBox = page.getByLabel('コメントを追加');
+	const newComment = page.locator('form.new-comment');
+	const commentToggle = newComment.getByRole('button', { name: 'Markdown で編集' });
+	await expect(newComment.getByRole('textbox', { name: 'コメントを追加' })).toHaveAttribute(
+		'contenteditable',
+		'true'
+	);
+	await commentToggle.click();
+	await expect(commentToggle).toHaveAttribute('aria-pressed', 'true');
+	const commentBox = page.locator('#new-comment');
+	await expect(commentBox).toBeVisible();
+	// 「Markdown で編集」の textarea は内容に合わせて伸びる
+	const emptyHeight = (await commentBox.boundingBox())!.height;
+	await commentBox.fill('1\n2\n3\n4\n5\n6');
+	await expect
+		.poll(async () => (await commentBox.boundingBox())!.height)
+		.toBeGreaterThan(emptyHeight);
+	const grownHeight = (await commentBox.boundingBox())!.height;
+	// 見たまま編集を挟んで戻しても（隠れている間は測れない）、表示したときに測り直す
+	await commentToggle.click();
+	await expect(commentBox).toBeHidden();
+	await commentToggle.click();
+	await expect(commentBox).toBeVisible();
+	expect((await commentBox.boundingBox())!.height).toBe(grownHeight);
+	await commentBox.fill('');
 	const textPastePrevented = await commentBox.evaluate((el) => {
 		const data = new DataTransfer();
 		data.setData('text/plain', 'hello');
@@ -425,6 +475,9 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.unroute('**/projects/ACME/attachments');
 	await page.getByRole('button', { name: 'コメントする' }).click();
 	await expect(page.locator('.markdown').getByText('確認しました')).toBeVisible();
+	// モードは localStorage に残るので、後の手順のために見たまま編集へ戻す
+	await commentToggle.click();
+	await expect(commentToggle).toHaveAttribute('aria-pressed', 'false');
 	const attachmentList = page.getByRole('region', { name: '添付ファイル' });
 	await expect(attachmentList.getByRole('link', { name: 'spec.pdf' })).toBeVisible();
 
@@ -453,14 +506,21 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 		'href',
 		'/projects/ACME/issues/1'
 	);
-	await sheet.getByLabel('コメントを追加').fill('シートからのコメント');
+	const sheetComment = sheet.getByRole('textbox', { name: 'コメントを追加' });
+	await expect(sheetComment).toHaveAttribute('contenteditable', 'true');
+	await sheetComment.fill('シートからのコメント');
 	await sheet.getByRole('button', { name: 'コメントする' }).click();
 	await expect(sheet.getByText('シートからのコメント')).toBeVisible();
 	// 編集ボタンは同じ位置で「編集をやめる」に切り替わる
 	await sheet.getByRole('button', { name: 'タイトル・本文を編集' }).click();
-	await expect(sheet.getByLabel('本文')).toBeVisible();
+	// 既存の本文がそのままエディタに読み込まれる
+	await expect(sheet.getByRole('textbox', { name: '本文' })).toHaveAttribute(
+		'contenteditable',
+		'true'
+	);
+	await expect(sheet.getByRole('textbox', { name: '本文' }).locator('strong')).toHaveText('強調');
 	await sheet.getByRole('button', { name: '編集をやめる' }).click();
-	await expect(sheet.getByLabel('本文')).toBeHidden();
+	await expect(sheet.getByRole('textbox', { name: '本文' })).toBeHidden();
 	await sheet.getByRole('button', { name: '閉じる' }).click();
 	await expect(sheet).toBeHidden();
 	// バーのクリックでも開く

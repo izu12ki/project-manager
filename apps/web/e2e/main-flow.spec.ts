@@ -605,4 +605,41 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	).toBeVisible();
 	await expect(page.getByRole('switch', { name: 'Slack 通知' })).toBeDisabled();
 	await expect(page.getByText('Slack 連携は未設定です（管理者に連絡してください）')).toBeVisible();
+
+	// 13. 見たまま編集で開いて中身を変えずに保存しても、本文の Markdown は 1 文字も変わらない
+	// 書き出すと形が変わる書き方（番号の振り直し・Setext 見出し・参照リンク）を含める
+	const rawBody = '* a\n* b\n\n1) x\n1) y\n\nSetext\n===\n\n[x][l]\n\n[l]: https://example.com';
+	await page.goto('/projects/ACME/issues/new');
+	await page.getByLabel('タイトル').fill('書き方を保つ');
+	const newToggle = page.getByRole('button', { name: 'Markdown で編集' });
+	await expect(page.getByRole('textbox', { name: '本文' })).toHaveAttribute(
+		'contenteditable',
+		'true'
+	);
+	await newToggle.click();
+	await page.locator('textarea[name="description"]').fill(rawBody);
+	await newToggle.click();
+	await expect(newToggle).toHaveAttribute('aria-pressed', 'false');
+	await page.getByRole('button', { name: '起票する' }).first().click();
+	await expect(page.getByRole('heading', { name: '書き方を保つ' })).toBeVisible();
+	const editBody = async () => {
+		await page.getByRole('button', { name: 'タイトル・本文を編集' }).click();
+		const box = page.getByRole('textbox', { name: '本文' });
+		await expect(box).toHaveAttribute('contenteditable', 'true');
+		return box;
+	};
+	const rawBox = page.locator('textarea#issue-description');
+	// 起票時点で変わっていないことを先に確かめる
+	await editBody();
+	await expect(rawBox).toHaveValue(rawBody);
+	await page.getByRole('button', { name: '編集をやめる' }).click();
+	await (await editBody()).click();
+	// 1 文字入れて消す（書き出しは元と同じになるので、元の文字列のまま送る）
+	await page.keyboard.type('z');
+	await page.keyboard.press('Backspace');
+	await page.getByRole('button', { name: '保存', exact: true }).click();
+	await expect(page.getByText('保存しました')).toBeVisible();
+	await page.reload();
+	await editBody();
+	await expect(rawBox).toHaveValue(rawBody);
 });

@@ -105,11 +105,16 @@ export function createMarkdownEditor(opts: {
 		editor.dispatchCommand(CLEAR_HISTORY_COMMAND, undefined);
 	};
 
-	const unregister = editor.registerUpdateListener(({ dirtyElements, dirtyLeaves, tags }) => {
-		if (!opts.onChange || tags.has(LOAD_TAG)) return;
-		if (dirtyElements.size === 0 && dirtyLeaves.size === 0) return;
-		opts.onChange(getMarkdown());
-	});
+	const unregister = editor.registerUpdateListener(
+		({ dirtyElements, dirtyLeaves, prevEditorState, tags }) => {
+			if (!opts.onChange || tags.has(LOAD_TAG)) return;
+			// setRootElement で最初の状態（空の段落）が確定するときは編集ではない。
+			// ここで onChange('') を呼ぶと、textarea の既存の値が消える
+			if (prevEditorState.isEmpty()) return;
+			if (dirtyElements.size === 0 && dirtyLeaves.size === 0) return;
+			opts.onChange(getMarkdown());
+		}
+	);
 
 	if (opts.root) editor.setRootElement(opts.root);
 

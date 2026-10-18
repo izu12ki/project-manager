@@ -1,7 +1,13 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
 import { $convertToMarkdownString } from '@lexical/mdast';
-import { $createTextNode, $getRoot, $isLineBreakNode, type ElementNode } from 'lexical';
+import {
+	$createParagraphNode,
+	$createTextNode,
+	$getRoot,
+	$isLineBreakNode,
+	type ElementNode
+} from 'lexical';
 import { renderMarkdown } from '$lib/server/markdown';
 import { createMarkdownEditor } from './create-editor';
 import { $createUploadPlaceholderNode } from './nodes';
@@ -67,6 +73,30 @@ describe('createMarkdownEditor', () => {
 		);
 		expect(changes.at(-1)).toBe('* ab');
 		expect(h.getMarkdown()).toBe('* ab');
+	});
+
+	it('root を付けたときの最初の状態（空の段落）では onChange を呼ばない', () => {
+		const changes: string[] = [];
+		const root = document.createElement('div');
+		root.contentEditable = 'true';
+		document.body.appendChild(root);
+		const h = createMarkdownEditor({ root, onChange: (md) => changes.push(md) });
+		expect(changes).toEqual([]);
+		// 空で読み込んでからの最初の入力は知らせる
+		h.setMarkdown('');
+		h.editor.update(
+			() => {
+				const top = $getRoot();
+				const p =
+					top.getFirstChild<ElementNode>() ??
+					top.append($createParagraphNode()).getFirstChild<ElementNode>()!;
+				p.append($createTextNode('a'));
+			},
+			{ discrete: true }
+		);
+		expect(changes).toEqual(['a']);
+		h.destroy();
+		root.remove();
 	});
 
 	it('空のままなら空', () => {

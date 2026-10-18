@@ -120,6 +120,29 @@ describe('createMarkdownEditor', () => {
 		);
 	});
 
+	it('本文の文字として末尾にある &#x20; は空白に変えない', () => {
+		const h = createMarkdownEditor({});
+		h.setMarkdown('');
+		h.editor.update(
+			() => {
+				const p = $createParagraphNode().append($createTextNode('x &#x20;'));
+				$getRoot().clear().append(p);
+			},
+			{ discrete: true }
+		);
+		expect(renderMarkdown(h.getMarkdown())).toBe('<p>x &amp;#x20;</p>');
+	});
+
+	it('末尾の空白はそのまま空白で書き出す', () => {
+		const h = createMarkdownEditor({});
+		h.setMarkdown('a');
+		h.editor.update(
+			() => $getRoot().getFirstChildOrThrow<ElementNode>().append($createTextNode(' ')),
+			{ discrete: true }
+		);
+		expect(h.getMarkdown()).toBe('a ');
+	});
+
 	it('アップロード中の仮の要素は書き出さない', () => {
 		const h = createMarkdownEditor({});
 		h.setMarkdown('a');

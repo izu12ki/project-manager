@@ -17,7 +17,13 @@ import {
 	MdastTaskListExtension
 } from '@lexical/mdast';
 import { RichTextExtension } from '@lexical/rich-text';
-import { $setSelection, CLEAR_HISTORY_COMMAND, defineExtension, type LexicalEditor } from 'lexical';
+import {
+	$getRoot,
+	$setSelection,
+	CLEAR_HISTORY_COMMAND,
+	defineExtension,
+	type LexicalEditor
+} from 'lexical';
 import { MarkdownNodesExtension } from './nodes';
 import { PasteCleanupExtension } from './paste';
 
@@ -82,9 +88,13 @@ export function createMarkdownEditor(opts: {
 	let source = '';
 	let baseline = '';
 
-	// 末尾の空白（メンション確定直後など）は mdast が `&#x20;` に直すので、そのまま空白に戻す
+	// 末尾の空白（メンション確定直後など）は mdast が `&#x20;` に直すので、そのまま空白に戻す。
+	// 本文の文字が `&#x20;` で終わるとき（`\&#x20;` と書き出される）は変えない
 	const exportMarkdown = () =>
-		editor.read(() => $convertToMarkdownString()).replace(/&#x20;$/, ' ');
+		editor.read(() => {
+			const md = $convertToMarkdownString();
+			return $getRoot().getTextContent().endsWith(' ') ? md.replace(/&#x20;$/, ' ') : md;
+		});
 
 	const getMarkdown = () => {
 		const md = exportMarkdown();

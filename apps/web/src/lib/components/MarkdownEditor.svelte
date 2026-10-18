@@ -3,7 +3,7 @@
 	import { Bold, Code, FileCode, Link, List, ListChecks, Strikethrough } from '@lucide/svelte';
 	import type { Attachment } from 'svelte/attachments';
 	import type { HTMLTextareaAttributes } from 'svelte/elements';
-	import { uploadable } from '$lib/attachment-upload';
+	import { insertUploads, uploadable } from '$lib/attachment-upload';
 	import type { Format } from '$lib/editor/commands';
 	import type { MarkdownEditorHandle } from '$lib/editor/create-editor';
 	import type { MentionCandidate } from '$lib/mentions';
@@ -13,6 +13,7 @@
 
 	type Commands = typeof import('$lib/editor/commands');
 	type MentionApi = typeof import('$lib/editor/mention-query');
+	type UploadsApi = typeof import('$lib/editor/uploads');
 	type Mode = 'rich' | 'source';
 
 	let {
@@ -38,6 +39,9 @@
 	let handle = $state.raw<MarkdownEditorHandle | null>(null);
 	let commands = $state.raw<Commands | null>(null);
 	let mentionApi = $state.raw<MentionApi | null>(null);
+	let uploadsApi = $state.raw<UploadsApi | null>(null);
+	/** エディタにアップロード中の仮の要素があるか（あればモードを切り替えさせない） */
+	let uploading = $state(false);
 	let active = $state.raw(new Set<Format>());
 	let invalid = $state(false);
 	let linkOpen = $state(false);
@@ -89,10 +93,11 @@
 		let cleanup = () => {};
 
 		async function load() {
-			const [{ createMarkdownEditor }, cmds, mention] = await Promise.all([
+			const [{ createMarkdownEditor }, cmds, mention, ups] = await Promise.all([
 				import('$lib/editor/create-editor'),
 				import('$lib/editor/commands'),
-				import('$lib/editor/mention-query')
+				import('$lib/editor/mention-query'),
+				import('$lib/editor/uploads')
 			]);
 			if (disposed || !body || !textarea) return;
 			const hadFocus = document.activeElement === textarea;
@@ -105,13 +110,22 @@
 			const offActive = h.editor.registerUpdateListener(() => {
 				active = cmds.activeFormats(h.editor);
 			});
+			const offUploads = projectKey
+				? ups.registerEditorUploads(h.editor, {
+						projectKey,
+						form: () => textarea?.form ?? null,
+						onUploadingChange: (u) => (uploading = u)
+					})
+				: () => {};
 			cleanup = () => {
 				offTab();
 				offActive();
+				offUploads();
 				h.destroy();
 			};
 			commands = cmds;
 			mentionApi = mention;
+			uploadsApi = ups;
 			handle = h;
 			if (hadFocus && mode === 'rich') {
 				await tick();
@@ -188,7 +202,16 @@
 		};
 	};
 
+	/** 添付ボタンのファイル。見たまま編集ならキャレット位置に、そうでなければ textarea に入れる */
+	function onFiles(files: File[]) {
+		if (!projectKey || !textarea) return;
+		if (rich && handle && uploadsApi) {
+			void uploadsApi.insertUploadsIntoEditor(handle.editor, textarea.form, projectKey, files);
+		} else void insertUploads(textarea, projectKey, files);
+	}
+
 	async function toggleMode() {
+		if (uploading) return;
 		mode = mode === 'rich' ? 'source' : 'rich';
 		linkOpen = false;
 		try {
@@ -349,15 +372,16 @@
 			</button>
 		{/each}
 		{#if projectKey}
-			<AttachButton {projectKey} target={() => textarea} />
+			<AttachButton {projectKey} {onFiles} />
 		{/if}
 		<button
 			type="button"
 			class="icon-btn"
 			class:active={mode === 'source'}
 			aria-label="Markdown で編集"
-			title="Markdown で編集"
+			title={uploading ? 'アップロードが終わるまで切り替えられません' : 'Markdown で編集'}
 			aria-pressed={mode === 'source'}
+			disabled={uploading}
 			onmousedown={keepFocus}
 			onclick={toggleMode}
 		>

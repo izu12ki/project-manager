@@ -2,7 +2,7 @@
 	import { Paperclip, Pencil, Trash2, X } from '@lucide/svelte';
 	import { untrack } from 'svelte';
 	import { formatBytes } from '$lib/attachment-rules';
-	import { uploadable } from '$lib/attachment-upload';
+	import { insertUploads, uploadable } from '$lib/attachment-upload';
 	import { autosize } from '$lib/autosize';
 	import AttachButton from '$lib/components/AttachButton.svelte';
 	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
@@ -298,7 +298,11 @@
 								? '右'
 								: '上'}の「保存」で反映されます。
 						</p>
-						<AttachButton projectKey={ref.key} target={() => descriptionInput} />
+						<AttachButton
+							projectKey={ref.key}
+							onFiles={(files) =>
+								descriptionInput && insertUploads(descriptionInput, ref.key, files)}
+						/>
 					</div>
 				</div>
 			</div>
@@ -464,7 +468,10 @@
 						{@attach uploadable(ref.key)}></textarea>
 					<MentionMenu target={() => commentInput} candidates={mentionCandidates} />
 					<div class="flex items-center justify-end gap-2">
-						<AttachButton projectKey={ref.key} target={() => commentInput} />
+						<AttachButton
+							projectKey={ref.key}
+							onFiles={(files) => commentInput && insertUploads(commentInput, ref.key, files)}
+						/>
 						<button type="submit" class="btn btn-primary">コメントする</button>
 					</div>
 				</form>

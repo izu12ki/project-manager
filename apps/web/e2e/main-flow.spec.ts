@@ -258,12 +258,65 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.keyboard.press('ControlOrMeta+a');
 	await page.keyboard.press('Backspace');
 	await expect(page.locator('textarea[name="description"]')).toHaveValue('');
+	// 見たまま編集でも、ドロップしたファイルはエディタに添付する（ブラウザがファイルを開かない）
+	const descSource = page.locator('textarea[name="description"]');
+	const dropAccepted = await mentionBody.evaluate((el, png) => {
+		const data = new DataTransfer();
+		const bytes = Uint8Array.from(atob(png), (c) => c.charCodeAt(0));
+		data.items.add(new File([bytes], 'drop.png', { type: 'image/png' }));
+		const r = el.getBoundingClientRect();
+		const init = {
+			dataTransfer: data,
+			bubbles: true,
+			cancelable: true,
+			clientX: r.left + 20,
+			clientY: r.top + 20
+		};
+		const over = new DragEvent('dragover', init);
+		el.dispatchEvent(over);
+		const drop = new DragEvent('drop', init);
+		el.dispatchEvent(drop);
+		return over.defaultPrevented && drop.defaultPrevented;
+	}, PNG.toString('base64'));
+	expect(dropAccepted).toBe(true);
+	await expect(descSource).toHaveValue(
+		/^!\[drop\.png\]\(\/projects\/ACME\/attachments\/[0-9a-f-]{36}\)$/
+	);
+	// アップロードが終わるまで送信させない。仮の要素は本文（textarea）に入らない
+	let releaseDescUpload!: () => void;
+	const descUploadHeld = new Promise<void>((r) => (releaseDescUpload = r));
+	await page.route('**/projects/ACME/attachments', async (route) => {
+		await descUploadHeld;
+		await route.continue();
+	});
+	await page.getByTestId('attach-input').setInputFiles({
+		name: 'spec.pdf',
+		mimeType: 'application/pdf',
+		buffer: Buffer.from('%PDF-1.4\n%%EOF\n')
+	});
+	await expect(mentionBody.locator('.upload-placeholder')).toHaveText('アップロード中: spec.pdf');
+	await expect(page.getByRole('button', { name: 'Markdown で編集' })).toBeDisabled();
+	await expect(descSource).not.toHaveValue(/アップロード中/);
+	await page.getByRole('button', { name: '起票する' }).first().click();
+	await expect(page.getByText('アップロードが終わってから送信してください')).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'トップページ改修' })).toBeHidden();
+	releaseDescUpload();
+	await expect(descSource).toHaveValue(
+		/!\[drop\.png\]\(\/projects\/ACME\/attachments\/[0-9a-f-]{36}\)\\?\n\[spec\.pdf\]\(\/projects\/ACME\/attachments\/[0-9a-f-]{36}\)$/
+	);
+	await expect(mentionBody.locator('.upload-placeholder')).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Markdown で編集' })).toBeEnabled();
+	await page.unroute('**/projects/ACME/attachments');
 	await page.getByLabel('開始日').fill(jstDay(0));
 	await page.getByLabel('期限日').fill(jstDay(2));
 	// 手順 10 の「マイルストーン未設定」の絞り込みで 0 件になるよう v1.0 に入れる
 	await page.getByLabel('マイルストーン').selectOption({ label: 'v1.0（11/30 リリース）' });
 	await page.getByRole('button', { name: '起票する' }).first().click();
 	await expect(page.getByRole('heading', { name: 'トップページ改修' })).toBeVisible();
+	await expect(page.locator('.markdown img[alt="drop.png"]')).toBeVisible();
+	await expect(
+		page.getByRole('region', { name: '添付ファイル' }).getByRole('link', { name: 'spec.pdf' })
+	).toBeVisible();
 
 	// 課題詳細にはプロジェクトのタブがないので、一覧から入る
 	await page.goto('/projects/ACME');

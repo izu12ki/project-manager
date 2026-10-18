@@ -44,7 +44,8 @@ function blockSubmit(e: SubmitEvent) {
 	toast.error('アップロードが終わってから送信してください');
 }
 
-function trackUpload(form: HTMLFormElement | null): () => void {
+/** アップロード中は form の送信を止める。返した関数で解除する */
+export function trackUpload(form: HTMLFormElement | null): () => void {
 	if (!form) return () => {};
 	const n = uploading.get(form) ?? 0;
 	if (n === 0) form.addEventListener('submit', blockSubmit, true);

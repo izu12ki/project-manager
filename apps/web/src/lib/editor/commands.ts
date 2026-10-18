@@ -24,6 +24,7 @@ import {
 	type LexicalNode,
 	type RangeSelection
 } from 'lexical';
+import { normalizeLinkUrl } from '$lib/markdown/url';
 
 export type Format = 'bold' | 'strikethrough' | 'code' | 'link' | 'bullet' | 'check';
 
@@ -72,7 +73,8 @@ export function runFormat(editor: LexicalEditor, f: Format): void {
 			return runCode(editor);
 		case 'link':
 			// 付ける側は URL が要るので setLink を使う。ここではリンクを外す
-			return setLink(editor, null);
+			setLink(editor, null);
+			return;
 		case 'bullet':
 		case 'check': {
 			const current = editor.read(() => {
@@ -120,8 +122,13 @@ function runCode(editor: LexicalEditor) {
 	});
 }
 
-/** 選択範囲にリンクを付ける（null なら外す）。選択が空なら URL を文字にして入れる */
-export function setLink(editor: LexicalEditor, url: string | null): void {
+/**
+ * 選択範囲にリンクを付ける（null なら外す）。選択が空なら URL を文字にして入れる。
+ * スキームのない URL には https:// を付け、使えない URL ならリンクを作らずに false を返す
+ */
+export function setLink(editor: LexicalEditor, input: string | null): boolean {
+	const url = input === null ? null : normalizeLinkUrl(input);
+	if (input !== null && url === null) return false;
 	const collapsed = editor.read(() => {
 		const selection = $getSelection();
 		return $isRangeSelection(selection) && selection.isCollapsed();
@@ -131,12 +138,13 @@ export function setLink(editor: LexicalEditor, url: string | null): void {
 			const selection = $getSelection();
 			if (!$isRangeSelection(selection)) return;
 			const link = $createLinkNode(url);
-			link.append($createTextNode(url));
+			link.append($createTextNode(input!.trim()));
 			selection.insertNodes([link]);
 		});
-		return;
+		return true;
 	}
 	editor.dispatchCommand(TOGGLE_LINK_COMMAND, url);
+	return true;
 }
 
 /**

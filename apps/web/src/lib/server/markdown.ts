@@ -11,7 +11,8 @@ import { toHtml } from 'hast-util-to-html';
 import type { Element, ElementContent, Parents as HastParents } from 'hast';
 import type { Definition, Nodes, PhrasingContent, Root } from 'mdast';
 import { mentionFromMarkdown, type MentionMdast } from '$lib/markdown/mention-mdast';
-import { isAllowedUrl, linkifyMdast } from './linkify-mdast';
+import { isAllowedUrl } from '$lib/markdown/url';
+import { linkifyMdast } from './linkify-mdast';
 
 /** 生の HTML は解釈せず、書かれたままの文字として表示する */
 function htmlToText(node: Nodes): void {

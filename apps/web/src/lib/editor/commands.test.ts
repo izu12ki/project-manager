@@ -95,4 +95,34 @@ describe('setLink', () => {
 		// 文字と URL が同じリンクは自動リンクの形で書き出される（表示は同じ）
 		expect(h.getMarkdown()).toBe('abc<https://example.com>');
 	});
+
+	it.each([
+		['example.com', '[x](https://example.com)'],
+		['www.example.com', '[x](https://www.example.com)'],
+		['/projects/A/attachments/1', '[x](/projects/A/attachments/1)'],
+		['mailto:a@example.com', '[x](mailto:a@example.com)']
+	])('スキームのない URL には https:// を付ける: %s', async (url, md) => {
+		const h = selectAll('x');
+		expect(setLink(h.editor, url)).toBe(true);
+		await flush();
+		expect(h.getMarkdown()).toBe(md);
+	});
+
+	it.each(['javascript:alert(1)', '//evil.example.com', '#top', 'data:text/html,x'])(
+		'使えない URL ではリンクを作らない: %s',
+		async (url) => {
+			const h = selectAll('x');
+			expect(setLink(h.editor, url)).toBe(false);
+			await flush();
+			expect(h.getMarkdown()).toBe('x');
+			expect(activeFormats(h.editor).has('link')).toBe(false);
+		}
+	);
+
+	it('選択が空でも使えない URL は入れない', async () => {
+		const h = caretAt('abc', 3);
+		expect(setLink(h.editor, 'javascript:alert(1)')).toBe(false);
+		await flush();
+		expect(h.getMarkdown()).toBe('abc');
+	});
 });

@@ -37,6 +37,8 @@
 	} = $props();
 
 	const MODE_KEY = 'md-editor-mode';
+	const uid = $props.id();
+	const linkErrorId = `${uid}-link-error`;
 
 	let textarea = $state<HTMLTextAreaElement>();
 	let body = $state<HTMLDivElement>();
@@ -56,6 +58,7 @@
 	let invalid = $state(false);
 	let linkOpen = $state(false);
 	let linkUrl = $state('');
+	let linkError = $state(false);
 
 	const rich = $derived(mode === 'rich' && handle !== null);
 	const minRows = $derived(Number(rest.rows) || 2);
@@ -302,6 +305,7 @@
 		if (!rich || !handle || !commands) return t.source();
 		if (t.f === 'link' && !active.has('link')) {
 			linkUrl = '';
+			linkError = false;
 			linkOpen = true;
 			return;
 		}
@@ -315,7 +319,11 @@
 			// フォームを送信させない
 			e.preventDefault();
 			const url = linkUrl.trim();
-			if (url && handle && commands) commands.setLink(handle.editor, url);
+			if (url && handle && commands && !commands.setLink(handle.editor, url)) {
+				// 使えない URL はリンクにせず、直せるよう開いたままにする
+				linkError = true;
+				return;
+			}
 			closeLink();
 		} else if (e.key === 'Escape') {
 			e.preventDefault();
@@ -365,11 +373,17 @@
 					type="url"
 					placeholder="https://"
 					aria-label="リンクの URL"
+					aria-invalid={linkError || undefined}
+					aria-describedby={linkError ? linkErrorId : undefined}
 					bind:value={linkUrl}
+					oninput={() => (linkError = false)}
 					onkeydown={onLinkKeydown}
 					onblur={() => (linkOpen = false)}
 					{@attach (el) => el.focus()}
 				/>
+				{#if linkError}
+					<p class="link-error" id={linkErrorId} role="alert">このURLは使えません</p>
+				{/if}
 			</div>
 		{/if}
 	</div>
@@ -492,6 +506,11 @@
 	}
 	.link-pop .input {
 		width: 100%;
+	}
+	.link-error {
+		margin: 4px 2px 0;
+		color: var(--destructive, #dc2626);
+		font-size: 12px;
 	}
 	.toolbar {
 		display: flex;

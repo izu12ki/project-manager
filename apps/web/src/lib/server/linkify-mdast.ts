@@ -1,19 +1,9 @@
 import { LinkifyIt } from 'linkify-it';
 import type { Nodes, Parents, PhrasingContent, Root } from 'mdast';
+import { isAllowedUrl } from '$lib/markdown/url';
 
 // markdown-it の既定（`new LinkifyIt()`）と同じ設定。自動リンクの検出結果を揃える
 const linkify = new LinkifyIt();
-
-/** リンク先として出してよい URL か。`/` 始まり（`//` を除く）か http / https / mailto のみ */
-export function isAllowedUrl(url: string): boolean {
-	const u = url.trim();
-	if (u.startsWith('/')) return !/^\/[\\/]/.test(u);
-	try {
-		return ['http:', 'https:', 'mailto:'].includes(new URL(u).protocol);
-	} catch {
-		return false;
-	}
-}
 
 const SKIP = new Set(['code', 'inlineCode', 'link', 'linkReference']);
 

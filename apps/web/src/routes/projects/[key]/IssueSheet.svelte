@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { ExternalLink, LoaderCircle, X } from '@lucide/svelte';
-	import IssueView from '../issues/[number=int]/IssueView.svelte';
+	import IssueView from './issues/[number=int]/IssueView.svelte';
 
 	interface Props {
 		projectKey: string;

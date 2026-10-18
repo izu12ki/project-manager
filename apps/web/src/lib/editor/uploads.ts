@@ -5,6 +5,7 @@ import {
 	$createLineBreakNode,
 	$createParagraphNode,
 	$createTextNode,
+	$getNodeByKey,
 	$getRoot,
 	$getSelection,
 	$isElementNode,
@@ -69,10 +70,18 @@ function $selectionForInsert(): RangeSelection {
 function $insertPlaceholders(items: { key: string; filename: string }[]) {
 	for (const { key, filename } of items) {
 		const sel = $selectionForInsert();
+		// 選択している文字を置き換えないよう、選択の終わり（focus）に畳む
+		if (!sel.isCollapsed()) sel.anchor.set(sel.focus.key, sel.focus.offset, sel.focus.type);
 		const nodes = $atLineStart(sel) ? [] : [$createLineBreakNode()];
 		sel.insertNodes([...nodes, $createUploadPlaceholderNode(key, filename)]);
 	}
 }
+
+/**
+ * アップロード中の仮の要素の key。取り消しなどで、終わったアップロードの仮の要素が
+ * 戻ってきたら消すために使う（終わったものは二度と置き換わらない）
+ */
+const inFlight = new Set<string>();
 
 function $findPlaceholder(key: string): UploadPlaceholderNode | null {
 	for (const { node } of $dfs()) {
@@ -117,6 +126,7 @@ export async function insertUploadsIntoEditor(
 		filename: file.name
 	}));
 	if (items.length === 0) return;
+	for (const { key } of items) inFlight.add(key);
 	editor.update(() => $insertPlaceholders(items));
 	const done = trackUpload(form);
 	try {
@@ -127,9 +137,11 @@ export async function insertUploadsIntoEditor(
 			} catch (e) {
 				toast.error(e instanceof Error ? e.message : 'アップロードに失敗しました');
 			}
+			inFlight.delete(key);
 			settle(editor, key, result);
 		}
 	} finally {
+		for (const { key } of items) inFlight.delete(key);
 		done();
 	}
 }
@@ -152,7 +164,8 @@ export function registerEditorUploads(
 		void insertUploadsIntoEditor(editor, opts.form(), opts.projectKey, files, opts.upload);
 	const pending = new Set<string>();
 	return mergeRegister(
-		// rich-text より先に、textarea 版と同じ条件（テキストを含まない）で判定する
+		// rich-text より先に shouldUploadPaste で判定する（rich-text に任せると、ファイルを含む
+		// 貼り付けは text/html があっても DRAG_DROP_PASTE に回されてしまう）
 		editor.registerCommand(
 			PASTE_COMMAND,
 			(e) => {
@@ -186,11 +199,27 @@ export function registerEditorUploads(
 			UploadPlaceholderNode,
 			(mutations) => {
 				const was = pending.size > 0;
+				const added: string[] = [];
 				for (const [key, m] of mutations) {
 					if (m === 'destroyed') pending.delete(key);
-					else pending.add(key);
+					else {
+						pending.add(key);
+						added.push(key);
+					}
 				}
 				if (was !== pending.size > 0) opts.onUploadingChange?.(pending.size > 0);
+				// 取り消しで戻った、もう終わっているアップロードの仮の要素は消す
+				const orphans = editor.read(() =>
+					added
+						.map((k) => $getNodeByKey(k))
+						.filter((n) => $isUploadPlaceholderNode(n) && !inFlight.has(n.getUploadKey()))
+						.map((n) => n!.getKey())
+				);
+				if (orphans.length > 0) {
+					editor.update(() => orphans.forEach((k) => $getNodeByKey(k)?.remove()), {
+						tag: HISTORY_MERGE_TAG
+					});
+				}
 			},
 			{ skipInitialization: true }
 		)

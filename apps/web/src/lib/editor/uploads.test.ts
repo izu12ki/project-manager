@@ -1,7 +1,15 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest';
 import { $dfs } from '@lexical/utils';
-import { $createParagraphNode, $createTextNode, $getRoot, PASTE_COMMAND } from 'lexical';
+import {
+	$createParagraphNode,
+	$createTextNode,
+	$getRoot,
+	$getSelection,
+	$isRangeSelection,
+	PASTE_COMMAND,
+	UNDO_COMMAND
+} from 'lexical';
 import type { UploadResult } from '$lib/attachment-upload';
 import { createMarkdownEditor } from './create-editor';
 import { $isUploadPlaceholderNode } from './nodes';
@@ -90,6 +98,29 @@ describe('insertUploadsIntoEditor', () => {
 		expect(toast.error).toHaveBeenCalledWith('ファイルは25MB以下にしてください');
 	});
 
+	it('選択している文字は消さず、選択の終わりに入れる', async () => {
+		const h = setup('選択した文字');
+		h.editor.update(
+			() => {
+				const t = $getRoot().getFirstDescendant();
+				t?.selectStart();
+				const sel = $getSelection();
+				if ($isRangeSelection(sel)) sel.focus.set(sel.anchor.key, 2, 'text');
+			},
+			{ discrete: true }
+		);
+		const upload = vi.fn(async () => ({
+			id: '4',
+			url: '/projects/A/attachments/4',
+			filename: 'c.png',
+			isImage: true
+		}));
+		await insertUploadsIntoEditor(h.editor, null, 'A', [file('c.png', 'image/png')], upload);
+		expect(h.getMarkdown()).toMatch(
+			/^選択\\?\n!\[c\.png\]\(\/projects\/A\/attachments\/4\)した文字$/
+		);
+	});
+
 	it('行の途中では改行してから入れる', async () => {
 		const h = setup('前');
 		const upload = vi.fn(async () => ({
@@ -170,6 +201,43 @@ describe('registerEditorUploads', () => {
 		d.resolve({ id: '1', url: '/projects/A/attachments/1', filename: 'a.png', isImage: true });
 		await vi.waitFor(() => expect(h.getMarkdown()).toBe('![a.png](/projects/A/attachments/1)'));
 		await flush();
+		expect(states.at(-1)).toBe(false);
+	});
+
+	it('アップロード中に入力してから取り消しても、仮の要素は戻らない', async () => {
+		const root = document.createElement('div');
+		root.contentEditable = 'true';
+		document.body.appendChild(root);
+		const h = setup('', root);
+		const d = deferred<UploadResult>();
+		const states: boolean[] = [];
+		registerEditorUploads(h.editor, {
+			projectKey: 'A',
+			form: () => null,
+			onUploadingChange: (u) => states.push(u)
+		});
+		const done = insertUploadsIntoEditor(
+			h.editor,
+			null,
+			'A',
+			[file('a.png', 'image/png')],
+			() => d.promise
+		);
+		await flush();
+		h.editor.update(
+			() => {
+				const sel = $getSelection();
+				if ($isRangeSelection(sel)) sel.insertText('入力');
+			},
+			{ discrete: true }
+		);
+		d.resolve({ id: '1', url: '/projects/A/attachments/1', filename: 'a.png', isImage: true });
+		await done;
+		await flush();
+		h.editor.dispatchCommand(UNDO_COMMAND, undefined);
+		await flush();
+		await flush();
+		expect(placeholders(h)).toBe(0);
 		expect(states.at(-1)).toBe(false);
 	});
 

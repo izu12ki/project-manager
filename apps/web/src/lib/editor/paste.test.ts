@@ -55,6 +55,8 @@ describe('外からの貼り付け', () => {
 				.filter((n) => $isTextNode(n))
 				.map((n) => n.getStyle())
 		);
+		// 空の配列では every が常に true になるので、テキストが入ったことも確かめる
+		expect(styles.length).toBeGreaterThan(0);
 		expect(styles.every((s) => s === '')).toBe(true);
 	});
 	it('テキストに付いた style は常に空に戻す', () => {

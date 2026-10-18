@@ -14,6 +14,7 @@ import {
 	parseView,
 	shortDate,
 	viewRange,
+	lastDate,
 	type TimelineFilters,
 	type TimelineIssue
 } from './timeline';
@@ -56,6 +57,30 @@ describe('表示範囲', () => {
 			step: 21
 		});
 		expect(viewRange('2026-10-05', 'week')).toMatchObject({ days: 182, dayWidth: 8, step: 91 });
+	});
+
+	it('最後の日付が既定の範囲より後ろならそこまで広げる', () => {
+		expect(viewRange('2026-10-05', 'day', '2026-12-18')).toMatchObject({
+			to: '2026-12-18',
+			days: 75
+		});
+		// 範囲内・範囲より前・なしは既定のまま
+		expect(viewRange('2026-10-05', 'day', '2026-10-20').days).toBe(42);
+		expect(viewRange('2026-10-05', 'day', '2026-09-01').days).toBe(42);
+		expect(viewRange('2026-10-05', 'day', null).days).toBe(42);
+		// 上限で打ち切る
+		expect(viewRange('2026-10-05', 'day', '2099-01-01').days).toBe(731);
+	});
+
+	it('最後の日付は期限、なければ開始日で決める', () => {
+		expect(
+			lastDate([
+				{ startDate: '2026-10-01', dueDate: '2026-11-01' },
+				{ startDate: '2026-12-01', dueDate: null },
+				{ startDate: null, dueDate: '2026-11-20' }
+			])
+		).toBe('2026-12-01');
+		expect(lastDate([{ startDate: null, dueDate: null }])).toBeNull();
 	});
 
 	it('URL クエリの不正値は既定に戻す', () => {

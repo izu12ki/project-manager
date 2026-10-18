@@ -7,6 +7,7 @@ import {
 	INSERT_UNORDERED_LIST_COMMAND,
 	REMOVE_LIST_COMMAND
 } from '@lexical/list';
+import { $createQuoteNode, $isQuoteNode } from '@lexical/rich-text';
 import { $setBlocksType } from '@lexical/selection';
 import { $findMatchingParent, mergeRegister } from '@lexical/utils';
 import {
@@ -26,7 +27,7 @@ import {
 } from 'lexical';
 import { normalizeLinkUrl } from '$lib/markdown/url';
 
-export type Format = 'bold' | 'strikethrough' | 'code' | 'link' | 'bullet' | 'check';
+export type Format = 'bold' | 'strikethrough' | 'code' | 'link' | 'bullet' | 'check' | 'quote';
 
 /** 選択の起点がいるリストの種類（リストの外なら null） */
 function $listType(selection: RangeSelection) {
@@ -44,6 +45,9 @@ function $spansBlocks(selection: RangeSelection) {
 	return !!a && !!b && !a.is(b);
 }
 
+const $inQuote = (selection: RangeSelection) =>
+	$findMatchingParent(selection.anchor.getNode(), $isQuoteNode) !== null;
+
 const $inLink = (node: LexicalNode) => $findMatchingParent(node, $isLinkNode) !== null;
 
 export function activeFormats(editor: LexicalEditor): Set<Format> {
@@ -59,6 +63,7 @@ export function activeFormats(editor: LexicalEditor): Set<Format> {
 		const list = $listType(selection);
 		if (list === 'bullet') active.add('bullet');
 		if (list === 'check') active.add('check');
+		if ($inQuote(selection)) active.add('quote');
 		return active;
 	});
 }
@@ -74,6 +79,15 @@ export function runFormat(editor: LexicalEditor, f: Format): void {
 		case 'link':
 			// 付ける側は URL が要るので setLink を使う。ここではリンクを外す
 			setLink(editor, null);
+			return;
+		case 'quote':
+			// 引用の中なら段落に戻し、外なら選択したブロックを引用にする
+			editor.update(() => {
+				const selection = $getSelection();
+				if (!$isRangeSelection(selection)) return;
+				if ($inQuote(selection)) $setBlocksType(selection, $createParagraphNode);
+				else $setBlocksType(selection, () => $createQuoteNode());
+			});
 			return;
 		case 'bullet':
 		case 'check': {

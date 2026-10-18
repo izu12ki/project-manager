@@ -74,6 +74,18 @@ describe('runFormat', () => {
 		await flush();
 		expect(h.getMarkdown()).toBe('abc');
 	});
+
+	it('quote は選択したブロックを引用にし、もう一度で戻す', async () => {
+		const h = selectAll('a\n\nb');
+		runFormat(h.editor, 'quote');
+		await flush();
+		expect(h.getMarkdown()).toBe('> a\n\n> b');
+		expect(activeFormats(h.editor).has('quote')).toBe(true);
+		runFormat(h.editor, 'quote');
+		await flush();
+		expect(h.getMarkdown()).toBe('a\n\nb');
+		expect(activeFormats(h.editor).has('quote')).toBe(false);
+	});
 });
 
 describe('setLink', () => {

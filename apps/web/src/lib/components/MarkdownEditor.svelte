@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import { Bold, Code, FileCode, Link, List, ListChecks, Strikethrough } from '@lucide/svelte';
+	import { Bold, Code, Link, List, ListChecks, Strikethrough, TextQuote } from '@lucide/svelte';
 	import type { Attachment } from 'svelte/attachments';
 	import type { HTMLTextareaAttributes } from 'svelte/elements';
 	import {
@@ -50,7 +50,7 @@
 	let uploadsApi = $state.raw<UploadsApi | null>(null);
 	/** エディタにアップロード中の仮の要素があるか（あればモードを切り替えさせない） */
 	let editorUploading = $state(false);
-	/** textarea（「Markdown で編集」）にアップロード中のものがあるか。
+	/** textarea（「Markdown ソースのまま編集」）にアップロード中のものがあるか。
 	 * 見たまま編集に切り替えるとプレースホルダが書き出しでエスケープされ、結果を差し込めなくなる */
 	let sourceUploading = $state(false);
 	const uploading = $derived(editorUploading || sourceUploading);
@@ -222,7 +222,7 @@
 		};
 	};
 
-	// 「Markdown で編集」のときだけ高さを内容に合わせる。隠れている間は測れないので、
+	// 「Markdown ソースのまま編集」のときだけ高さを内容に合わせる。隠れている間は測れないので、
 	// rich が変わるたびに付け直し、表示されたときに測り直す
 	const fitSource: Attachment<HTMLTextAreaElement> = (el) => {
 		if (!rich) return autosize(el);
@@ -251,7 +251,7 @@
 		else textarea?.focus();
 	}
 
-	// ---- 「Markdown で編集」のモード（textarea）での書式 ----
+	// ---- 「Markdown ソースのまま編集」のモード（textarea）での書式 ----
 
 	/** 選択範囲を before/after で囲む（未選択なら placeholder を入れて選択する） */
 	function wrap(before: string, after: string, placeholder: string) {
@@ -298,7 +298,8 @@
 		{ f: 'code', label: 'コード', icon: Code, source: code },
 		{ f: 'link', label: 'リンク', icon: Link, source: () => wrap('[', '](https://)', 'リンク') },
 		{ f: 'bullet', label: '箇条書き', icon: List, source: () => prefixLines('- ') },
-		{ f: 'check', label: 'チェックリスト', icon: ListChecks, source: () => prefixLines('- [ ] ') }
+		{ f: 'check', label: 'チェックリスト', icon: ListChecks, source: () => prefixLines('- [ ] ') },
+		{ f: 'quote', label: '引用', icon: TextQuote, source: () => prefixLines('> ') }
 	] as const;
 
 	function runTool(t: (typeof tools)[number]) {
@@ -414,16 +415,16 @@
 		{/if}
 		<button
 			type="button"
-			class="icon-btn"
+			class="icon-btn md-toggle"
 			class:active={mode === 'source'}
-			aria-label="Markdown で編集"
-			title={uploading ? 'アップロードが終わるまで切り替えられません' : 'Markdown で編集'}
+			aria-label="Markdown ソースのまま編集"
+			title={uploading ? 'アップロードが終わるまで切り替えられません' : 'Markdown ソースのまま編集'}
 			aria-pressed={mode === 'source'}
 			disabled={uploading}
 			onmousedown={keepFocus}
 			onclick={toggleMode}
 		>
-			<FileCode />
+			<span aria-hidden="true">MD</span>
 		</button>
 	</div>
 	{#if mentionCandidates}
@@ -464,6 +465,17 @@
 	}
 	.body-wrap {
 		position: relative;
+	}
+	/* 「Markdown ソースのまま編集」は文字の「MD」で示す */
+	.md-toggle {
+		width: auto;
+		padding: 0 6px;
+		margin-left: 4px;
+		font-family: var(--font-mono);
+		font-size: 11px;
+		font-weight: 700;
+		letter-spacing: 0.02em;
+		box-shadow: inset 0 0 0 1px var(--border);
 	}
 	.editor-body {
 		min-height: calc(var(--rows) * 1.7em + 20px);

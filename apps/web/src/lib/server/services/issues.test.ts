@@ -9,11 +9,13 @@ import {
 	deleteIssue,
 	getIssue,
 	listBoard,
+	listDeletedIssues,
 	listIssues,
 	listTimeline,
 	moveIssue,
 	updateIssue
 } from './issues';
+import { listIssueTypes } from './issue-fields';
 import { setProjectArchived } from './projects';
 
 describe('issues', () => {
@@ -37,7 +39,7 @@ describe('issues', () => {
 		expect(
 			await createIssue(as(member), 'ACME', { title: 'B', priority: 'high', dueDate: '2026-12-31' })
 		).toEqual({ number: 2 });
-		const board = await listBoard(as(member), 'ACME');
+		const { columns: board } = await listBoard(as(member), 'ACME');
 		expect(board.todo.map((i) => i.number)).toEqual([1, 2]);
 		const { issue } = await getIssue(as(member), 'ACME', 2);
 		expect(issue).toMatchObject({
@@ -55,7 +57,7 @@ describe('issues', () => {
 			startDate: '2026-10-06',
 			dueDate: '2026-10-10'
 		});
-		const board = await listBoard(as(member), 'ACME');
+		const { columns: board } = await listBoard(as(member), 'ACME');
 		expect(board.in_progress.map((i) => i.number)).toEqual([1]);
 		expect((await getIssue(as(member), 'ACME', 1)).issue).toMatchObject({
 			startDate: '2026-10-06'
@@ -71,8 +73,8 @@ describe('issues', () => {
 			updateIssue(as(member), 'ACME', 1, { startDate: '2026-10-11' })
 		).rejects.toMatchObject({ code: 'validation' });
 		await expect(
-			createIssue(as(guest), 'ACME', { title: 'C', status: 'done' })
-		).rejects.toMatchObject({ code: 'forbidden' });
+			createIssue(as(member), 'ACME', { title: 'C', status: 'bogus' })
+		).rejects.toMatchObject({ code: 'validation' });
 	});
 
 	it('同時に起票しても番号が重複しない', async () => {
@@ -82,10 +84,12 @@ describe('issues', () => {
 		expect(results.map((r) => r.number).sort()).toEqual([1, 2, 3, 4, 5]);
 	});
 
-	it('ゲストは起票時に担当者を指定できない', async () => {
-		await expect(
-			createIssue(as(guest), 'ACME', { title: 'A', assigneeId: member.id })
-		).rejects.toMatchObject({ code: 'forbidden' });
+	it('ゲストも起票時に担当者とステータスを指定できる', async () => {
+		await createIssue(as(guest), 'ACME', { title: 'A', assigneeId: member.id, status: 'done' });
+		expect((await getIssue(as(guest), 'ACME', 1)).issue).toMatchObject({
+			assigneeId: member.id,
+			status: 'done'
+		});
 	});
 
 	it('参加者でない人は担当者にできない', async () => {
@@ -95,7 +99,7 @@ describe('issues', () => {
 		).rejects.toMatchObject({ code: 'validation' });
 	});
 
-	it('ゲストは自分が起票した課題だけ内容を編集できる', async () => {
+	it('ゲストは他の人が起票した課題も編集できる', async () => {
 		await createIssue(as(guest), 'ACME', { title: 'mine' });
 		await createIssue(as(member), 'ACME', { title: 'theirs' });
 		await updateIssue(as(guest), 'ACME', 1, {
@@ -110,12 +114,10 @@ describe('issues', () => {
 			priority: 'low',
 			dueDate: null
 		});
-		await expect(updateIssue(as(guest), 'ACME', 2, { title: 'x' })).rejects.toMatchObject({
-			code: 'forbidden'
-		});
-		await expect(updateIssue(as(guest2), 'ACME', 1, { title: 'x' })).rejects.toMatchObject({
-			code: 'forbidden'
-		});
+		await updateIssue(as(guest), 'ACME', 2, { title: 'x' });
+		await updateIssue(as(guest2), 'ACME', 1, { title: 'y' });
+		expect((await getIssue(as(guest), 'ACME', 2)).issue.title).toBe('x');
+		expect((await getIssue(as(guest), 'ACME', 1)).issue.title).toBe('y');
 	});
 
 	it('値が変わっていない項目は権限チェックしない（フォームが全項目を送るため）', async () => {
@@ -143,18 +145,13 @@ describe('issues', () => {
 		).rejects.toMatchObject({ code: 'validation' });
 	});
 
-	it('ゲストは自分が担当の課題だけステータスを変えられ、担当者は変えられない', async () => {
-		await createIssue(as(member), 'ACME', { title: 'A', assigneeId: guest.id });
+	it('ゲストも担当外の課題のステータスと担当者を変えられる', async () => {
 		await createIssue(as(member), 'ACME', { title: 'B' });
-		await updateIssue(as(guest), 'ACME', 1, { status: 'done' });
-		await expect(updateIssue(as(guest), 'ACME', 2, { status: 'done' })).rejects.toMatchObject({
-			code: 'forbidden'
+		await updateIssue(as(guest), 'ACME', 1, { status: 'done', assigneeId: guest2.id });
+		expect((await getIssue(as(member), 'ACME', 1)).issue).toMatchObject({
+			status: 'done',
+			assigneeName: 'guest2'
 		});
-		await expect(updateIssue(as(guest), 'ACME', 1, { assigneeId: '' })).rejects.toMatchObject({
-			code: 'forbidden'
-		});
-		await updateIssue(as(member), 'ACME', 2, { assigneeId: guest2.id });
-		expect((await getIssue(as(member), 'ACME', 2)).issue.assigneeName).toBe('guest2');
 	});
 
 	it('ステータスを変えると移動先の列の末尾に入る', async () => {
@@ -162,12 +159,12 @@ describe('issues', () => {
 		await createIssue(as(member), 'ACME', { title: 'B' });
 		await updateIssue(as(member), 'ACME', 2, { status: 'done' });
 		await updateIssue(as(member), 'ACME', 1, { status: 'done' });
-		expect((await listBoard(as(member), 'ACME')).done.map((i) => i.number)).toEqual([2, 1]);
+		expect((await listBoard(as(member), 'ACME')).columns.done.map((i) => i.number)).toEqual([2, 1]);
 	});
 
 	it('カンバン移動: 前後の課題の間に入る', async () => {
 		for (const t of ['A', 'B', 'C']) await createIssue(as(member), 'ACME', { title: t });
-		const ids = (await listBoard(as(member), 'ACME')).todo.map((i) => i.id);
+		const ids = (await listBoard(as(member), 'ACME')).columns.todo.map((i) => i.id);
 		// C を A と B の間へ
 		await moveIssue(as(member), 'ACME', {
 			issueId: ids[2],
@@ -175,7 +172,11 @@ describe('issues', () => {
 			beforeId: ids[0],
 			afterId: ids[1]
 		});
-		expect((await listBoard(as(member), 'ACME')).todo.map((i) => i.title)).toEqual(['A', 'C', 'B']);
+		expect((await listBoard(as(member), 'ACME')).columns.todo.map((i) => i.title)).toEqual([
+			'A',
+			'C',
+			'B'
+		]);
 		// B を in_review の空の列へ
 		await moveIssue(as(member), 'ACME', {
 			issueId: ids[1],
@@ -183,7 +184,7 @@ describe('issues', () => {
 			beforeId: '',
 			afterId: ''
 		});
-		const board = await listBoard(as(member), 'ACME');
+		const { columns: board } = await listBoard(as(member), 'ACME');
 		expect(board.in_review.map((i) => i.title)).toEqual(['B']);
 		expect(board.todo.map((i) => i.title)).toEqual(['A', 'C']);
 	});
@@ -191,19 +192,26 @@ describe('issues', () => {
 	it('カンバン移動: 隣接 ID が別の列のもの（古い画面）なら validation', async () => {
 		await createIssue(as(member), 'ACME', { title: 'A' });
 		await createIssue(as(member), 'ACME', { title: 'B' });
-		const [a, b] = (await listBoard(as(member), 'ACME')).todo;
+		const [a, b] = (await listBoard(as(member), 'ACME')).columns.todo;
 		await updateIssue(as(member), 'ACME', b.number, { status: 'done' });
 		await expect(
 			moveIssue(as(member), 'ACME', { issueId: a.id, status: 'todo', beforeId: b.id, afterId: '' })
 		).rejects.toMatchObject({ code: 'validation' });
 	});
 
-	it('カンバン移動: ゲストは担当外の課題を動かせない', async () => {
+	it('カンバン移動: ゲストも担当外の課題を動かせる。存在しないステータスへは動かせない', async () => {
 		await createIssue(as(member), 'ACME', { title: 'A' });
-		const [a] = (await listBoard(as(member), 'ACME')).todo;
+		const [a] = (await listBoard(as(member), 'ACME')).columns.todo;
+		await moveIssue(as(guest), 'ACME', {
+			issueId: a.id,
+			status: 'done',
+			beforeId: '',
+			afterId: ''
+		});
+		expect((await listBoard(as(member), 'ACME')).columns.done.map((i) => i.id)).toEqual([a.id]);
 		await expect(
-			moveIssue(as(guest), 'ACME', { issueId: a.id, status: 'done', beforeId: '', afterId: '' })
-		).rejects.toMatchObject({ code: 'forbidden' });
+			moveIssue(as(guest), 'ACME', { issueId: a.id, status: 'bogus', beforeId: '', afterId: '' })
+		).rejects.toMatchObject({ code: 'validation' });
 	});
 
 	it('一覧の絞り込み', async () => {
@@ -226,7 +234,48 @@ describe('issues', () => {
 		await createIssue(as(guest), 'ACME', { title: 'A' });
 		await expect(deleteIssue(as(guest), 'ACME', 1)).rejects.toMatchObject({ code: 'forbidden' });
 		await deleteIssue(as(member), 'ACME', 1);
-		await expect(getIssue(as(member), 'ACME', 1)).rejects.toMatchObject({ code: 'not_found' });
+	});
+
+	it('削除した課題は一覧から消え、削除履歴として閲覧だけできる', async () => {
+		await createIssue(as(member), 'ACME', { title: 'A' });
+		await createIssue(as(member), 'ACME', { title: 'B' });
+		await deleteIssue(as(member), 'ACME', 1);
+		expect((await listIssues(as(guest), 'ACME')).map((i) => i.number)).toEqual([2]);
+		expect((await listBoard(as(guest), 'ACME')).columns.todo.map((i) => i.number)).toEqual([2]);
+		expect(await listDeletedIssues(as(guest), 'ACME')).toMatchObject([
+			{ number: 1, title: 'A', deletedByName: 'member' }
+		]);
+		const { issue } = await getIssue(as(guest), 'ACME', 1);
+		expect(issue.deletedAt).toBeInstanceOf(Date);
+		expect(issue.deletedByName).toBe('member');
+		await expect(updateIssue(as(member), 'ACME', 1, { title: 'x' })).rejects.toMatchObject({
+			code: 'conflict'
+		});
+		await expect(deleteIssue(as(member), 'ACME', 1)).rejects.toMatchObject({ code: 'conflict' });
+		// 番号は再利用しない
+		expect(await createIssue(as(member), 'ACME', { title: 'C' })).toEqual({ number: 3 });
+	});
+
+	it('種別と完了理由を設定できる', async () => {
+		const types = await listIssueTypes(as(member), 'ACME');
+		expect(types.map((t) => t.name)).toEqual(['タスク', 'バグ', '要望', 'その他']);
+		await createIssue(as(guest), 'ACME', { title: 'A', typeId: types[1].id });
+		await updateIssue(as(guest), 'ACME', 1, { resolution: 'duplicate' });
+		expect((await listIssues(as(member), 'ACME'))[0]).toMatchObject({
+			typeName: 'バグ',
+			resolution: 'duplicate'
+		});
+		await updateIssue(as(member), 'ACME', 1, { resolution: '', typeId: types[0].id });
+		expect((await getIssue(as(member), 'ACME', 1)).issue).toMatchObject({
+			resolution: null,
+			typeId: types[0].id
+		});
+		await expect(updateIssue(as(member), 'ACME', 1, { resolution: 'bogus' })).rejects.toMatchObject(
+			{ code: 'validation' }
+		);
+		await expect(updateIssue(as(member), 'ACME', 1, { typeId: 'nope' })).rejects.toMatchObject({
+			code: 'validation'
+		});
 	});
 
 	it('別プロジェクトの課題は番号を推測しても見えない', async () => {
@@ -245,7 +294,9 @@ describe('issues', () => {
 		await Promise.all(['A', 'B', 'C'].map((t) => createIssue(as(member), 'ACME', { title: t })));
 		// 同時起票で位置が衝突しうるので、確実に衝突した状態を作る
 		await db.update(issueTable).set({ position: 'a0' });
-		const byNumber = (await listBoard(as(member), 'ACME')).todo.sort((x, y) => x.number - y.number);
+		const byNumber = (await listBoard(as(member), 'ACME')).columns.todo.sort(
+			(x, y) => x.number - y.number
+		);
 		const [i1, i2, i3] = byNumber;
 		await moveIssue(as(member), 'ACME', {
 			issueId: i3.id,
@@ -253,7 +304,7 @@ describe('issues', () => {
 			beforeId: i1.id,
 			afterId: i2.id
 		});
-		expect((await listBoard(as(member), 'ACME')).todo.map((i) => i.number)).toEqual([
+		expect((await listBoard(as(member), 'ACME')).columns.todo.map((i) => i.number)).toEqual([
 			i1.number,
 			i3.number,
 			i2.number
@@ -279,9 +330,9 @@ describe('issues', () => {
 			await seedProject(db, { key: 'OTHER' });
 			await createIssue(as(admin), 'OTHER', { title: 'o' });
 			await createIssue(as(member), 'ACME', { title: 'G' });
-			const todo = (await listBoard(as(member), 'ACME')).todo;
+			const todo = (await listBoard(as(member), 'ACME')).columns.todo;
 			const id = (t: string) => todo.find((i) => i.title === t)!.id;
-			const other = (await listBoard(as(admin), 'OTHER')).todo[0].id;
+			const other = (await listBoard(as(admin), 'OTHER')).columns.todo[0].id;
 			const ids = { a: id('A'), b: id('B'), c: id('C'), other, gone: id('G') };
 			await deleteIssue(as(member), 'ACME', todo.find((i) => i.title === 'G')!.number);
 			const before = await listBoard(as(member), 'ACME');
@@ -309,13 +360,13 @@ describe('issues', () => {
 			expect(t.unscheduled.map((i) => i.number)).toEqual([3]);
 		});
 
-		it('canEdit: ゲストは自分の起票だけ、アーカイブ済みは全員 false', async () => {
+		it('canEdit: ゲストも全課題 true、アーカイブ済みは全員 false', async () => {
 			await createIssue(as(guest), 'ACME', { title: 'G', dueDate: '2026-10-10' });
 			await createIssue(as(member), 'ACME', { title: 'M', dueDate: '2026-10-10' });
 			const byGuest = await listTimeline(as(guest), 'ACME');
 			expect(byGuest.scheduled.map((i) => [i.number, i.canEdit])).toEqual([
 				[1, true],
-				[2, false]
+				[2, true]
 			]);
 			const byMember = await listTimeline(as(member), 'ACME');
 			expect(byMember.scheduled.every((i) => i.canEdit)).toBe(true);

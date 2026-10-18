@@ -10,6 +10,7 @@ import type { AppContext, BaseContext } from './context';
 import type { DB } from './db';
 import { project, projectMember, relations, user } from './db/schema';
 import type { MailMessage } from './mailer';
+import { defaultFieldInserts } from './services/issue-fields';
 
 export async function createTestDb(): Promise<DB> {
 	const db = drizzle({ client: createClient({ url: ':memory:' }), relations });
@@ -77,6 +78,9 @@ export async function seedProject(
 		name: opts.name ?? 'Acme',
 		archivedAt: opts.archived ? new Date() : null
 	});
+	const [statuses, types] = defaultFieldInserts(db, id);
+	await statuses;
+	await types;
 	for (const m of opts.members ?? []) {
 		await db.insert(projectMember).values({ projectId: id, userId: m.id });
 	}

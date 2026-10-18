@@ -8,7 +8,7 @@ import { AppError } from '../errors';
 import { notify } from '../notifications';
 import { parse } from '../validation';
 import { linkAttachments } from './attachment-links';
-import { getIssue } from './issues';
+import { assertNotDeleted, getIssue } from './issues';
 import { assertWritable, requireProject } from './projects';
 
 const BodyInput = v.object({
@@ -47,6 +47,7 @@ export async function addComment(
 ): Promise<void> {
 	const { project, issue } = await getIssue(ctx, key, number);
 	assertWritable(project);
+	assertNotDeleted(issue);
 	authorize(ctx.actor, 'comment:create');
 	const { body } = parse(BodyInput, input);
 	const id = uuidv7();
@@ -62,6 +63,7 @@ export async function addComment(
 async function findOwnedComment(ctx: AppContext, key: string, number: number, commentId: string) {
 	const { project, issue } = await getIssue(ctx, key, number);
 	assertWritable(project);
+	assertNotDeleted(issue);
 	const [c] = await ctx.db
 		.select()
 		.from(comment)

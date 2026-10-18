@@ -14,7 +14,12 @@ import {
 	editComment,
 	listComments
 } from '$lib/server/services/comments';
-import { listCategories, listMilestones } from '$lib/server/services/issue-fields';
+import {
+	listCategories,
+	listIssueTypesOf,
+	listMilestones,
+	listStatusesOf
+} from '$lib/server/services/issue-fields';
 import { getIssue, updateIssue } from '$lib/server/services/issues';
 import { markIssueRead } from '$lib/server/services/notifications';
 import { listAssignableUsers, requireProject } from '$lib/server/services/projects';
@@ -31,12 +36,15 @@ export const getIssueDetail = query(IssueRef, ({ key, number }) => {
 	const ctx = remoteContext();
 	return runQuery(async () => {
 		const p = await requireProject(ctx, key);
-		const [{ project, issue }, assignees, categories, milestones] = await Promise.all([
-			getIssue(ctx, key, number),
-			listAssignableUsers(ctx.db, p.id),
-			listCategories(ctx, key),
-			listMilestones(ctx, key)
-		]);
+		const [{ project, issue }, assignees, statuses, issueTypes, categories, milestones] =
+			await Promise.all([
+				getIssue(ctx, key, number),
+				listAssignableUsers(ctx.db, p.id),
+				listStatusesOf(ctx.db, p.id),
+				listIssueTypesOf(ctx.db, p.id),
+				listCategories(ctx, key),
+				listMilestones(ctx, key)
+			]);
 		const assignable = assignees.map((u) => ({ ...u, disabled: false }));
 		if (issue.assigneeId && !assignable.some((u) => u.id === issue.assigneeId)) {
 			const [cur] = await ctx.db
@@ -46,10 +54,13 @@ export const getIssueDetail = query(IssueRef, ({ key, number }) => {
 			if (cur) assignable.push({ ...cur, disabled: true });
 		}
 		const res = { reporterId: issue.reporterId, assigneeId: issue.assigneeId };
-		const writable = !project.archivedAt;
+		// 削除した課題は閲覧だけできる
+		const writable = !project.archivedAt && !issue.deletedAt;
 		return {
 			issue: { ...issue, descriptionHtml: renderMarkdown(issue.description) },
 			assignees: assignable,
+			statuses,
+			issueTypes,
 			categories,
 			// 完了済みは選択肢から外す。ただし現在設定されているものは残す
 			milestones: milestones.filter((m) => !m.completedAt || m.id === issue.milestoneId),
@@ -67,14 +78,17 @@ export const getIssueDetail = query(IssueRef, ({ key, number }) => {
 export const getComments = query(IssueRef, ({ key, number }) => {
 	const ctx = remoteContext();
 	return runQuery(async () => {
-		const [{ project }, comments] = await Promise.all([
+		const [{ project, issue }, comments] = await Promise.all([
 			getIssue(ctx, key, number),
 			listComments(ctx, key, number)
 		]);
 		return comments.map((c) => ({
 			...c,
 			html: renderMarkdown(c.body),
-			canModify: !project.archivedAt && can(ctx.actor, 'comment:modify', { authorId: c.authorId })
+			canModify:
+				!project.archivedAt &&
+				!issue.deletedAt &&
+				can(ctx.actor, 'comment:modify', { authorId: c.authorId })
 		}));
 	});
 });
@@ -82,7 +96,7 @@ export const getComments = query(IssueRef, ({ key, number }) => {
 export const getAttachments = query(IssueRef, ({ key, number }) => {
 	const ctx = remoteContext();
 	return runQuery(async () => {
-		const [{ project }, rows] = await Promise.all([
+		const [{ project, issue }, rows] = await Promise.all([
 			getIssue(ctx, key, number),
 			listAttachments(ctx, key, number)
 		]);
@@ -91,7 +105,9 @@ export const getAttachments = query(IssueRef, ({ key, number }) => {
 			url: attachmentUrl(project.key, a.id),
 			isImage: isSafeImage(a.contentType),
 			canDelete:
-				!project.archivedAt && can(ctx.actor, 'attachment:delete', { uploaderId: a.uploaderId })
+				!project.archivedAt &&
+				!issue.deletedAt &&
+				can(ctx.actor, 'attachment:delete', { uploaderId: a.uploaderId })
 		}));
 	});
 });
@@ -100,6 +116,8 @@ export const saveIssue = form(
 	v.object({
 		...IssueRefFields,
 		title: opt,
+		typeId: opt,
+		resolution: opt,
 		description: opt,
 		status: opt,
 		priority: opt,

@@ -19,8 +19,8 @@
 		<div class="auth-head">
 			<h1>招待を受ける</h1>
 			<p>
-				{#if data.invitation.projectName}「{data.invitation.projectName}」に{/if}{data.invitation
-					.roleLabel}として招待されています
+				{#each data.invitation.projectNames as name (name)}「{name}」{/each}{#if data.invitation.projectNames.length > 0}に{/if}{data
+					.invitation.roleLabel}として招待されています
 			</p>
 		</div>
 		<form method="POST" use:enhance class="auth-form">

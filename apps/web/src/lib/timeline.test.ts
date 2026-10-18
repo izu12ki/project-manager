@@ -105,7 +105,6 @@ describe('表示範囲', () => {
 			from: '2026-10-08',
 			filters: { status: 'open', assignee: 'none', category: 'c1', milestone: 'm1' }
 		});
-		expect(parseView(new URLSearchParams('status=bogus'), today).filters.status).toBe('');
 		for (const bad of ['from=abc', 'from=2026-02-30', 'from=2026-1-1']) {
 			expect(parseView(new URLSearchParams(bad), today).from).toBe('2026-10-05');
 		}

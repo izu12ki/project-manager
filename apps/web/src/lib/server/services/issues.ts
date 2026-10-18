@@ -1,18 +1,45 @@
-import { and, asc, count, desc, eq, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
+import {
+	and,
+	asc,
+	count,
+	desc,
+	eq,
+	inArray,
+	isNotNull,
+	isNull,
+	ne,
+	or,
+	sql,
+	type SQL
+} from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
-import { PRIORITIES, STATUSES, type Priority, type Status } from '$lib/labels';
+import {
+	DONE_STATUS,
+	INITIAL_STATUS,
+	PRIORITIES,
+	RESOLUTIONS,
+	type Priority,
+	type Status,
+	type StatusDef
+} from '$lib/labels';
 import { authorize, can } from '../authz';
 import type { AppContext } from '../context';
 import type { DB } from '../db';
-import { attachment, category, issue, milestone, project, user } from '../db/schema';
+import { category, issue, issueType, milestone, project, user } from '../db/schema';
 import { AppError } from '../errors';
 import { notify, type IssueEvent } from '../notifications';
 import { emptyToNull, parse } from '../validation';
 import { linkAttachments } from './attachment-links';
-import { assertCategoryOf, assertMilestoneOf } from './issue-fields';
+import {
+	assertCategoryOf,
+	assertIssueTypeOf,
+	assertMilestoneOf,
+	assertStatusOf,
+	listStatusesOf
+} from './issue-fields';
 import {
 	assertAssignable,
 	assertWritable,
@@ -41,6 +68,7 @@ const DateOrEmpty = v.union(
 /** assigneeId / categoryId / milestoneId は 'none' で未設定のものに絞る。q はタイトルか番号の部分一致。 */
 export interface IssueFilters {
 	status?: Status;
+	typeId?: string;
 	assigneeId?: string;
 	priority?: Priority;
 	categoryId?: string;
@@ -50,12 +78,17 @@ export interface IssueFilters {
 
 const assignee = alias(user, 'assignee');
 const reporter = alias(user, 'reporter');
+const deleter = alias(user, 'deleter');
 
 const listColumns = {
 	id: issue.id,
 	number: issue.number,
 	title: issue.title,
+	typeId: issue.typeId,
+	typeName: issueType.name,
+	typeColor: issueType.color,
 	status: issue.status,
+	resolution: issue.resolution,
 	priority: issue.priority,
 	startDate: issue.startDate,
 	dueDate: issue.dueDate,
@@ -77,6 +110,7 @@ function selectIssues(db: DB, where: SQL | undefined, order: SQL[]) {
 		.select(listColumns)
 		.from(issue)
 		.leftJoin(assignee, eq(issue.assigneeId, assignee.id))
+		.leftJoin(issueType, eq(issue.typeId, issueType.id))
 		.leftJoin(category, eq(issue.categoryId, category.id))
 		.leftJoin(milestone, eq(issue.milestoneId, milestone.id))
 		.where(where)
@@ -84,7 +118,11 @@ function selectIssues(db: DB, where: SQL | undefined, order: SQL[]) {
 }
 
 function optionCond(
-	col: typeof issue.assigneeId | typeof issue.categoryId | typeof issue.milestoneId,
+	col:
+		| typeof issue.assigneeId
+		| typeof issue.typeId
+		| typeof issue.categoryId
+		| typeof issue.milestoneId,
 	value: string | undefined
 ): SQL | undefined {
 	if (!value) return undefined;
@@ -104,9 +142,11 @@ function keywordCond(projectKey: string, q: string | undefined): SQL | undefined
 function filterConds(p: ProjectRow, filters: IssueFilters): SQL | undefined {
 	return and(
 		eq(issue.projectId, p.id),
+		isNull(issue.deletedAt),
 		filters.status ? eq(issue.status, filters.status) : undefined,
 		filters.priority ? eq(issue.priority, filters.priority) : undefined,
 		optionCond(issue.assigneeId, filters.assigneeId),
+		optionCond(issue.typeId, filters.typeId),
 		optionCond(issue.categoryId, filters.categoryId),
 		optionCond(issue.milestoneId, filters.milestoneId),
 		keywordCond(p.key, filters.q)
@@ -127,28 +167,37 @@ export async function countOpenIssues(
 	const rows = await ctx.db
 		.select({ projectId: issue.projectId, n: count() })
 		.from(issue)
-		.where(and(inArray(issue.projectId, projectIds), ne(issue.status, 'done')))
+		.where(
+			and(
+				inArray(issue.projectId, projectIds),
+				ne(issue.status, DONE_STATUS),
+				isNull(issue.deletedAt)
+			)
+		)
 		.groupBy(issue.projectId);
 	return Object.fromEntries(rows.map((r) => [r.projectId, r.n]));
 }
 
-/** 絞り込んだ場合も、カード間の並び順は全体の position を保つ。 */
+/** 列はプロジェクトのステータス順。絞り込んだ場合も、カード間の並び順は全体の position を保つ。 */
 export async function listBoard(
 	ctx: AppContext,
 	key: string,
 	filters: Omit<IssueFilters, 'status'> = {}
-): Promise<Record<Status, IssueListItem[]>> {
+): Promise<{ statuses: StatusDef[]; columns: Record<Status, IssueListItem[]> }> {
 	const p = await requireProject(ctx, key);
-	const rows = await selectIssues(ctx.db, filterConds(p, { ...filters, status: undefined }), [
-		asc(issue.position),
-		asc(issue.number)
+	const [statuses, rows] = await Promise.all([
+		listStatusesOf(ctx.db, p.id),
+		selectIssues(ctx.db, filterConds(p, { ...filters, status: undefined }), [
+			asc(issue.position),
+			asc(issue.number)
+		])
 	]);
-	const board = Object.fromEntries(STATUSES.map((s) => [s, [] as IssueListItem[]])) as Record<
-		Status,
-		IssueListItem[]
-	>;
-	for (const r of rows) board[r.status].push(r);
-	return board;
+	const columns: Record<Status, IssueListItem[]> = Object.fromEntries(
+		statuses.map((s) => [s.key, [] as IssueListItem[]])
+	);
+	// 定義が消えたステータスの課題は初期ステータスの列に出す
+	for (const r of rows) (columns[r.status] ?? columns[INITIAL_STATUS])?.push(r);
+	return { statuses, columns };
 }
 
 export type TimelineItem = IssueListItem & { canEdit: boolean };
@@ -171,23 +220,55 @@ export async function listTimeline(
 	}));
 	return {
 		scheduled: items.filter((i) => i.startDate || i.dueDate),
-		unscheduled: items.filter((i) => !i.startDate && !i.dueDate && i.status !== 'done')
+		unscheduled: items.filter((i) => !i.startDate && !i.dueDate && i.status !== DONE_STATUS)
 	};
 }
 
 export async function getIssue(ctx: AppContext, key: string, number: number) {
 	const p = await requireProject(ctx, key);
 	const [row] = await ctx.db
-		.select({ issue, assigneeName: assignee.name, reporterName: reporter.name })
+		.select({
+			issue,
+			assigneeName: assignee.name,
+			reporterName: reporter.name,
+			deletedByName: deleter.name
+		})
 		.from(issue)
 		.leftJoin(assignee, eq(issue.assigneeId, assignee.id))
 		.innerJoin(reporter, eq(issue.reporterId, reporter.id))
+		.leftJoin(deleter, eq(issue.deletedBy, deleter.id))
 		.where(and(eq(issue.projectId, p.id), eq(issue.number, number)));
 	if (!row) throw new AppError('not_found', '課題が見つかりません');
 	return {
 		project: p as ProjectRow,
-		issue: { ...row.issue, assigneeName: row.assigneeName, reporterName: row.reporterName }
+		issue: {
+			...row.issue,
+			assigneeName: row.assigneeName,
+			reporterName: row.reporterName,
+			deletedByName: row.deletedByName
+		}
 	};
+}
+
+/** 削除した課題は閲覧だけできる */
+export function assertNotDeleted(i: { deletedAt: Date | null }): void {
+	if (i.deletedAt) throw new AppError('conflict', '削除された課題は変更できません');
+}
+
+/** 削除履歴（新しい順） */
+export async function listDeletedIssues(ctx: AppContext, key: string) {
+	const p = await requireProject(ctx, key);
+	return ctx.db
+		.select({
+			number: issue.number,
+			title: issue.title,
+			deletedAt: issue.deletedAt,
+			deletedByName: deleter.name
+		})
+		.from(issue)
+		.leftJoin(deleter, eq(issue.deletedBy, deleter.id))
+		.where(and(eq(issue.projectId, p.id), isNotNull(issue.deletedAt)))
+		.orderBy(desc(issue.deletedAt));
 }
 
 async function nextPosition(db: DB, projectId: string, status: Status): Promise<string> {
@@ -198,10 +279,17 @@ async function nextPosition(db: DB, projectId: string, status: Status): Promise<
 	return generateKeyBetween(row?.max ?? null, null);
 }
 
+const StatusSchema = v.pipe(v.string(), v.minLength(1, 'ステータスを選択してください'));
+const ResolutionOrEmpty = v.union(
+	[v.literal(''), v.picklist(RESOLUTIONS)],
+	'完了理由を選択してください'
+);
+
 const CreateInput = v.object({
 	title: TitleSchema,
+	typeId: v.optional(v.string()),
 	description: v.optional(DescriptionSchema, ''),
-	status: v.optional(v.picklist(STATUSES), 'todo'),
+	status: v.optional(StatusSchema, INITIAL_STATUS),
 	priority: v.optional(v.picklist(PRIORITIES), 'none'),
 	startDate: v.optional(DateOrEmpty),
 	dueDate: v.optional(DateOrEmpty),
@@ -231,7 +319,12 @@ export async function createIssue(
 		authorize(ctx.actor, 'issue:assign');
 		await assertAssignable(ctx.db, p.id, assigneeId);
 	}
-	if (data.status !== 'todo') authorize(ctx.actor, 'issue:changeStatus', { assigneeId });
+	if (data.status !== INITIAL_STATUS) {
+		authorize(ctx.actor, 'issue:changeStatus', { assigneeId });
+		await assertStatusOf(ctx.db, p.id, data.status);
+	}
+	const typeId = emptyToNull(data.typeId) ?? null;
+	if (typeId) await assertIssueTypeOf(ctx.db, p.id, typeId);
 	const startDate = emptyToNull(data.startDate) ?? null;
 	const dueDate = emptyToNull(data.dueDate) ?? null;
 	assertDateRange(startDate, dueDate);
@@ -251,6 +344,7 @@ export async function createIssue(
 			projectId: p.id,
 			number: sql`(select ${project.nextIssueNumber} - 1 from ${project} where ${project.id} = ${p.id})`,
 			title: data.title,
+			typeId,
 			description: data.description,
 			status: data.status,
 			priority: data.priority,
@@ -278,11 +372,13 @@ export async function createIssue(
 
 const UpdateInput = v.object({
 	title: v.optional(TitleSchema),
+	typeId: v.optional(v.string()),
+	resolution: v.optional(ResolutionOrEmpty),
 	description: v.optional(DescriptionSchema),
 	priority: v.optional(v.picklist(PRIORITIES)),
 	startDate: v.optional(DateOrEmpty),
 	dueDate: v.optional(DateOrEmpty),
-	status: v.optional(v.picklist(STATUSES)),
+	status: v.optional(StatusSchema),
 	assigneeId: v.optional(v.string()),
 	categoryId: v.optional(v.string()),
 	milestoneId: v.optional(v.string())
@@ -297,6 +393,7 @@ export async function updateIssue(
 ): Promise<void> {
 	const { project: p, issue: cur } = await getIssue(ctx, key, number);
 	assertWritable(p);
+	assertNotDeleted(cur);
 	const data = parse(UpdateInput, input);
 	const res = { reporterId: cur.reporterId, assigneeId: cur.assigneeId };
 	const patch: Partial<typeof issue.$inferInsert> = {};
@@ -305,7 +402,11 @@ export async function updateIssue(
 	const dueDate = emptyToNull(data.dueDate);
 	const categoryId = emptyToNull(data.categoryId);
 	const milestoneId = emptyToNull(data.milestoneId);
+	const typeId = emptyToNull(data.typeId);
+	const resolution = data.resolution === undefined ? undefined : data.resolution || null;
 	if (data.title !== undefined && data.title !== cur.title) patch.title = data.title;
+	if (typeId !== undefined && typeId !== cur.typeId) patch.typeId = typeId;
+	if (resolution !== undefined && resolution !== cur.resolution) patch.resolution = resolution;
 	if (data.description !== undefined && data.description !== cur.description)
 		patch.description = data.description;
 	if (data.priority !== undefined && data.priority !== cur.priority) patch.priority = data.priority;
@@ -320,11 +421,13 @@ export async function updateIssue(
 			patch.dueDate !== undefined ? patch.dueDate : cur.dueDate
 		);
 	}
+	if (patch.typeId) await assertIssueTypeOf(ctx.db, p.id, patch.typeId);
 	if (patch.categoryId) await assertCategoryOf(ctx.db, p.id, patch.categoryId);
 	if (patch.milestoneId) await assertMilestoneOf(ctx.db, p.id, patch.milestoneId);
 
 	if (data.status !== undefined && data.status !== cur.status) {
 		authorize(ctx.actor, 'issue:changeStatus', res);
+		await assertStatusOf(ctx.db, p.id, data.status);
 		patch.status = data.status;
 		patch.position = await nextPosition(ctx.db, p.id, data.status);
 	}
@@ -367,7 +470,7 @@ export async function updateIssue(
 
 const MoveInput = v.object({
 	issueId: v.string(),
-	status: v.picklist(STATUSES),
+	status: StatusSchema,
 	beforeId: v.optional(v.string()),
 	afterId: v.optional(v.string())
 });
@@ -397,17 +500,19 @@ export async function moveIssue(ctx: AppContext, key: string, input: unknown): P
 		.from(issue)
 		.where(and(eq(issue.id, data.issueId), eq(issue.projectId, p.id)));
 	if (!cur) throw new AppError('not_found', '課題が見つかりません');
+	assertNotDeleted(cur);
 	authorize(ctx.actor, 'issue:changeStatus', {
 		reporterId: cur.reporterId,
 		assigneeId: cur.assigneeId
 	});
+	if (data.status !== cur.status) await assertStatusOf(ctx.db, p.id, data.status);
 
 	const neighbor = async (id: string | null | undefined): Promise<string | null> => {
 		if (!id) return null;
 		const [n] = await ctx.db
 			.select({ position: issue.position, status: issue.status })
 			.from(issue)
-			.where(and(eq(issue.id, id), eq(issue.projectId, p.id)));
+			.where(and(eq(issue.id, id), eq(issue.projectId, p.id), isNull(issue.deletedAt)));
 		if (!n || n.status !== data.status || id === cur.id) throw new AppError('validation', STALE);
 		return n.position;
 	};
@@ -442,21 +547,14 @@ export async function moveIssue(ctx: AppContext, key: string, input: unknown): P
 	}
 }
 
+/** 削除は論理削除。一覧からは消え、削除履歴から内容を閲覧できる（添付も残す） */
 export async function deleteIssue(ctx: AppContext, key: string, number: number): Promise<void> {
 	const { project: p, issue: cur } = await getIssue(ctx, key, number);
 	assertWritable(p);
+	assertNotDeleted(cur);
 	authorize(ctx.actor, 'issue:delete');
-	const files = await ctx.db
-		.select({ r2Key: attachment.r2Key })
-		.from(attachment)
-		.where(eq(attachment.issueId, cur.id));
-	// 添付の行は課題の削除で連鎖削除される
-	await ctx.db.delete(issue).where(eq(issue.id, cur.id));
-	if (files.length > 0) {
-		ctx.waitUntil(
-			ctx.bucket
-				.delete(files.map((f) => f.r2Key))
-				.catch((e) => console.error('attachment delete failed', e))
-		);
-	}
+	await ctx.db
+		.update(issue)
+		.set({ deletedAt: new Date(), deletedBy: ctx.actor.id })
+		.where(eq(issue.id, cur.id));
 }

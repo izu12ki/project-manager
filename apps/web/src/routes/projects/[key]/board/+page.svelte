@@ -2,12 +2,11 @@
 	import { Calendar, CircleAlert, Flag, X } from '@lucide/svelte';
 	import { page } from '$app/state';
 	import { dndzone, type DndEvent } from 'svelte-dnd-action';
+	import IssueTypeTag from '$lib/components/IssueTypeTag.svelte';
 	import PriorityPill from '$lib/components/PriorityPill.svelte';
 	import {
-		STATUSES,
-		STATUS_COLOR,
-		STATUS_LABEL,
 		colorFor,
+		colorVar,
 		formatDue,
 		isDueAlert,
 		milestoneLabel,
@@ -29,7 +28,7 @@
 	type Card = Columns[Status][number];
 
 	const clone = (c: Columns): Columns =>
-		Object.fromEntries(STATUSES.map((s) => [s, [...c[s]]])) as Columns;
+		Object.fromEntries(Object.entries(c).map(([s, items]) => [s, [...items]]));
 
 	let columns = $derived(clone(board.columns));
 	let snapshot: Columns | null = null;
@@ -133,16 +132,16 @@
 		</div>
 	{/if}
 
-	<div class="board" class:with-sheet={opened !== null}>
-		{#each STATUSES as status (status)}
+	<div class="board" class:with-sheet={opened !== null} style:--columns={board.statuses.length}>
+		{#each board.statuses as { key: status, name, color } (status)}
 			<section
 				class="column"
-				style:--c={STATUS_COLOR[status]}
+				style:--c={colorVar(color)}
 				data-testid={`column-${status}`}
-				aria-label={STATUS_LABEL[status]}
+				aria-label={name}
 			>
 				<h2 class="column-head">
-					{STATUS_LABEL[status]}
+					{name}
 					<span class="count">{columns[status].length}</span>
 				</h2>
 				<ul
@@ -166,9 +165,15 @@
 							onclick={(e) => openSheet(e, card)}
 						>
 							<div class="flex items-center justify-between gap-2">
-								<span class="mono text-xs text-muted-foreground"
-									>{data.project.key}-{card.number}</span
-								>
+								<span class="flex min-w-0 items-center gap-1.5">
+									{#if card.typeName}<IssueTypeTag
+											name={card.typeName}
+											color={card.typeColor}
+										/>{/if}
+									<span class="mono text-xs text-muted-foreground"
+										>{data.project.key}-{card.number}</span
+									>
+								</span>
 								{#if card.priority !== 'none'}<PriorityPill priority={card.priority} small />{/if}
 							</div>
 							<a href={`/projects/${data.project.key}/issues/${card.number}`} class="title"
@@ -221,7 +226,7 @@
 <style>
 	.board {
 		display: grid;
-		grid-template-columns: repeat(4, minmax(264px, 1fr));
+		grid-template-columns: repeat(var(--columns), minmax(264px, 1fr));
 		gap: 12px;
 		overflow-x: auto;
 		padding-bottom: 8px;

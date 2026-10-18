@@ -3,7 +3,7 @@
 	import { UserRoundCheck } from '@lucide/svelte';
 	import FormAlert from '$lib/components/FormAlert.svelte';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
-	import { PRIORITIES, PRIORITY_LABEL, STATUSES, STATUS_LABEL, milestoneLabel } from '$lib/labels';
+	import { PRIORITIES, PRIORITY_LABEL, milestoneLabel } from '$lib/labels';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -25,6 +25,16 @@
 		{@render actions()}
 	</div>
 	{#if form?.message}<FormAlert message={form.message} />{/if}
+	{#if data.issueTypes.length > 0}
+		<div class="flex items-center gap-2">
+			<label for="issue-type" class="text-[13px] text-muted-foreground">種別</label>
+			<select class="select type-select" id="issue-type" name="typeId">
+				{#each data.issueTypes as t (t.id)}
+					<option value={t.id}>{t.name}</option>
+				{/each}
+			</select>
+		</div>
+	{/if}
 	<label for="issue-title" class="sr-only">タイトル</label>
 	<input
 		class="input title"
@@ -51,8 +61,8 @@
 					<div class="prop-row">
 						<label for="issue-status">ステータス</label>
 						<select class="select" id="issue-status" name="status">
-							{#each STATUSES as s (s)}
-								<option value={s}>{STATUS_LABEL[s]}</option>
+							{#each data.statuses as s (s.key)}
+								<option value={s.key}>{s.name}</option>
 							{/each}
 						</select>
 					</div>
@@ -122,6 +132,10 @@
 </form>
 
 <style>
+	.type-select {
+		width: auto;
+		min-width: 140px;
+	}
 	.title {
 		background: var(--card);
 		font-size: 15px;

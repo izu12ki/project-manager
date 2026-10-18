@@ -16,6 +16,7 @@ import {
 	setProjectArchived,
 	updateProject
 } from './projects';
+import { listIssueTypes, listStatuses } from './issue-fields';
 
 describe('projects', () => {
 	let db: DB;
@@ -90,6 +91,44 @@ describe('projects', () => {
 		expect(await requireProject(ctxOf(base, admin), 'ACME')).toMatchObject({
 			name: '新名称',
 			description: '説明'
+		});
+	});
+
+	it('作成すると既定のステータスと課題種別が用意される', async () => {
+		await createProject(ctxOf(base, admin), { key: 'NEW', name: 'New' });
+		const ctx = ctxOf(base, admin);
+		expect((await listStatuses(ctx, 'NEW')).map((s) => s.name)).toEqual([
+			'未着手',
+			'進行中',
+			'レビュー',
+			'完了'
+		]);
+		expect((await listIssueTypes(ctx, 'NEW')).map((t) => t.name)).toEqual([
+			'タスク',
+			'バグ',
+			'要望',
+			'その他'
+		]);
+	});
+
+	it('キー・アイコン・色を変更できる。キーの重複は conflict', async () => {
+		await seedProject(db, { key: 'ACME' });
+		await seedProject(db, { key: 'BETA' });
+		const ctx = ctxOf(base, admin);
+		const input = { name: 'Acme', description: '', icon: '🚀', color: 'teal' };
+		await expect(updateProject(ctx, 'ACME', { ...input, key: 'beta' })).rejects.toMatchObject({
+			code: 'conflict'
+		});
+		expect(await updateProject(ctx, 'ACME', { ...input, key: 'acme2' })).toEqual({ key: 'ACME2' });
+		expect(await requireProject(ctx, 'ACME2')).toMatchObject({ icon: '🚀', color: 'teal' });
+		await expect(requireProject(ctx, 'ACME')).rejects.toMatchObject({ code: 'not_found' });
+		await updateProject(ctx, 'ACME2', { ...input, icon: '', color: '' });
+		expect(await requireProject(ctx, 'ACME2')).toMatchObject({ icon: null, color: null });
+		await expect(updateProject(ctx, 'ACME2', { ...input, icon: 'abc' })).rejects.toMatchObject({
+			code: 'validation'
+		});
+		await expect(updateProject(ctx, 'ACME2', { ...input, color: 'purple' })).rejects.toMatchObject({
+			code: 'validation'
 		});
 	});
 

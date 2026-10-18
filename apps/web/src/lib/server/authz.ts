@@ -36,17 +36,16 @@ export function can(actor: Actor, action: Action, res: Resource = {}): boolean {
 		case 'user:manage':
 		case 'project:manage':
 			return false;
+		// ゲストも参加しているプロジェクトの課題は作成・編集できる（削除はメンバー以上）
 		case 'issue:create':
+		case 'issue:edit':
+		case 'issue:changeStatus':
+		case 'issue:assign':
 		case 'comment:create':
 		case 'attachment:create':
 			return true;
-		case 'issue:assign':
 		case 'issue:delete':
 			return isMember;
-		case 'issue:edit':
-			return isMember || res.reporterId === actor.id;
-		case 'issue:changeStatus':
-			return isMember || (res.assigneeId != null && res.assigneeId === actor.id);
 		case 'comment:modify':
 			return res.authorId === actor.id;
 		case 'attachment:delete':

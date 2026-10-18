@@ -5,6 +5,7 @@ import type { Priority } from '$lib/labels';
 import type { AppContext } from '../context';
 import type { DB } from '../db';
 import { comment, issue, notification, userIntegration } from '../db/schema';
+import { listStatusesOf } from '../services/issue-fields';
 import { listAssignableUsers } from '../services/projects';
 import { channelConfig, providers, toDirectMessage, type DmSource } from './channels';
 import type { IssueEvent, NotifyInput } from './events';
@@ -101,13 +102,17 @@ async function sendDirectMessages(
 			)
 		);
 	if (links.length === 0) return;
+	const statuses = planned.some((n) => n.type === 'status_changed')
+		? await listStatusesOf(ctx.db, input.project.id)
+		: [];
 	const byUser = new Map(planned.map((n) => [n.userId, n]));
 	const src: DmSource = {
 		baseUrl: ctx.baseUrl,
 		projectKey: input.project.key,
 		issue: { number: input.issue.number, title: input.issue.title, priority },
 		actorName: ctx.actor.name,
-		events: input.events
+		events: input.events,
+		statuses
 	};
 	for (const l of links) {
 		const m = toDirectMessage(src, byUser.get(l.userId)!);

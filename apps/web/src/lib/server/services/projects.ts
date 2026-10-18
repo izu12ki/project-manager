@@ -4,9 +4,11 @@ import * as v from 'valibot';
 import { authorize } from '../authz';
 import type { AppContext } from '../context';
 import type { DB } from '../db';
+import { COLORS } from '$lib/labels';
 import { issue, project, projectMember, user } from '../db/schema';
 import { AppError } from '../errors';
 import { parse } from '../validation';
+import { defaultFieldInserts } from './issue-fields';
 
 export type ProjectRow = typeof project.$inferSelect;
 
@@ -23,6 +25,23 @@ const ProjectNameSchema = v.pipe(
 	v.maxLength(100, 'プロジェクト名は100文字以内で入力してください')
 );
 const DescriptionSchema = v.optional(v.pipe(v.string(), v.maxLength(10_000)), '');
+/** 絵文字 1 つや 2 文字程度の略称を想定。空はキーの頭文字 */
+const IconSchema = v.optional(
+	v.pipe(
+		v.string(),
+		v.trim(),
+		v.check(
+			(s) => Array.from(new Intl.Segmenter().segment(s)).length <= 2,
+			'アイコンは2文字以内で入力してください'
+		)
+	),
+	''
+);
+/** '' は自動 */
+const ColorSchema = v.optional(
+	v.union([v.literal(''), v.picklist(COLORS)], '色を選択してください'),
+	''
+);
 
 export async function listProjects(ctx: AppContext): Promise<ProjectRow[]> {
 	if (ctx.actor.role === 'admin') {
@@ -82,21 +101,58 @@ export async function createProject(ctx: AppContext, input: unknown): Promise<{ 
 		.select({ id: project.id })
 		.from(project)
 		.where(eq(project.key, data.key));
-	if (dup) {
-		throw new AppError('conflict', 'このキーは既に使われています', {
-			key: ['このキーは既に使われています']
-		});
-	}
-	await ctx.db.insert(project).values({ id: uuidv7(), ...data });
+	if (dup) throw keyTaken();
+	const id = uuidv7();
+	await ctx.db.batch([
+		ctx.db.insert(project).values({ id, ...data }),
+		...defaultFieldInserts(ctx.db, id)
+	]);
 	return { key: data.key };
 }
 
-export async function updateProject(ctx: AppContext, key: string, input: unknown): Promise<void> {
+const keyTaken = () =>
+	new AppError('conflict', 'このキーは既に使われています', {
+		key: ['このキーは既に使われています']
+	});
+
+/** キーを変えると URL と課題キー（ACME-12 など）が変わる。変更後のキーを返す */
+export async function updateProject(
+	ctx: AppContext,
+	key: string,
+	input: unknown
+): Promise<{ key: string }> {
 	authorize(ctx.actor, 'project:manage');
 	const p = await requireProject(ctx, key);
-	const data = parse(v.object({ name: ProjectNameSchema, description: DescriptionSchema }), input);
-	await ctx.db.update(project).set(data).where(eq(project.id, p.id));
+	const data = parse(
+		v.object({
+			key: v.optional(KeySchema),
+			name: ProjectNameSchema,
+			description: DescriptionSchema,
+			icon: IconSchema,
+			color: ColorSchema
+		}),
+		input
+	);
+	const newKey = data.key ?? p.key;
+	if (newKey !== p.key) {
+		const [dup] = await ctx.db
+			.select({ id: project.id })
+			.from(project)
+			.where(eq(project.key, newKey));
+		if (dup) throw keyTaken();
+	}
+	await ctx.db
+		.update(project)
+		.set({
+			key: newKey,
+			name: data.name,
+			description: data.description,
+			icon: data.icon || null,
+			color: data.color || null
+		})
+		.where(eq(project.id, p.id));
 	forgetProject(ctx, key);
+	return { key: newKey };
 }
 
 export async function setProjectArchived(

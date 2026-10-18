@@ -1,12 +1,12 @@
 <script lang="ts">
-	import { Flag, Inbox, Search, SearchX } from '@lucide/svelte';
+	import { Flag, Inbox, Search, SearchX, Trash2 } from '@lucide/svelte';
+	import IssueTypeTag from '$lib/components/IssueTypeTag.svelte';
 	import PriorityPill from '$lib/components/PriorityPill.svelte';
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import {
 		PRIORITIES,
 		PRIORITY_LABEL,
-		STATUSES,
-		STATUS_LABEL,
+		formatDateTime,
 		formatDue,
 		isDueAlert,
 		milestoneLabel
@@ -43,11 +43,23 @@
 			<label class="label text-[13px]" for="filter-status">ステータス</label>
 			<select class="select" id="filter-status" name="status">
 				<option value="">すべて</option>
-				{#each STATUSES as s (s)}
-					<option value={s} selected={data.filters.status === s}>{STATUS_LABEL[s]}</option>
+				{#each data.statuses as s (s.key)}
+					<option value={s.key} selected={data.filters.status === s.key}>{s.name}</option>
 				{/each}
 			</select>
 		</div>
+		{#if data.issueTypes.length > 0}
+			<div class="field w-36 gap-1.5">
+				<label class="label text-[13px]" for="filter-type">種別</label>
+				<select class="select" id="filter-type" name="type">
+					<option value="">すべて</option>
+					<option value="none" selected={data.filters.typeId === 'none'}>未設定</option>
+					{#each data.issueTypes as t (t.id)}
+						<option value={t.id} selected={data.filters.typeId === t.id}>{t.name}</option>
+					{/each}
+				</select>
+			</div>
+		{/if}
 		<div class="field w-36 gap-1.5">
 			<label class="label text-[13px]" for="filter-priority">優先度</label>
 			<select class="select" id="filter-priority" name="priority">
@@ -134,6 +146,7 @@
 							>{data.project.key}-{i.number}</span
 						>
 						<span role="cell" class="flex min-w-0 items-center gap-2">
+							{#if i.typeName}<IssueTypeTag name={i.typeName} color={i.typeColor} />{/if}
 							<a href={`${base}/issues/${i.number}`} class="title truncate">{i.title}</a>
 							{#if i.categoryName}<span class="tag">{i.categoryName}</span>{/if}
 						</span>
@@ -159,9 +172,49 @@
 			</div>
 		</div>
 	{/if}
+
+	{#if data.deletedIssues.length > 0}
+		<details class="deleted">
+			<summary class="text-[13px] text-muted-foreground">
+				<Trash2 size={14} />削除した課題 {data.deletedIssues.length} 件
+			</summary>
+			<ul>
+				{#each data.deletedIssues as d (d.number)}
+					<li>
+						<span class="mono text-[13px] text-muted-foreground">{data.project.key}-{d.number}</span
+						>
+						<a href={`${base}/issues/${d.number}`} class="min-w-0 truncate">{d.title}</a>
+						<span class="ml-auto shrink-0 text-xs text-muted-foreground"
+							>{d.deletedByName ?? '—'} が {d.deletedAt ? formatDateTime(d.deletedAt) : ''} に削除</span
+						>
+					</li>
+				{/each}
+			</ul>
+		</details>
+	{/if}
 </section>
 
 <style>
+	.deleted summary {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		cursor: pointer;
+	}
+	.deleted ul {
+		display: grid;
+		margin: 8px 0 0;
+		padding: 0;
+		list-style: none;
+		border-top: 1px solid var(--border);
+	}
+	.deleted li {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		min-height: 40px;
+		border-bottom: 1px solid var(--border);
+	}
 	.row {
 		position: relative;
 		min-height: 48px;

@@ -31,7 +31,11 @@ describe('invitations', () => {
 	it('admin 以外は招待できない', async () => {
 		const member = await seedUser(db, 'member');
 		await expect(
-			createInvitation(ctxOf(base, member), { email: 'x@example.com', role: 'member' })
+			createInvitation(ctxOf(base, member), {
+				email: 'x@example.com',
+				role: 'member',
+				projectIds: [projectId]
+			})
 		).rejects.toMatchObject({ code: 'forbidden' });
 	});
 
@@ -39,7 +43,7 @@ describe('invitations', () => {
 		const { url } = await createInvitation(ctxOf(base, admin), {
 			email: 'Guest@Example.com',
 			role: 'guest',
-			projectId
+			projectIds: [projectId]
 		});
 		expect(url).toMatch(/^http:\/\/localhost:5173\/invite\/[A-Za-z0-9_-]{43}$/);
 		expect(base.sent).toHaveLength(1);
@@ -50,19 +54,40 @@ describe('invitations', () => {
 		expect(await getInvitationByToken(db, tokenOf(url))).toEqual({
 			email: 'guest@example.com',
 			role: 'guest',
-			projectName: 'Acme'
+			projectNames: ['Acme']
 		});
 	});
 
-	it('ゲストの招待にはプロジェクトが必須', async () => {
-		await expect(
-			createInvitation(ctxOf(base, admin), { email: 'g@example.com', role: 'guest' })
-		).rejects.toMatchObject({ code: 'validation' });
+	it('メンバー・ゲストとも参加プロジェクトが必須', async () => {
+		for (const role of ['guest', 'member']) {
+			await expect(
+				createInvitation(ctxOf(base, admin), { email: 'g@example.com', role, projectIds: [] })
+			).rejects.toMatchObject({ code: 'validation' });
+		}
+	});
+
+	it('複数のプロジェクトに招待でき、受諾するとすべてに参加する', async () => {
+		const { id: other } = await seedProject(db, { key: 'BETA', name: 'Beta' });
+		const { url } = await createInvitation(ctxOf(base, admin), {
+			email: 'm@example.com',
+			role: 'member',
+			projectIds: [projectId, other]
+		});
+		expect(base.sent[0].subject).toContain('「Acme」「Beta」');
+		expect((await getInvitationByToken(db, tokenOf(url)))?.projectNames).toEqual(['Acme', 'Beta']);
+		await acceptInvitation(base, { token: tokenOf(url), name: 'M', password: 'password-1234' });
+		const [u] = await db.select().from(user).where(eq(user.email, 'm@example.com'));
+		const joined = await db.select().from(projectMember).where(eq(projectMember.userId, u.id));
+		expect(joined.map((m) => m.projectId).sort()).toEqual([projectId, other].sort());
 	});
 
 	it('登録済みのメールアドレスは conflict', async () => {
 		await expect(
-			createInvitation(ctxOf(base, admin), { email: admin.email, role: 'member' })
+			createInvitation(ctxOf(base, admin), {
+				email: admin.email,
+				role: 'member',
+				projectIds: [projectId]
+			})
 		).rejects.toMatchObject({ code: 'conflict' });
 	});
 
@@ -70,7 +95,7 @@ describe('invitations', () => {
 		const { url } = await createInvitation(ctxOf(base, admin), {
 			email: 'guest@example.com',
 			role: 'guest',
-			projectId
+			projectIds: [projectId]
 		});
 		const input = { token: tokenOf(url), name: '顧客', password: 'password-1234' };
 
@@ -88,7 +113,8 @@ describe('invitations', () => {
 	it('期限切れのリンクは使えない', async () => {
 		const { url } = await createInvitation(ctxOf(base, admin), {
 			email: 'm@example.com',
-			role: 'member'
+			role: 'member',
+			projectIds: [projectId]
 		});
 		await db.update(invitation).set({ expiresAt: new Date(Date.now() - 1000) });
 		expect(await getInvitationByToken(db, tokenOf(url))).toBeNull();
@@ -100,7 +126,11 @@ describe('invitations', () => {
 
 	it('再発行すると古いリンクは無効になり、メールは送らない', async () => {
 		const ctx = ctxOf(base, admin);
-		const { url: oldUrl } = await createInvitation(ctx, { email: 'm@example.com', role: 'member' });
+		const { url: oldUrl } = await createInvitation(ctx, {
+			email: 'm@example.com',
+			role: 'member',
+			projectIds: [projectId]
+		});
 		const [pending] = await listPendingInvitations(ctx);
 		const { url: newUrl } = await reissueInvitation(ctx, pending.id);
 
@@ -113,7 +143,11 @@ describe('invitations', () => {
 
 	it('取り消すと一覧から消える', async () => {
 		const ctx = ctxOf(base, admin);
-		await createInvitation(ctx, { email: 'm@example.com', role: 'member' });
+		await createInvitation(ctx, {
+			email: 'm@example.com',
+			role: 'member',
+			projectIds: [projectId]
+		});
 		const [pending] = await listPendingInvitations(ctx);
 		await revokeInvitation(ctx, pending.id);
 		expect(await listPendingInvitations(ctx)).toHaveLength(0);
@@ -121,7 +155,11 @@ describe('invitations', () => {
 
 	it('再発行後、古いトークンでは受諾できない', async () => {
 		const ctx = ctxOf(base, admin);
-		const { url: oldUrl } = await createInvitation(ctx, { email: 'm@example.com', role: 'member' });
+		const { url: oldUrl } = await createInvitation(ctx, {
+			email: 'm@example.com',
+			role: 'member',
+			projectIds: [projectId]
+		});
 		const [pending] = await listPendingInvitations(ctx);
 		await reissueInvitation(ctx, pending.id);
 
@@ -133,7 +171,11 @@ describe('invitations', () => {
 
 	it('取り消し後、そのトークンでは受諾できない', async () => {
 		const ctx = ctxOf(base, admin);
-		const { url } = await createInvitation(ctx, { email: 'm@example.com', role: 'member' });
+		const { url } = await createInvitation(ctx, {
+			email: 'm@example.com',
+			role: 'member',
+			projectIds: [projectId]
+		});
 		const [pending] = await listPendingInvitations(ctx);
 		await revokeInvitation(ctx, pending.id);
 
@@ -146,7 +188,8 @@ describe('invitations', () => {
 	it('受諾時にメールが既に登録されていたら conflict で、招待は使用済みにならない', async () => {
 		const { url } = await createInvitation(ctxOf(base, admin), {
 			email: 'dup@example.com',
-			role: 'member'
+			role: 'member',
+			projectIds: [projectId]
 		});
 		await db.insert(user).values({
 			id: 'u-dup',
@@ -165,10 +208,11 @@ describe('invitations', () => {
 
 	it('プロジェクトで絞り込める', async () => {
 		const ctx = ctxOf(base, admin);
-		await createInvitation(ctx, { email: 'g@example.com', role: 'guest', projectId });
-		await createInvitation(ctx, { email: 'm@example.com', role: 'member' });
+		const { id: other } = await seedProject(db, { key: 'BETA', name: 'Beta' });
+		await createInvitation(ctx, { email: 'g@example.com', role: 'guest', projectIds: [projectId] });
+		await createInvitation(ctx, { email: 'm@example.com', role: 'member', projectIds: [other] });
 		const list = await listPendingInvitations(ctx, { projectId });
 		expect(list.map((i) => i.email)).toEqual(['g@example.com']);
-		expect(list[0]).toMatchObject({ projectName: 'Acme', expired: false });
+		expect(list[0]).toMatchObject({ projects: [{ id: projectId, name: 'Acme' }], expired: false });
 	});
 });

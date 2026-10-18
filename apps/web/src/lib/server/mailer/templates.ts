@@ -1,10 +1,10 @@
-export function invitationMail(p: {
-	url: string;
-	inviterName: string;
-	projectName: string | null;
-}) {
-	const where = p.projectName ? `「${p.projectName}」` : 'Project Manager';
-	const whereEn = p.projectName ? `"${p.projectName}"` : 'Project Manager';
+export function invitationMail(p: { url: string; inviterName: string; projectNames: string[] }) {
+	const where = p.projectNames.length
+		? p.projectNames.map((n) => `「${n}」`).join('')
+		: 'Project Manager';
+	const whereEn = p.projectNames.length
+		? p.projectNames.map((n) => `"${n}"`).join(', ')
+		: 'Project Manager';
 	return {
 		subject: `${where}に招待されました / You are invited to ${whereEn}`,
 		text: [

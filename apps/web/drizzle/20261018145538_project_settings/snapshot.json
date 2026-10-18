@@ -1,0 +1,2392 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "id": "98835179-2a3b-4baa-864e-17e80a4fad89",
+  "prevIds": [
+    "b655f7de-2cf8-4247-87dc-effdedf2953b"
+  ],
+  "ddl": [
+    {
+      "name": "account",
+      "entityType": "tables"
+    },
+    {
+      "name": "attachment",
+      "entityType": "tables"
+    },
+    {
+      "name": "category",
+      "entityType": "tables"
+    },
+    {
+      "name": "comment",
+      "entityType": "tables"
+    },
+    {
+      "name": "invitation",
+      "entityType": "tables"
+    },
+    {
+      "name": "invitation_project",
+      "entityType": "tables"
+    },
+    {
+      "name": "issue",
+      "entityType": "tables"
+    },
+    {
+      "name": "issue_status",
+      "entityType": "tables"
+    },
+    {
+      "name": "issue_type",
+      "entityType": "tables"
+    },
+    {
+      "name": "milestone",
+      "entityType": "tables"
+    },
+    {
+      "name": "notification",
+      "entityType": "tables"
+    },
+    {
+      "name": "project",
+      "entityType": "tables"
+    },
+    {
+      "name": "project_member",
+      "entityType": "tables"
+    },
+    {
+      "name": "rate_limit",
+      "entityType": "tables"
+    },
+    {
+      "name": "session",
+      "entityType": "tables"
+    },
+    {
+      "name": "user",
+      "entityType": "tables"
+    },
+    {
+      "name": "user_integration",
+      "entityType": "tables"
+    },
+    {
+      "name": "verification",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "account"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "account_id",
+      "entityType": "columns",
+      "table": "account"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "provider_id",
+      "entityType": "columns",
+      "table": "account"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "table": "account"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "access_token",
+      "entityType": "columns",
+      "table": "account"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "refresh_token",
+      "entityType": "columns",
+      "table": "account"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id_token",
+      "entityType": "columns",
+      "table": "account"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "access_token_expires_at",
+      "entityType": "columns",
+      "table": "account"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "refresh_token_expires_at",
+      "entityType": "columns",
+      "table": "account"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "scope",
+      "entityType": "columns",
+      "table": "account"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "password",
+      "entityType": "columns",
+      "table": "account"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "account"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "account"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "attachment"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "project_id",
+      "entityType": "columns",
+      "table": "attachment"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "issue_id",
+      "entityType": "columns",
+      "table": "attachment"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "comment_id",
+      "entityType": "columns",
+      "table": "attachment"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "uploader_id",
+      "entityType": "columns",
+      "table": "attachment"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "filename",
+      "entityType": "columns",
+      "table": "attachment"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "content_type",
+      "entityType": "columns",
+      "table": "attachment"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "size",
+      "entityType": "columns",
+      "table": "attachment"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "r2_key",
+      "entityType": "columns",
+      "table": "attachment"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "attachment"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "category"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "project_id",
+      "entityType": "columns",
+      "table": "category"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "category"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "category"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "comment"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "issue_id",
+      "entityType": "columns",
+      "table": "comment"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "author_id",
+      "entityType": "columns",
+      "table": "comment"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "body",
+      "entityType": "columns",
+      "table": "comment"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "comment"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "comment"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "invitation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "email",
+      "entityType": "columns",
+      "table": "invitation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "role",
+      "entityType": "columns",
+      "table": "invitation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "token_hash",
+      "entityType": "columns",
+      "table": "invitation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "invited_by",
+      "entityType": "columns",
+      "table": "invitation"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "table": "invitation"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "accepted_at",
+      "entityType": "columns",
+      "table": "invitation"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "invitation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "invitation_id",
+      "entityType": "columns",
+      "table": "invitation_project"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "project_id",
+      "entityType": "columns",
+      "table": "invitation_project"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "issue"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "project_id",
+      "entityType": "columns",
+      "table": "issue"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "number",
+      "entityType": "columns",
+      "table": "issue"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "title",
+      "entityType": "columns",
+      "table": "issue"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "''",
+      "generated": null,
+      "name": "description",
+      "entityType": "columns",
+      "table": "issue"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "type_id",
+      "entityType": "columns",
+      "table": "issue"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'todo'",
+      "generated": null,
+      "name": "status",
+      "entityType": "columns",
+      "table": "issue"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "resolution",
+      "entityType": "columns",
+      "table": "issue"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'none'",
+      "generated": null,
+      "name": "priority",
+      "entityType": "columns",
+      "table": "issue"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "assignee_id",
+      "entityType": "columns",
+      "table": "issue"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "reporter_id",
+      "entityType": "columns",
+      "table": "issue"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "start_date",
+      "entityType": "columns",
+      "table": "issue"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "due_date",
+      "entityType": "columns",
+      "table": "issue"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "category_id",
+      "entityType": "columns",
+      "table": "issue"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "milestone_id",
+      "entityType": "columns",
+      "table": "issue"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "position",
+      "entityType": "columns",
+      "table": "issue"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "deleted_at",
+      "entityType": "columns",
+      "table": "issue"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "deleted_by",
+      "entityType": "columns",
+      "table": "issue"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "issue"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "issue"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "project_id",
+      "entityType": "columns",
+      "table": "issue_status"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "key",
+      "entityType": "columns",
+      "table": "issue_status"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "issue_status"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'gray'",
+      "generated": null,
+      "name": "color",
+      "entityType": "columns",
+      "table": "issue_status"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "position",
+      "entityType": "columns",
+      "table": "issue_status"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "issue_status"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "issue_type"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "project_id",
+      "entityType": "columns",
+      "table": "issue_type"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "issue_type"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'gray'",
+      "generated": null,
+      "name": "color",
+      "entityType": "columns",
+      "table": "issue_type"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "position",
+      "entityType": "columns",
+      "table": "issue_type"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "issue_type"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "milestone"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "project_id",
+      "entityType": "columns",
+      "table": "milestone"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "milestone"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "release_date",
+      "entityType": "columns",
+      "table": "milestone"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "completed_at",
+      "entityType": "columns",
+      "table": "milestone"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "milestone"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "notification"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "table": "notification"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "actor_id",
+      "entityType": "columns",
+      "table": "notification"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "issue_id",
+      "entityType": "columns",
+      "table": "notification"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "type",
+      "entityType": "columns",
+      "table": "notification"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "comment_id",
+      "entityType": "columns",
+      "table": "notification"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "from_status",
+      "entityType": "columns",
+      "table": "notification"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "to_status",
+      "entityType": "columns",
+      "table": "notification"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "read_at",
+      "entityType": "columns",
+      "table": "notification"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "notification"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "project"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "key",
+      "entityType": "columns",
+      "table": "project"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "project"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "''",
+      "generated": null,
+      "name": "description",
+      "entityType": "columns",
+      "table": "project"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "icon",
+      "entityType": "columns",
+      "table": "project"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "color",
+      "entityType": "columns",
+      "table": "project"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "1",
+      "generated": null,
+      "name": "next_issue_number",
+      "entityType": "columns",
+      "table": "project"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "archived_at",
+      "entityType": "columns",
+      "table": "project"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "project"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "project"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "project_id",
+      "entityType": "columns",
+      "table": "project_member"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "table": "project_member"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "project_member"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "rate_limit"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "key",
+      "entityType": "columns",
+      "table": "rate_limit"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "count",
+      "entityType": "columns",
+      "table": "rate_limit"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_request",
+      "entityType": "columns",
+      "table": "rate_limit"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "session"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "table": "session"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "token",
+      "entityType": "columns",
+      "table": "session"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "session"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "session"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "ip_address",
+      "entityType": "columns",
+      "table": "session"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_agent",
+      "entityType": "columns",
+      "table": "session"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "table": "session"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "user"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "user"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "email",
+      "entityType": "columns",
+      "table": "user"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "false",
+      "generated": null,
+      "name": "email_verified",
+      "entityType": "columns",
+      "table": "user"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "image",
+      "entityType": "columns",
+      "table": "user"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'member'",
+      "generated": null,
+      "name": "role",
+      "entityType": "columns",
+      "table": "user"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "disabled_at",
+      "entityType": "columns",
+      "table": "user"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "user"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "user"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "table": "user_integration"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "provider",
+      "entityType": "columns",
+      "table": "user_integration"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "external_id",
+      "entityType": "columns",
+      "table": "user_integration"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "user_integration"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "verification"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "identifier",
+      "entityType": "columns",
+      "table": "verification"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "value",
+      "entityType": "columns",
+      "table": "verification"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "table": "verification"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "verification"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(cast(unixepoch('subsecond') * 1000 as integer))",
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "verification"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_account_user_id_user_id_fk",
+      "entityType": "fks",
+      "table": "account"
+    },
+    {
+      "columns": [
+        "project_id"
+      ],
+      "tableTo": "project",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_attachment_project_id_project_id_fk",
+      "entityType": "fks",
+      "table": "attachment"
+    },
+    {
+      "columns": [
+        "issue_id"
+      ],
+      "tableTo": "issue",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_attachment_issue_id_issue_id_fk",
+      "entityType": "fks",
+      "table": "attachment"
+    },
+    {
+      "columns": [
+        "comment_id"
+      ],
+      "tableTo": "comment",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "nameExplicit": false,
+      "name": "fk_attachment_comment_id_comment_id_fk",
+      "entityType": "fks",
+      "table": "attachment"
+    },
+    {
+      "columns": [
+        "uploader_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_attachment_uploader_id_user_id_fk",
+      "entityType": "fks",
+      "table": "attachment"
+    },
+    {
+      "columns": [
+        "project_id"
+      ],
+      "tableTo": "project",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_category_project_id_project_id_fk",
+      "entityType": "fks",
+      "table": "category"
+    },
+    {
+      "columns": [
+        "issue_id"
+      ],
+      "tableTo": "issue",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_comment_issue_id_issue_id_fk",
+      "entityType": "fks",
+      "table": "comment"
+    },
+    {
+      "columns": [
+        "author_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_comment_author_id_user_id_fk",
+      "entityType": "fks",
+      "table": "comment"
+    },
+    {
+      "columns": [
+        "invited_by"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_invitation_invited_by_user_id_fk",
+      "entityType": "fks",
+      "table": "invitation"
+    },
+    {
+      "columns": [
+        "invitation_id"
+      ],
+      "tableTo": "invitation",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_invitation_project_invitation_id_invitation_id_fk",
+      "entityType": "fks",
+      "table": "invitation_project"
+    },
+    {
+      "columns": [
+        "project_id"
+      ],
+      "tableTo": "project",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_invitation_project_project_id_project_id_fk",
+      "entityType": "fks",
+      "table": "invitation_project"
+    },
+    {
+      "columns": [
+        "project_id"
+      ],
+      "tableTo": "project",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_issue_project_id_project_id_fk",
+      "entityType": "fks",
+      "table": "issue"
+    },
+    {
+      "columns": [
+        "type_id"
+      ],
+      "tableTo": "issue_type",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "nameExplicit": false,
+      "name": "fk_issue_type_id_issue_type_id_fk",
+      "entityType": "fks",
+      "table": "issue"
+    },
+    {
+      "columns": [
+        "assignee_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_issue_assignee_id_user_id_fk",
+      "entityType": "fks",
+      "table": "issue"
+    },
+    {
+      "columns": [
+        "reporter_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_issue_reporter_id_user_id_fk",
+      "entityType": "fks",
+      "table": "issue"
+    },
+    {
+      "columns": [
+        "category_id"
+      ],
+      "tableTo": "category",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "nameExplicit": false,
+      "name": "fk_issue_category_id_category_id_fk",
+      "entityType": "fks",
+      "table": "issue"
+    },
+    {
+      "columns": [
+        "milestone_id"
+      ],
+      "tableTo": "milestone",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "nameExplicit": false,
+      "name": "fk_issue_milestone_id_milestone_id_fk",
+      "entityType": "fks",
+      "table": "issue"
+    },
+    {
+      "columns": [
+        "deleted_by"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_issue_deleted_by_user_id_fk",
+      "entityType": "fks",
+      "table": "issue"
+    },
+    {
+      "columns": [
+        "project_id"
+      ],
+      "tableTo": "project",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_issue_status_project_id_project_id_fk",
+      "entityType": "fks",
+      "table": "issue_status"
+    },
+    {
+      "columns": [
+        "project_id"
+      ],
+      "tableTo": "project",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_issue_type_project_id_project_id_fk",
+      "entityType": "fks",
+      "table": "issue_type"
+    },
+    {
+      "columns": [
+        "project_id"
+      ],
+      "tableTo": "project",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_milestone_project_id_project_id_fk",
+      "entityType": "fks",
+      "table": "milestone"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_notification_user_id_user_id_fk",
+      "entityType": "fks",
+      "table": "notification"
+    },
+    {
+      "columns": [
+        "actor_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_notification_actor_id_user_id_fk",
+      "entityType": "fks",
+      "table": "notification"
+    },
+    {
+      "columns": [
+        "issue_id"
+      ],
+      "tableTo": "issue",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_notification_issue_id_issue_id_fk",
+      "entityType": "fks",
+      "table": "notification"
+    },
+    {
+      "columns": [
+        "comment_id"
+      ],
+      "tableTo": "comment",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_notification_comment_id_comment_id_fk",
+      "entityType": "fks",
+      "table": "notification"
+    },
+    {
+      "columns": [
+        "project_id"
+      ],
+      "tableTo": "project",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_project_member_project_id_project_id_fk",
+      "entityType": "fks",
+      "table": "project_member"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_project_member_user_id_user_id_fk",
+      "entityType": "fks",
+      "table": "project_member"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_session_user_id_user_id_fk",
+      "entityType": "fks",
+      "table": "session"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_user_integration_user_id_user_id_fk",
+      "entityType": "fks",
+      "table": "user_integration"
+    },
+    {
+      "columns": [
+        "invitation_id",
+        "project_id"
+      ],
+      "nameExplicit": false,
+      "name": "invitation_project_pk",
+      "entityType": "pks",
+      "table": "invitation_project"
+    },
+    {
+      "columns": [
+        "project_id",
+        "key"
+      ],
+      "nameExplicit": false,
+      "name": "issue_status_pk",
+      "entityType": "pks",
+      "table": "issue_status"
+    },
+    {
+      "columns": [
+        "project_id",
+        "user_id"
+      ],
+      "nameExplicit": false,
+      "name": "project_member_pk",
+      "entityType": "pks",
+      "table": "project_member"
+    },
+    {
+      "columns": [
+        "user_id",
+        "provider"
+      ],
+      "nameExplicit": false,
+      "name": "user_integration_pk",
+      "entityType": "pks",
+      "table": "user_integration"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "account_pk",
+      "table": "account",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "attachment_pk",
+      "table": "attachment",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "category_pk",
+      "table": "category",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "comment_pk",
+      "table": "comment",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "invitation_pk",
+      "table": "invitation",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "issue_pk",
+      "table": "issue",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "issue_type_pk",
+      "table": "issue_type",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "milestone_pk",
+      "table": "milestone",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "notification_pk",
+      "table": "notification",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "project_pk",
+      "table": "project",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "rate_limit_pk",
+      "table": "rate_limit",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "session_pk",
+      "table": "session",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "user_pk",
+      "table": "user",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "verification_pk",
+      "table": "verification",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "account_user_id_idx",
+      "entityType": "indexes",
+      "table": "account"
+    },
+    {
+      "columns": [
+        {
+          "value": "r2_key",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "attachment_r2_key_uq",
+      "entityType": "indexes",
+      "table": "attachment"
+    },
+    {
+      "columns": [
+        {
+          "value": "issue_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "attachment_issue_idx",
+      "entityType": "indexes",
+      "table": "attachment"
+    },
+    {
+      "columns": [
+        {
+          "value": "uploader_id",
+          "isExpression": false
+        },
+        {
+          "value": "issue_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "attachment_uploader_idx",
+      "entityType": "indexes",
+      "table": "attachment"
+    },
+    {
+      "columns": [
+        {
+          "value": "project_id",
+          "isExpression": false
+        },
+        {
+          "value": "name",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "category_project_name_uq",
+      "entityType": "indexes",
+      "table": "category"
+    },
+    {
+      "columns": [
+        {
+          "value": "issue_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "comment_issue_idx",
+      "entityType": "indexes",
+      "table": "comment"
+    },
+    {
+      "columns": [
+        {
+          "value": "token_hash",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "invitation_token_hash_uq",
+      "entityType": "indexes",
+      "table": "invitation"
+    },
+    {
+      "columns": [
+        {
+          "value": "email",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "invitation_email_idx",
+      "entityType": "indexes",
+      "table": "invitation"
+    },
+    {
+      "columns": [
+        {
+          "value": "project_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "invitation_project_project_idx",
+      "entityType": "indexes",
+      "table": "invitation_project"
+    },
+    {
+      "columns": [
+        {
+          "value": "project_id",
+          "isExpression": false
+        },
+        {
+          "value": "number",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "issue_project_number_uq",
+      "entityType": "indexes",
+      "table": "issue"
+    },
+    {
+      "columns": [
+        {
+          "value": "project_id",
+          "isExpression": false
+        },
+        {
+          "value": "status",
+          "isExpression": false
+        },
+        {
+          "value": "position",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "issue_board_idx",
+      "entityType": "indexes",
+      "table": "issue"
+    },
+    {
+      "columns": [
+        {
+          "value": "assignee_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "issue_assignee_idx",
+      "entityType": "indexes",
+      "table": "issue"
+    },
+    {
+      "columns": [
+        {
+          "value": "project_id",
+          "isExpression": false
+        },
+        {
+          "value": "name",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "issue_type_project_name_uq",
+      "entityType": "indexes",
+      "table": "issue_type"
+    },
+    {
+      "columns": [
+        {
+          "value": "project_id",
+          "isExpression": false
+        },
+        {
+          "value": "name",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "milestone_project_name_uq",
+      "entityType": "indexes",
+      "table": "milestone"
+    },
+    {
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false
+        },
+        {
+          "value": "read_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "notification_user_read_idx",
+      "entityType": "indexes",
+      "table": "notification"
+    },
+    {
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false
+        },
+        {
+          "value": "created_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "notification_user_created_idx",
+      "entityType": "indexes",
+      "table": "notification"
+    },
+    {
+      "columns": [
+        {
+          "value": "key",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "project_key_uq",
+      "entityType": "indexes",
+      "table": "project"
+    },
+    {
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "project_member_user_idx",
+      "entityType": "indexes",
+      "table": "project_member"
+    },
+    {
+      "columns": [
+        {
+          "value": "key",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "rate_limit_key_uq",
+      "entityType": "indexes",
+      "table": "rate_limit"
+    },
+    {
+      "columns": [
+        {
+          "value": "token",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "session_token_uq",
+      "entityType": "indexes",
+      "table": "session"
+    },
+    {
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "session_user_id_idx",
+      "entityType": "indexes",
+      "table": "session"
+    },
+    {
+      "columns": [
+        {
+          "value": "email",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "user_email_uq",
+      "entityType": "indexes",
+      "table": "user"
+    },
+    {
+      "columns": [
+        {
+          "value": "identifier",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "verification_identifier_idx",
+      "entityType": "indexes",
+      "table": "verification"
+    }
+  ],
+  "renames": []
+}

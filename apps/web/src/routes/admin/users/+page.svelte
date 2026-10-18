@@ -4,6 +4,7 @@
 	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
 	import FormAlert from '$lib/components/FormAlert.svelte';
 	import InviteLinkBox from '$lib/components/InviteLinkBox.svelte';
+	import MultiSelect from '$lib/components/MultiSelect.svelte';
 	import RolePill from '$lib/components/RolePill.svelte';
 	import { formatDate } from '$lib/labels';
 	import type { PageProps } from './$types';
@@ -38,19 +39,14 @@
 					</select>
 				</div>
 				<div class="field">
-					<label class="label" for="invite-project">参加プロジェクト</label>
-					<select
-						class="select"
+					<span class="label" id="invite-project-label">参加プロジェクト</span>
+					<MultiSelect
 						id="invite-project"
-						name="projectId"
+						name="projectIds"
+						options={data.projects.map((p) => ({ value: p.id, label: p.name }))}
 						aria-describedby="invite-project-hint"
-					>
-						<option value="">なし</option>
-						{#each data.projects as p (p.id)}
-							<option value={p.id}>{p.name}</option>
-						{/each}
-					</select>
-					<p class="hint" id="invite-project-hint">ゲストは必須</p>
+					/>
+					<p class="hint" id="invite-project-hint">複数選択可</p>
 				</div>
 			</div>
 			<div><button type="submit" class="btn btn-primary">招待する</button></div>
@@ -122,8 +118,8 @@
 						<Mail size={16} class="shrink-0 text-muted-foreground" />
 						<span class="min-w-40 flex-1 truncate">{inv.email}</span>
 						<RolePill role={inv.role} />
-						{#if inv.projectName}<span class="text-[13px] text-muted-foreground"
-								>{inv.projectName}</span
+						{#if inv.projects.length > 0}<span class="text-[13px] text-muted-foreground"
+								>{inv.projects.map((p) => p.name).join('、')}</span
 							>{/if}
 						{#if inv.expired}<span class="pill pill-urgent">期限切れ</span>{/if}
 						<span class="text-xs text-muted-foreground tabular-nums"
@@ -162,7 +158,7 @@
 	}
 	@media (min-width: 720px) {
 		.invite-grid {
-			grid-template-columns: minmax(0, 1fr) 160px 220px;
+			grid-template-columns: minmax(0, 1fr) 160px 260px;
 		}
 	}
 	.users {

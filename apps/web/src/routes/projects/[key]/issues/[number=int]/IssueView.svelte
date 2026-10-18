@@ -10,8 +10,8 @@
 	import {
 		PRIORITIES,
 		PRIORITY_LABEL,
-		STATUSES,
-		STATUS_LABEL,
+		RESOLUTIONS,
+		RESOLUTION_LABEL,
 		colorFor,
 		formatDateTime,
 		milestoneLabel
@@ -152,8 +152,22 @@
 					{...save.fields.status.as('select', issue.status)}
 					disabled={!perms.changeStatus}
 				>
-					{#each STATUSES as s (s)}
-						<option value={s}>{STATUS_LABEL[s]}</option>
+					{#each detail.statuses as s (s.key)}
+						<option value={s.key}>{s.name}</option>
+					{/each}
+				</select>
+			</div>
+			<div class="prop-row">
+				<label for="issue-resolution">完了理由</label>
+				<select
+					class="select"
+					id="issue-resolution"
+					{...save.fields.resolution.as('select', issue.resolution ?? '')}
+					disabled={!perms.edit}
+				>
+					<option value="">未設定</option>
+					{#each RESOLUTIONS as r (r)}
+						<option value={r}>{RESOLUTION_LABEL[r]}</option>
 					{/each}
 				</select>
 			</div>
@@ -254,10 +268,40 @@
 
 <section class="detail" class:sheet={variant === 'sheet'}>
 	<div class="grid min-w-0 grid-cols-1 gap-6">
+		{#if issue.deletedAt}
+			<div role="status" class="alert">
+				<Trash2 />
+				<div>
+					この課題は {issue.deletedByName ?? '—'} が {formatDateTime(issue.deletedAt)} に削除しました（閲覧のみ）。
+				</div>
+			</div>
+		{/if}
 		<header class="grid gap-2">
+			{#if detail.issueTypes.length > 0 || issue.typeId}
+				<div class="flex items-center gap-2">
+					<label for={`issue-type-${variant}`} class="text-[13px] text-muted-foreground">種別</label
+					>
+					<!-- 属性フォームに form 属性で紐づける。タイトル・本文の編集中でなければ選んだ時点で保存する -->
+					<select
+						class="select type-select"
+						id={`issue-type-${variant}`}
+						{...save.fields.typeId.as('select', issue.typeId ?? '')}
+						form={attrFormId}
+						disabled={!perms.edit}
+						onchange={(e) => {
+							if (!editing) e.currentTarget.form?.requestSubmit();
+						}}
+					>
+						{#if !issue.typeId}<option value="">未設定</option>{/if}
+						{#each detail.issueTypes as t (t.id)}
+							<option value={t.id}>{t.name}</option>
+						{/each}
+					</select>
+				</div>
+			{/if}
 			<div class="flex flex-wrap items-center gap-2">
 				<span class="mono text-[13px] text-muted-foreground">{projectKey}-{issue.number}</span>
-				<StatusPill status={issue.status} />
+				<StatusPill status={issue.status} statuses={detail.statuses} />
 				<PriorityPill priority={issue.priority} />
 			</div>
 			<div class="flex items-start gap-2">
@@ -482,7 +526,7 @@
 				<ConfirmAction
 					action="?/delete"
 					title="課題の削除"
-					description="この課題を削除してよろしいですか？&#10;この操作は元に戻せません。"
+					description="この課題を削除してよろしいですか？&#10;課題は一覧から消え、一覧の「削除した課題」から閲覧だけできます。"
 					confirmLabel="課題を削除する"
 					triggerClass="btn btn-danger w-full"
 				>
@@ -494,6 +538,10 @@
 </section>
 
 <style>
+	.type-select {
+		width: auto;
+		min-width: 140px;
+	}
 	.detail {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);

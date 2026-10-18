@@ -7,6 +7,12 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 	const projects = await listProjects(appContext(locals));
 	return {
 		user: locals.user,
-		projects: projects.map((p) => ({ key: p.key, name: p.name, archived: !!p.archivedAt }))
+		projects: projects.map((p) => ({
+			key: p.key,
+			name: p.name,
+			icon: p.icon,
+			color: p.color,
+			archived: !!p.archivedAt
+		}))
 	};
 };

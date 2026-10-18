@@ -1,4 +1,4 @@
-import { PRIORITY_LABEL, STATUS_LABEL, type Priority } from '$lib/labels';
+import { PRIORITY_LABEL, statusName, type Priority, type StatusDef } from '$lib/labels';
 import type { IssueEvent } from '../events';
 import { excerpt } from '../format';
 import type { PlannedNotification } from '../recipients';
@@ -10,6 +10,8 @@ export interface DmSource {
 	issue: { number: number; title: string; priority: Priority };
 	actorName: string;
 	events: IssueEvent[];
+	/** プロジェクトのステータス定義（名前の解決用） */
+	statuses?: StatusDef[];
 }
 
 const VERB: Record<DirectMessage['type'], string> = {
@@ -43,7 +45,7 @@ export function toDirectMessage(src: DmSource, n: PlannedNotification): DirectMe
 			break;
 		case 'status_changed':
 			if (n.fromStatus && n.toStatus)
-				detail = `${STATUS_LABEL[n.fromStatus]} → ${STATUS_LABEL[n.toStatus]}`;
+				detail = `${statusName(src.statuses, n.fromStatus)} → ${statusName(src.statuses, n.toStatus)}`;
 			break;
 		case 'commented':
 		case 'mentioned':

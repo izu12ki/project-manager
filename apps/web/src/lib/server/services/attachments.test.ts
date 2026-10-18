@@ -209,14 +209,14 @@ describe('attachments: open / delete', () => {
 		});
 	});
 
-	it('課題を削除すると添付の行と R2 の実体も消える', async () => {
+	it('課題を削除しても、削除履歴から見られるよう添付の行と R2 の実体は残す', async () => {
 		const a = await uploadAttachment(as(member), 'ACME', file('a.png'));
 		await createIssue(as(member), 'ACME', { title: 'A', description: `![a](${a.url})` });
 		await settle();
 		await deleteIssue(as(member), 'ACME', 1);
 		await settle();
-		expect(await db.select().from(attachment)).toHaveLength(0);
-		expect(store.objects.size).toBe(0);
+		expect(await db.select().from(attachment)).toHaveLength(1);
+		expect(store.objects.size).toBe(1);
 	});
 });
 

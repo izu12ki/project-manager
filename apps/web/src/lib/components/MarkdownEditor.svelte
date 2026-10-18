@@ -8,9 +8,11 @@
 	import type { MarkdownEditorHandle } from '$lib/editor/create-editor';
 	import type { MentionCandidate } from '$lib/mentions';
 	import AttachButton from './AttachButton.svelte';
+	import EditorMentionMenu from './EditorMentionMenu.svelte';
 	import MentionMenu from './MentionMenu.svelte';
 
 	type Commands = typeof import('$lib/editor/commands');
+	type MentionApi = typeof import('$lib/editor/mention-query');
 	type Mode = 'rich' | 'source';
 
 	let {
@@ -35,6 +37,7 @@
 	// Lexical は動的 import で読み込む。読み込みが終わるまでは textarea で編集する
 	let handle = $state.raw<MarkdownEditorHandle | null>(null);
 	let commands = $state.raw<Commands | null>(null);
+	let mentionApi = $state.raw<MentionApi | null>(null);
 	let active = $state.raw(new Set<Format>());
 	let invalid = $state(false);
 	let linkOpen = $state(false);
@@ -86,9 +89,10 @@
 		let cleanup = () => {};
 
 		async function load() {
-			const [{ createMarkdownEditor }, cmds] = await Promise.all([
+			const [{ createMarkdownEditor }, cmds, mention] = await Promise.all([
 				import('$lib/editor/create-editor'),
-				import('$lib/editor/commands')
+				import('$lib/editor/commands'),
+				import('$lib/editor/mention-query')
 			]);
 			if (disposed || !body || !textarea) return;
 			const hadFocus = document.activeElement === textarea;
@@ -107,6 +111,7 @@
 				h.destroy();
 			};
 			commands = cmds;
+			mentionApi = mention;
 			handle = h;
 			if (hadFocus && mode === 'rich') {
 				await tick();
@@ -359,7 +364,13 @@
 			<FileCode />
 		</button>
 	</div>
-	{#if mentionCandidates}<MentionMenu target={() => textarea} candidates={mentionCandidates} />{/if}
+	{#if mentionCandidates}
+		{#if rich && handle && mentionApi}
+			<EditorMentionMenu editor={handle.editor} api={mentionApi} candidates={mentionCandidates} />
+		{:else if !rich}
+			<MentionMenu target={() => textarea} candidates={mentionCandidates} />
+		{/if}
+	{/if}
 </div>
 
 <style>

@@ -80,7 +80,9 @@ export function createMarkdownEditor(opts: {
 	let source = '';
 	let baseline = '';
 
-	const exportMarkdown = () => editor.read(() => $convertToMarkdownString());
+	// 末尾の空白（メンション確定直後など）は mdast が `&#x20;` に直すので、そのまま空白に戻す
+	const exportMarkdown = () =>
+		editor.read(() => $convertToMarkdownString()).replace(/&#x20;$/, ' ');
 
 	const getMarkdown = () => {
 		const md = exportMarkdown();

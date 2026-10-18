@@ -238,6 +238,26 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	// 6c. メンバーがタイムラインで日付を調整する
 	await page.goto('/projects/ACME/issues/new');
 	await page.getByLabel('タイトル').fill('トップページ改修');
+	// 見たまま編集でも @ 補完でメンションできる
+	const mentionBody = page.getByRole('textbox', { name: '本文' });
+	await expect(mentionBody).toHaveAttribute('contenteditable', 'true');
+	await page.getByLabel('タイトル').focus();
+	await page.keyboard.press('Tab');
+	await expect(mentionBody).toBeFocused();
+	await page.keyboard.type('@顧客');
+	await page
+		.getByRole('listbox', { name: 'メンションする人' })
+		.getByRole('option', { name: '顧客 太郎' })
+		.click();
+	await page.keyboard.type('お願いします');
+	await expect(mentionBody.locator('.mention')).toHaveText('@顧客 太郎');
+	await expect(page.locator('textarea[name="description"]')).toHaveValue(
+		/^@\[顧客 太郎\]\(user:[0-9a-f-]{36}\) お願いします$/
+	);
+	// 通知の件数を変えないよう、確認できたら本文を消してから起票する
+	await page.keyboard.press('ControlOrMeta+a');
+	await page.keyboard.press('Backspace');
+	await expect(page.locator('textarea[name="description"]')).toHaveValue('');
 	await page.getByLabel('開始日').fill(jstDay(0));
 	await page.getByLabel('期限日').fill(jstDay(2));
 	// 手順 10 の「マイルストーン未設定」の絞り込みで 0 件になるよう v1.0 に入れる

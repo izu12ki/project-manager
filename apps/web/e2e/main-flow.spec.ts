@@ -467,11 +467,14 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 			buffer: Buffer.from('%PDF-1.4\n%%EOF\n')
 		});
 	await expect(commentBox).toHaveValue(/アップロード中: spec\.pdf/);
+	// 切り替えるとプレースホルダがエスケープされて結果を差し込めないので、終わるまで切り替えさせない
+	await expect(commentToggle).toBeDisabled();
 	await page.getByRole('button', { name: 'コメントする' }).click();
 	await expect(page.getByText('アップロードが終わってから送信してください')).toBeVisible();
 	await expect(commentBox).toHaveValue(/アップロード中: spec\.pdf/);
 	releaseUpload();
 	await expect(commentBox).toHaveValue(/\[spec\.pdf\]\(\/projects\/ACME\/attachments\//);
+	await expect(commentToggle).toBeEnabled();
 	await page.unroute('**/projects/ACME/attachments');
 	await page.getByRole('button', { name: 'コメントする' }).click();
 	await expect(page.locator('.markdown').getByText('確認しました')).toBeVisible();

@@ -3,7 +3,12 @@
 	import { Bold, Code, FileCode, Link, List, ListChecks, Strikethrough } from '@lucide/svelte';
 	import type { Attachment } from 'svelte/attachments';
 	import type { HTMLTextareaAttributes } from 'svelte/elements';
-	import { insertUploads, uploadable } from '$lib/attachment-upload';
+	import {
+		insertUploads,
+		onPendingUploadsChange,
+		pendingUploads,
+		uploadable
+	} from '$lib/attachment-upload';
 	import { autosize } from '$lib/autosize';
 	import type { Format } from '$lib/editor/commands';
 	import type { MarkdownEditorHandle } from '$lib/editor/create-editor';
@@ -42,7 +47,11 @@
 	let mentionApi = $state.raw<MentionApi | null>(null);
 	let uploadsApi = $state.raw<UploadsApi | null>(null);
 	/** エディタにアップロード中の仮の要素があるか（あればモードを切り替えさせない） */
-	let uploading = $state(false);
+	let editorUploading = $state(false);
+	/** textarea（「Markdown で編集」）にアップロード中のものがあるか。
+	 * 見たまま編集に切り替えるとプレースホルダが書き出しでエスケープされ、結果を差し込めなくなる */
+	let sourceUploading = $state(false);
+	const uploading = $derived(editorUploading || sourceUploading);
 	let active = $state.raw(new Set<Format>());
 	let invalid = $state(false);
 	let linkOpen = $state(false);
@@ -115,7 +124,7 @@
 				? ups.registerEditorUploads(h.editor, {
 						projectKey,
 						form: () => textarea?.form ?? null,
-						onUploadingChange: (u) => (uploading = u)
+						onUploadingChange: (u) => (editorUploading = u)
 					})
 				: () => {};
 			cleanup = () => {
@@ -153,6 +162,13 @@
 		void value;
 		void handle;
 		syncFromTextarea();
+	});
+
+	$effect(() => {
+		const el = textarea;
+		if (!el) return;
+		sourceUploading = pendingUploads(el) > 0;
+		return onPendingUploadsChange(el, (n) => (sourceUploading = n > 0));
 	});
 
 	// form.reset() は input を発火しないので、値が戻った後に読み込み直す

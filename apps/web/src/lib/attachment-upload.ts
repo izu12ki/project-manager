@@ -80,13 +80,53 @@ async function insertUpload(el: HTMLTextAreaElement, projectKey: string, file: F
 	notify(el);
 }
 
+/** textarea ごとの、終わっていないアップロードの件数と、その変化を受け取る関数 */
+const pending = new Map<HTMLTextAreaElement, number>();
+const pendingListeners = new Map<HTMLTextAreaElement, Set<(n: number) => void>>();
+
+/** textarea に入れている途中のアップロードの件数 */
+export function pendingUploads(el: HTMLTextAreaElement): number {
+	return pending.get(el) ?? 0;
+}
+
+/** textarea のアップロード中の件数が変わったら知らせる。返した関数で解除する */
+export function onPendingUploadsChange(
+	el: HTMLTextAreaElement,
+	cb: (n: number) => void
+): () => void {
+	let set = pendingListeners.get(el);
+	if (!set) pendingListeners.set(el, (set = new Set()));
+	set.add(cb);
+	return () => {
+		set.delete(cb);
+		if (set.size === 0) pendingListeners.delete(el);
+	};
+}
+
+function addPending(el: HTMLTextAreaElement, delta: number) {
+	const n = pendingUploads(el) + delta;
+	if (n > 0) pending.set(el, n);
+	else pending.delete(el);
+	for (const cb of pendingListeners.get(el) ?? []) cb(Math.max(n, 0));
+}
+
 /** 1 件ずつ順に送る（同名ファイルのプレースホルダが衝突しないように） */
 export async function insertUploads(
 	el: HTMLTextAreaElement,
 	projectKey: string,
 	files: Iterable<File>
 ) {
-	for (const f of files) await insertUpload(el, projectKey, f);
+	const list = Array.from(files);
+	if (list.length === 0) return;
+	// 全件を先に数える（1 件ごとに 0 に戻ると、その隙にモードを切り替えられる）
+	addPending(el, list.length);
+	for (const f of list) {
+		try {
+			await insertUpload(el, projectKey, f);
+		} finally {
+			addPending(el, -1);
+		}
+	}
 }
 
 /** textarea への貼り付け・ドロップでファイルを添付する。ファイルを含まない操作には何もしない */

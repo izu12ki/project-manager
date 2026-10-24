@@ -16,6 +16,7 @@ import {
 	listMilestones,
 	listStatuses,
 	moveIssueType,
+	updateIssueType,
 	moveStatus,
 	updateStatus,
 	setMilestoneCompleted,
@@ -265,6 +266,19 @@ describe('issue-fields', () => {
 			await expect(
 				createIssueType(as(member), 'ACME', { name: 'X', color: 'blue' })
 			).rejects.toMatchObject({ code: 'forbidden' });
+		});
+
+		it('本文テンプレートを設定でき、名前・色だけの更新では消えない', async () => {
+			const [task] = await listIssueTypes(as(admin), 'ACME');
+			expect(task.template).toBe('');
+			await updateIssueType(as(admin), 'ACME', task.id, {
+				name: 'タスク',
+				color: 'blue',
+				template: '## 背景\r\n\r\n## やること'
+			});
+			await updateIssueType(as(admin), 'ACME', task.id, { name: '作業', color: 'blue' });
+			const [updated] = await listIssueTypes(as(admin), 'ACME');
+			expect(updated).toMatchObject({ name: '作業', template: '## 背景\n\n## やること' });
 		});
 
 		it('他のプロジェクトの種別は設定できない', async () => {

@@ -13,7 +13,7 @@
 		type Status
 	} from '$lib/labels';
 	import IssueSheet from '../IssueSheet.svelte';
-	import { getIssueDetail } from '../issues/[number=int]/issue.remote';
+	import { getChanges, getIssueDetail } from '../issues/[number=int]/issue.remote';
 	import { getBoard, moveCard } from './board.remote';
 	import type { PageProps } from './$types';
 
@@ -80,6 +80,9 @@
 			// シートで開いている課題なら、表示中のステータスも取り直す
 			if (items[idx].number === opened) {
 				getIssueDetail({ key: ref.key, number: opened })
+					.refresh()
+					.catch(() => {});
+				getChanges({ key: ref.key, number: opened })
 					.refresh()
 					.catch(() => {});
 			}

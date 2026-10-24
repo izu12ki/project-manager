@@ -8,6 +8,7 @@
 	import PriorityPill from '$lib/components/PriorityPill.svelte';
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import {
+		ISSUE_CHANGE_FIELD_LABEL,
 		PRIORITIES,
 		PRIORITY_LABEL,
 		RESOLUTIONS,
@@ -19,6 +20,7 @@
 	import { toast } from '$lib/toast.svelte';
 	import {
 		getAttachments,
+		getChanges,
 		getComments,
 		getIssueDetail,
 		postComment,
@@ -53,9 +55,18 @@
 	// 2つの query は同時に取得を始め、コメントの更新では課題側を取り直さない
 	const detailQuery = $derived(getIssueDetail(ref));
 	const commentsQuery = $derived(getComments(ref));
+	const changesQuery = $derived(getChanges(ref));
 	const attachmentsQuery = $derived(getAttachments(ref));
 	const detail = $derived(await detailQuery);
 	const comments = $derived(await commentsQuery);
+	const changes = $derived(await changesQuery);
+	// コメントと編集履歴を時刻順に並べる
+	const activity = $derived(
+		[
+			...comments.map((c) => ({ kind: 'comment' as const, id: c.id, at: c.createdAt, c })),
+			...changes.map((h) => ({ kind: 'change' as const, id: h.id, at: h.createdAt, h }))
+		].sort((a, b) => a.at.getTime() - b.at.getTime() || a.id.localeCompare(b.id))
+	);
 	const attachments = $derived(await attachmentsQuery);
 	const mentionCandidates = $derived(
 		detail.assignees.filter((u) => !u.disabled).map(({ id, name }) => ({ id, name }))
@@ -398,89 +409,109 @@
 			</section>
 		{/if}
 
-		<section class="grid grid-cols-1 gap-4">
-			<h2 class="m-0 text-base font-bold">
-				コメント <span class="font-medium text-muted-foreground"
-					>{comments.length + pendingComments.length}</span
-				>
-			</h2>
-			{#if comments.length + pendingComments.length === 0}
-				<p class="m-0 text-muted-foreground">まだコメントはありません</p>
-			{/if}
-			{#each comments as c (c.id)}
-				<article class="comment" id={`comment-${c.id}`}>
-					<span class="avatar" style:--c={colorFor(c.authorName)}>{c.authorName[0]}</span>
-					<div class="grid min-w-0 grid-cols-1 gap-1">
-						<div class="flex items-center gap-2">
-							<span class="font-medium">{c.authorName}</span>
-							<span class="text-xs text-muted-foreground">{formatDateTime(c.createdAt)}</span>
-							{#if c.canModify}
-								<div class="ml-auto flex items-center">
-									<button
-										type="button"
-										class="icon-btn"
+		<section class="grid grid-cols-1 gap-4" aria-label="コメントと編集履歴">
+			{#each activity as e (e.id)}
+				{#if e.kind === 'change'}
+					{@const h = e.h}
+					<article class="change" id={`change-${h.id}`}>
+						<span class="avatar" style:--c={colorFor(h.actorName)}>{h.actorName[0]}</span>
+						<div class="grid min-w-0 grid-cols-1 gap-1">
+							<div class="flex items-center gap-2">
+								<span class="font-medium">{h.actorName}</span>
+								<span class="text-xs text-muted-foreground">{formatDateTime(h.createdAt)}</span>
+							</div>
+							<ul class="change-list">
+								{#each h.changes as ch (ch.field)}
+									<li>
+										{#if ch.field === 'description'}
+											<span>本文を変更しました</span>
+										{:else}
+											<span class="change-field">{ISSUE_CHANGE_FIELD_LABEL[ch.field]}</span>
+											<span class="change-value">{ch.from ?? '未設定'}</span>
+											<span aria-label="から">→</span>
+											<span class="change-value">{ch.to ?? '未設定'}</span>
+										{/if}
+									</li>
+								{/each}
+							</ul>
+						</div>
+					</article>
+				{:else}
+					{@const c = e.c}
+					<article class="comment" id={`comment-${c.id}`}>
+						<span class="avatar" style:--c={colorFor(c.authorName)}>{c.authorName[0]}</span>
+						<div class="grid min-w-0 grid-cols-1 gap-1">
+							<div class="flex items-center gap-2">
+								<span class="font-medium">{c.authorName}</span>
+								<span class="text-xs text-muted-foreground">{formatDateTime(c.createdAt)}</span>
+								{#if c.canModify}
+									<div class="ml-auto flex items-center">
+										<button
+											type="button"
+											class="icon-btn"
+											aria-label="コメントを編集"
+											title="コメントを編集"
+											aria-expanded={editingComment === c.id}
+											onclick={() => (editingComment = editingComment === c.id ? null : c.id)}
+										>
+											<Pencil />
+										</button>
+										<ConfirmAction
+											onconfirm={() => deleteComment(c.id)}
+											title="コメントの削除"
+											description="このコメントを削除してよろしいですか？&#10;この操作は元に戻せません。"
+											confirmLabel="コメントを削除する"
+											triggerClass="icon-btn danger-hover"
+											triggerLabel="コメントを削除"
+										>
+											{#snippet trigger()}<Trash2 />{/snippet}
+										</ConfirmAction>
+									</div>
+								{/if}
+							</div>
+							{#if editingComment === c.id}
+								{@const edit = updateComment.for(c.id)}
+								<form
+									class="grid gap-2"
+									{...edit.enhance(async ({ submit }) => {
+										try {
+											if (await submit()) editingComment = null;
+										} catch {
+											failed();
+										}
+									})}
+								>
+									{#each edit.fields.allIssues() ?? [] as i (i.message)}<FormAlert
+											message={i.message}
+										/>{/each}
+									<input {...edit.fields.key.as('hidden', ref.key)} />
+									<input {...edit.fields.number.as('hidden', ref.number)} />
+									<input {...edit.fields.commentId.as('hidden', c.id)} />
+									<MarkdownEditor
+										{...edit.fields.body.as('text', c.body)}
+										rows={4}
+										required
 										aria-label="コメントを編集"
-										title="コメントを編集"
-										aria-expanded={editingComment === c.id}
-										onclick={() => (editingComment = editingComment === c.id ? null : c.id)}
-									>
-										<Pencil />
-									</button>
-									<ConfirmAction
-										onconfirm={() => deleteComment(c.id)}
-										title="コメントの削除"
-										description="このコメントを削除してよろしいですか？&#10;この操作は元に戻せません。"
-										confirmLabel="コメントを削除する"
-										triggerClass="icon-btn danger-hover"
-										triggerLabel="コメントを削除"
-									>
-										{#snippet trigger()}<Trash2 />{/snippet}
-									</ConfirmAction>
-								</div>
+										label="コメントを編集"
+										projectKey={ref.key}
+										{mentionCandidates}
+									/>
+									<div class="flex justify-end gap-2">
+										<button
+											type="button"
+											class="btn btn-outline btn-sm"
+											onclick={() => (editingComment = null)}>キャンセル</button
+										>
+										<button type="submit" class="btn btn-primary btn-sm">更新</button>
+									</div>
+								</form>
+							{:else}
+								<!-- eslint-disable-next-line svelte/no-at-html-tags -- markdown-it(html:false) で生成した HTML -->
+								<div class="markdown">{@html c.html}</div>
 							{/if}
 						</div>
-						{#if editingComment === c.id}
-							{@const edit = updateComment.for(c.id)}
-							<form
-								class="grid gap-2"
-								{...edit.enhance(async ({ submit }) => {
-									try {
-										if (await submit()) editingComment = null;
-									} catch {
-										failed();
-									}
-								})}
-							>
-								{#each edit.fields.allIssues() ?? [] as i (i.message)}<FormAlert
-										message={i.message}
-									/>{/each}
-								<input {...edit.fields.key.as('hidden', ref.key)} />
-								<input {...edit.fields.number.as('hidden', ref.number)} />
-								<input {...edit.fields.commentId.as('hidden', c.id)} />
-								<MarkdownEditor
-									{...edit.fields.body.as('text', c.body)}
-									rows={4}
-									required
-									aria-label="コメントを編集"
-									label="コメントを編集"
-									projectKey={ref.key}
-									{mentionCandidates}
-								/>
-								<div class="flex justify-end gap-2">
-									<button
-										type="button"
-										class="btn btn-outline btn-sm"
-										onclick={() => (editingComment = null)}>キャンセル</button
-									>
-									<button type="submit" class="btn btn-primary btn-sm">更新</button>
-								</div>
-							</form>
-						{:else}
-							<!-- eslint-disable-next-line svelte/no-at-html-tags -- markdown-it(html:false) で生成した HTML -->
-							<div class="markdown">{@html c.html}</div>
-						{/if}
-					</div>
-				</article>
+					</article>
+				{/if}
 			{/each}
 			{#each pendingComments as c (c.id)}
 				<article class="comment pending" aria-busy="true">
@@ -570,7 +601,8 @@
 			column-gap: 20px;
 		}
 	}
-	.comment {
+	.comment,
+	.change {
 		scroll-margin-top: 80px;
 		display: grid;
 		grid-template-columns: 32px minmax(0, 1fr);
@@ -583,6 +615,32 @@
 	}
 	.comment :global(.danger-hover:hover) {
 		color: var(--destructive);
+	}
+	.change-list {
+		display: grid;
+		gap: 2px;
+		margin: 0;
+		padding: 8px 12px;
+		border-radius: 6px;
+		background: var(--muted);
+		list-style: none;
+		font-size: 13px;
+	}
+	.change-list li {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 4px 6px;
+		min-width: 0;
+	}
+	.change-field {
+		color: var(--muted-foreground);
+	}
+	.change-field::after {
+		content: ':';
+	}
+	.change-value {
+		overflow-wrap: anywhere;
 	}
 	.comment.pending {
 		opacity: 0.6;

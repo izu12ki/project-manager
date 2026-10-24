@@ -20,7 +20,7 @@ import {
 	listMilestones,
 	listStatusesOf
 } from '$lib/server/services/issue-fields';
-import { getIssue, updateIssue } from '$lib/server/services/issues';
+import { getIssue, listIssueChanges, updateIssue } from '$lib/server/services/issues';
 import { markIssueRead } from '$lib/server/services/notifications';
 import { listAssignableUsers, requireProject } from '$lib/server/services/projects';
 
@@ -93,6 +93,11 @@ export const getComments = query(IssueRef, ({ key, number }) => {
 	});
 });
 
+export const getChanges = query(IssueRef, ({ key, number }) => {
+	const ctx = remoteContext();
+	return runQuery(() => listIssueChanges(ctx, key, number));
+});
+
 export const getAttachments = query(IssueRef, ({ key, number }) => {
 	const ctx = remoteContext();
 	return runQuery(async () => {
@@ -131,6 +136,7 @@ export const saveIssue = form(
 		runForm(async () => {
 			await updateIssue(remoteContext(), key, number, input);
 			void getIssueDetail({ key, number }).refresh();
+			void getChanges({ key, number }).refresh();
 			void getAttachments({ key, number }).refresh();
 			return { saved: true };
 		})

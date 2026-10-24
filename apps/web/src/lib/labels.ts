@@ -174,3 +174,34 @@ export function formatDate(d: Date): string {
 		day: '2-digit'
 	});
 }
+
+export const ISSUE_CHANGE_FIELDS = [
+	'title',
+	'description',
+	'type',
+	'status',
+	'resolution',
+	'priority',
+	'assignee',
+	'category',
+	'milestone',
+	'startDate',
+	'dueDate'
+] as const;
+export type IssueChangeField = (typeof ISSUE_CHANGE_FIELDS)[number];
+/** from / to は変更時点の表示名（後で名前が変わったり削除されたりしても当時のまま出す）。本文は値を持たない */
+export type IssueChangeItem = { field: IssueChangeField; from: string | null; to: string | null };
+
+export const ISSUE_CHANGE_FIELD_LABEL: Record<IssueChangeField, string> = {
+	title: 'タイトル',
+	description: '本文',
+	type: '種別',
+	status: 'ステータス',
+	resolution: '完了理由',
+	priority: '優先度',
+	assignee: '担当者',
+	category: 'カテゴリー',
+	milestone: 'マイルストーン',
+	startDate: '開始日',
+	dueDate: '期限日'
+};

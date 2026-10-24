@@ -305,12 +305,6 @@
 			inset 3px 0 0 var(--primary),
 			var(--card-shadow);
 	}
-	/* デザイン案 B: 件数を状態色で塗る（一時的） */
-	:global([data-design='b']) .count {
-		background: var(--c);
-		color: var(--solid-ink);
-		font-weight: 700;
-	}
 	.title {
 		font-weight: 500;
 		line-height: 1.45;

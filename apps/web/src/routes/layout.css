@@ -5,55 +5,55 @@
 /* ---------- tokens ---------- */
 
 :root {
-	--background: oklch(0.972 0.004 255);
+	--background: oklch(0.955 0.012 258);
 	--foreground: oklch(0.24 0.02 255);
 	--card: oklch(1 0 0);
 	--card-foreground: oklch(0.24 0.02 255);
 	--popover: oklch(1 0 0);
-	--primary: oklch(0.48 0.13 258);
+	--primary: oklch(0.53 0.16 258);
 	--primary-foreground: oklch(0.99 0 0);
-	--primary-soft: oklch(0.94 0.03 258);
-	--primary-ink: oklch(0.42 0.13 258);
-	--secondary: oklch(0.95 0.006 255);
+	--primary-soft: oklch(0.93 0.04 258);
+	--primary-ink: oklch(0.45 0.15 258);
+	--secondary: oklch(0.925 0.014 258);
 	--secondary-foreground: oklch(0.32 0.02 255);
 	--muted: oklch(0.962 0.005 255);
 	--muted-foreground: oklch(0.46 0.02 255);
-	--accent: oklch(0.95 0.012 258);
+	--accent: oklch(0.925 0.025 258);
 	--destructive: oklch(0.56 0.2 25);
-	--border: oklch(0.88 0.008 255);
+	--border: oklch(0.88 0.012 258);
 	--input: oklch(0.8 0.01 255);
-	--ring: oklch(0.55 0.13 258);
-	--ring-soft: oklch(0.55 0.13 258 / 0.22);
-	--sidebar: oklch(0.44 0.11 260);
-	--col: oklch(0.955 0.006 255);
-	--col-over: oklch(0.93 0.025 258);
+	--ring: oklch(0.55 0.16 258);
+	--ring-soft: oklch(0.55 0.16 258 / 0.22);
+	--sidebar: oklch(0.43 0.13 262);
+	--col: oklch(0.935 0.018 258);
+	--col-over: oklch(0.91 0.035 258);
 	--c-gray: oklch(0.56 0.02 265);
-	--c-blue: oklch(0.58 0.15 248);
-	--c-amber: oklch(0.7 0.14 72);
-	--c-green: oklch(0.6 0.13 155);
-	--c-pink: oklch(0.62 0.17 350);
-	--c-teal: oklch(0.61 0.1 195);
-	--c-orange: oklch(0.66 0.16 48);
+	--c-blue: oklch(0.6 0.16 248);
+	--c-amber: oklch(0.72 0.15 72);
+	--c-green: oklch(0.62 0.14 155);
+	--c-pink: oklch(0.63 0.19 350);
+	--c-teal: oklch(0.62 0.11 195);
+	--c-orange: oklch(0.67 0.17 48);
 	--overlay: oklch(0.2 0.02 255 / 0.45);
 	--shadow-pop: 0 8px 24px rgb(0 0 0 / 0.12);
 	/* 角丸。sm はボタン・入力欄、md はカード・メニュー、pill はピル・タグ、card はボードのカード */
-	--radius-sm: 4px;
-	--radius-md: 6px;
-	--radius-pill: 4px;
-	--radius-card: 4px;
-	--card-shadow: none;
-	--card-shadow-hover: none;
-	--btn-shadow: none;
+	--radius-sm: 8px;
+	--radius-md: 10px;
+	--radius-pill: 999px;
+	--radius-card: 10px;
+	--card-shadow: 0 1px 2px oklch(0.3 0.05 258 / 0.06), 0 2px 6px oklch(0.3 0.05 258 / 0.05);
+	--card-shadow-hover: 0 4px 14px oklch(0.3 0.08 258 / 0.12);
+	--btn-shadow: 0 1px 2px oklch(0.3 0.1 258 / 0.25);
 	color-scheme: light;
 }
 
 [data-theme='dark'] {
-	--background: oklch(0.18 0.012 255);
+	--background: oklch(0.165 0.014 258);
 	--foreground: oklch(0.95 0.006 255);
-	--card: oklch(0.22 0.014 255);
+	--card: oklch(0.225 0.018 258);
 	--card-foreground: oklch(0.95 0.006 255);
-	--popover: oklch(0.24 0.016 255);
-	--primary: oklch(0.7 0.13 258);
+	--popover: oklch(0.245 0.018 258);
+	--primary: oklch(0.72 0.14 258);
 	--primary-foreground: oklch(0.17 0.03 258);
 	--primary-soft: oklch(0.29 0.05 258);
 	--primary-ink: oklch(0.82 0.09 258);
@@ -67,17 +67,20 @@
 	--input: oklch(1 0 0 / 20%);
 	--ring: oklch(0.7 0.13 258);
 	--ring-soft: oklch(0.7 0.13 258 / 0.3);
-	--sidebar: oklch(0.27 0.06 260);
-	--col: oklch(0.2 0.012 255);
+	--sidebar: oklch(0.28 0.07 262);
+	--col: oklch(0.19 0.014 258);
 	--col-over: oklch(0.26 0.03 258);
 	--c-gray: oklch(0.7 0.02 265);
-	--c-blue: oklch(0.73 0.12 248);
-	--c-amber: oklch(0.8 0.12 75);
-	--c-green: oklch(0.75 0.12 155);
-	--c-pink: oklch(0.74 0.14 350);
-	--c-teal: oklch(0.75 0.09 195);
-	--c-orange: oklch(0.77 0.13 50);
+	--c-blue: oklch(0.74 0.13 248);
+	--c-amber: oklch(0.81 0.13 75);
+	--c-green: oklch(0.76 0.13 155);
+	--c-pink: oklch(0.75 0.15 350);
+	--c-teal: oklch(0.76 0.1 195);
+	--c-orange: oklch(0.78 0.14 50);
 	--overlay: oklch(0 0 0 / 0.6);
+	--card-shadow: 0 1px 3px oklch(0 0 0 / 0.3);
+	--card-shadow-hover: 0 6px 16px oklch(0 0 0 / 0.4);
+	--btn-shadow: none;
 	color-scheme: dark;
 }
 
@@ -86,130 +89,19 @@
 	--foreground: oklch(0.99 0 0);
 	--muted-foreground: oklch(0.87 0.035 260);
 	--sidebar-accent: oklch(1 0 0 / 10%);
-	--sb-active: oklch(1 0 0 / 20%);
+	--sb-active: oklch(1 0 0 / 94%);
+	--sb-active-fg: var(--sidebar);
 	--background: oklch(1 0 0 / 8%);
 	--border: oklch(1 0 0 / 24%);
 	--accent: oklch(1 0 0 / 14%);
-	--popover: oklch(0.36 0.09 260);
+	--popover: oklch(0.36 0.11 262);
 	--muted: oklch(1 0 0 / 14%);
-	--card: oklch(0.44 0.11 260);
+	--card: var(--sidebar);
 	--primary: oklch(0.99 0 0);
-	--primary-foreground: oklch(0.44 0.11 260);
+	--primary-foreground: var(--sidebar);
 }
 [data-theme='dark'] [data-sb] {
 	--popover: oklch(0.32 0.06 260);
-	--card: oklch(0.27 0.06 260);
-	--primary-foreground: oklch(0.27 0.06 260);
-}
-
-/* ---------- デザイン案の比較（一時的） ----------
-   <html data-design="a|b"> で切り替える。採用案が決まったら :root に取り込み、この節は消す */
-
-[data-design] {
-	--radius-sm: 8px;
-	--radius-md: 10px;
-	--radius-pill: 999px;
-	--radius-card: 10px;
-}
-[data-design]:not([data-theme='dark']) {
-	--background: oklch(0.975 0.006 255);
-	--border: oklch(0.9 0.01 255);
-	--col: oklch(0.95 0.01 255);
-	--card-shadow: 0 1px 2px oklch(0.3 0.05 258 / 0.06), 0 2px 6px oklch(0.3 0.05 258 / 0.05);
-	--card-shadow-hover: 0 4px 14px oklch(0.3 0.08 258 / 0.12);
-	--btn-shadow: 0 1px 2px oklch(0.3 0.1 258 / 0.25);
-	--c-blue: oklch(0.6 0.16 248);
-	--c-amber: oklch(0.72 0.15 72);
-	--c-green: oklch(0.62 0.14 155);
-	--c-pink: oklch(0.63 0.19 350);
-	--c-teal: oklch(0.62 0.11 195);
-	--c-orange: oklch(0.67 0.17 48);
-}
-[data-design][data-theme='dark'] {
-	--card-shadow: 0 1px 3px oklch(0 0 0 / 0.3);
-	--card-shadow-hover: 0 6px 16px oklch(0 0 0 / 0.4);
-	--c-blue: oklch(0.74 0.13 248);
-	--c-amber: oklch(0.81 0.13 75);
-	--c-green: oklch(0.76 0.13 155);
-	--c-pink: oklch(0.75 0.15 350);
-	--c-teal: oklch(0.76 0.1 195);
-	--c-orange: oklch(0.78 0.14 50);
-}
-[data-design='a']:not([data-theme='dark']) {
-	--primary: oklch(0.53 0.16 258);
-	--primary-soft: oklch(0.93 0.04 258);
-	--primary-ink: oklch(0.45 0.15 258);
-	--ring: oklch(0.55 0.16 258);
-	--sidebar: oklch(0.47 0.13 260);
-}
-[data-design='a'][data-theme='dark'] {
-	--primary: oklch(0.72 0.14 258);
-	--sidebar: oklch(0.28 0.07 260);
-}
-/* サイドバーの選択中は白地に青文字 */
-[data-design='a'] [data-sb] {
-	--sb-active: oklch(1 0 0 / 94%);
-	--sb-active-fg: var(--sidebar);
-}
-
-[data-design='b']:not([data-theme='dark']) {
-	--background: oklch(0.975 0.008 250);
-	--col: oklch(0.945 0.014 250);
-	--primary: oklch(0.56 0.2 262);
-	--primary-soft: oklch(0.93 0.05 262);
-	--primary-ink: oklch(0.47 0.19 262);
-	--ring: oklch(0.56 0.2 262);
-	--sidebar: oklch(0.5 0.19 262);
-	--c-blue: oklch(0.6 0.19 250);
-	--c-amber: oklch(0.74 0.16 70);
-	--c-green: oklch(0.63 0.16 152);
-	--c-pink: oklch(0.63 0.22 355);
-	--c-teal: oklch(0.63 0.12 195);
-	--c-orange: oklch(0.68 0.19 45);
-	--pop: oklch(0.86 0.15 92);
-	--pop-ink: oklch(0.3 0.06 80);
-	--coral: oklch(0.68 0.19 30);
-	--solid-ink: #fff;
-}
-[data-design='b'][data-theme='dark'] {
-	--background: oklch(0.19 0.02 262);
-	--card: oklch(0.235 0.025 262);
-	--col: oklch(0.215 0.022 262);
-	--primary: oklch(0.72 0.16 262);
-	--sidebar: oklch(0.32 0.11 262);
-	--pop: oklch(0.86 0.14 92);
-	--pop-ink: oklch(0.3 0.06 80);
-	--coral: oklch(0.74 0.15 30);
-	--solid-ink: oklch(0.2 0.03 260);
-}
-/* サイドバーの選択中と未読バッジに差し色 */
-[data-design='b'] [data-sb] {
-	--sb-active: var(--pop);
-	--sb-active-fg: var(--pop-ink);
-}
-[data-design='b'] [data-sb] .badge {
-	background: var(--coral);
-	color: var(--solid-ink);
-}
-[data-design] [data-sb] [aria-current='page'] {
-	color: var(--sb-active-fg);
-	font-weight: 700;
-}
-[data-design] [data-sb] [aria-current='page'] .muted-icon {
-	color: inherit;
-}
-/* ステータス・アバター・ボードの件数を塗りつぶしにする */
-[data-design='b'] .pill-status {
-	background: var(--c);
-	color: var(--solid-ink);
-}
-[data-design='b'] .pill-status::before {
-	background: currentColor;
-	opacity: 0.8;
-}
-[data-design='b'] .avatar {
-	background: var(--c);
-	color: var(--solid-ink);
 }
 
 @theme inline {
@@ -348,8 +240,7 @@
 		background: var(--accent);
 	}
 	.btn-outline:not(:disabled):hover,
-	.btn-ghost:not(:disabled):hover,
-	.btn-danger:not(:disabled):hover {
+	.btn-ghost:not(:disabled):hover {
 		background: var(--accent);
 	}
 	.btn-ghost {
@@ -359,11 +250,16 @@
 	.btn-ghost:not(:disabled):hover {
 		color: var(--foreground);
 	}
+	/* 削除などの副ボタン。赤みのある面と枠で、背景に埋もれさせない */
 	.btn-danger {
-		border-color: var(--border);
-		background: var(--background);
+		border-color: color-mix(in oklch, var(--destructive) 45%, transparent);
+		background: color-mix(in oklch, var(--destructive) 7%, var(--card));
 		color: var(--destructive);
-		font-weight: 500;
+		font-weight: 600;
+	}
+	.btn-danger:not(:disabled):hover {
+		border-color: var(--destructive);
+		background: color-mix(in oklch, var(--destructive) 14%, var(--card));
 	}
 	.btn-destructive {
 		border: none;

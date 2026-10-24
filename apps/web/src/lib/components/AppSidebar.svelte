@@ -271,9 +271,14 @@
 		padding: 0 12px;
 		border-radius: 0;
 	}
+	/* 選択中は白地に青文字 */
 	.item[aria-current='page'] {
 		background: var(--sb-active);
-		font-weight: 500;
+		color: var(--sb-active-fg);
+		font-weight: 700;
+	}
+	.item[aria-current='page'] :global(.muted-icon) {
+		color: inherit;
 	}
 	.proj-icon {
 		width: 22px;

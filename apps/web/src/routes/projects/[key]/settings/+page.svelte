@@ -710,7 +710,7 @@
 		max-width: 100%;
 		cursor: pointer;
 		list-style: none;
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 	}
 	.edit summary::-webkit-details-marker {
 		display: none;

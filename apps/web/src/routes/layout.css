@@ -5,47 +5,55 @@
 /* ---------- tokens ---------- */
 
 :root {
-	--background: oklch(0.972 0.004 255);
+	--background: oklch(0.955 0.012 258);
 	--foreground: oklch(0.24 0.02 255);
 	--card: oklch(1 0 0);
 	--card-foreground: oklch(0.24 0.02 255);
 	--popover: oklch(1 0 0);
-	--primary: oklch(0.48 0.13 258);
+	--primary: oklch(0.53 0.16 258);
 	--primary-foreground: oklch(0.99 0 0);
-	--primary-soft: oklch(0.94 0.03 258);
-	--primary-ink: oklch(0.42 0.13 258);
-	--secondary: oklch(0.95 0.006 255);
+	--primary-soft: oklch(0.93 0.04 258);
+	--primary-ink: oklch(0.45 0.15 258);
+	--secondary: oklch(0.925 0.014 258);
 	--secondary-foreground: oklch(0.32 0.02 255);
 	--muted: oklch(0.962 0.005 255);
 	--muted-foreground: oklch(0.46 0.02 255);
-	--accent: oklch(0.95 0.012 258);
+	--accent: oklch(0.925 0.025 258);
 	--destructive: oklch(0.56 0.2 25);
-	--border: oklch(0.88 0.008 255);
+	--border: oklch(0.88 0.012 258);
 	--input: oklch(0.8 0.01 255);
-	--ring: oklch(0.55 0.13 258);
-	--ring-soft: oklch(0.55 0.13 258 / 0.22);
-	--sidebar: oklch(0.44 0.11 260);
-	--col: oklch(0.955 0.006 255);
-	--col-over: oklch(0.93 0.025 258);
+	--ring: oklch(0.55 0.16 258);
+	--ring-soft: oklch(0.55 0.16 258 / 0.22);
+	--sidebar: oklch(0.43 0.13 262);
+	--col: oklch(0.935 0.018 258);
+	--col-over: oklch(0.91 0.035 258);
 	--c-gray: oklch(0.56 0.02 265);
-	--c-blue: oklch(0.58 0.15 248);
-	--c-amber: oklch(0.7 0.14 72);
-	--c-green: oklch(0.6 0.13 155);
-	--c-pink: oklch(0.62 0.17 350);
-	--c-teal: oklch(0.61 0.1 195);
-	--c-orange: oklch(0.66 0.16 48);
+	--c-blue: oklch(0.6 0.16 248);
+	--c-amber: oklch(0.72 0.15 72);
+	--c-green: oklch(0.62 0.14 155);
+	--c-pink: oklch(0.63 0.19 350);
+	--c-teal: oklch(0.62 0.11 195);
+	--c-orange: oklch(0.67 0.17 48);
 	--overlay: oklch(0.2 0.02 255 / 0.45);
 	--shadow-pop: 0 8px 24px rgb(0 0 0 / 0.12);
+	/* 角丸。sm はボタン・入力欄、md はカード・メニュー、pill はピル・タグ、card はボードのカード */
+	--radius-sm: 8px;
+	--radius-md: 10px;
+	--radius-pill: 999px;
+	--radius-card: 10px;
+	--card-shadow: 0 1px 2px oklch(0.3 0.05 258 / 0.06), 0 2px 6px oklch(0.3 0.05 258 / 0.05);
+	--card-shadow-hover: 0 4px 14px oklch(0.3 0.08 258 / 0.12);
+	--btn-shadow: 0 1px 2px oklch(0.3 0.1 258 / 0.25);
 	color-scheme: light;
 }
 
 [data-theme='dark'] {
-	--background: oklch(0.18 0.012 255);
+	--background: oklch(0.165 0.014 258);
 	--foreground: oklch(0.95 0.006 255);
-	--card: oklch(0.22 0.014 255);
+	--card: oklch(0.225 0.018 258);
 	--card-foreground: oklch(0.95 0.006 255);
-	--popover: oklch(0.24 0.016 255);
-	--primary: oklch(0.7 0.13 258);
+	--popover: oklch(0.245 0.018 258);
+	--primary: oklch(0.72 0.14 258);
 	--primary-foreground: oklch(0.17 0.03 258);
 	--primary-soft: oklch(0.29 0.05 258);
 	--primary-ink: oklch(0.82 0.09 258);
@@ -59,17 +67,20 @@
 	--input: oklch(1 0 0 / 20%);
 	--ring: oklch(0.7 0.13 258);
 	--ring-soft: oklch(0.7 0.13 258 / 0.3);
-	--sidebar: oklch(0.27 0.06 260);
-	--col: oklch(0.2 0.012 255);
+	--sidebar: oklch(0.28 0.07 262);
+	--col: oklch(0.19 0.014 258);
 	--col-over: oklch(0.26 0.03 258);
 	--c-gray: oklch(0.7 0.02 265);
-	--c-blue: oklch(0.73 0.12 248);
-	--c-amber: oklch(0.8 0.12 75);
-	--c-green: oklch(0.75 0.12 155);
-	--c-pink: oklch(0.74 0.14 350);
-	--c-teal: oklch(0.75 0.09 195);
-	--c-orange: oklch(0.77 0.13 50);
+	--c-blue: oklch(0.74 0.13 248);
+	--c-amber: oklch(0.81 0.13 75);
+	--c-green: oklch(0.76 0.13 155);
+	--c-pink: oklch(0.75 0.15 350);
+	--c-teal: oklch(0.76 0.1 195);
+	--c-orange: oklch(0.78 0.14 50);
 	--overlay: oklch(0 0 0 / 0.6);
+	--card-shadow: 0 1px 3px oklch(0 0 0 / 0.3);
+	--card-shadow-hover: 0 6px 16px oklch(0 0 0 / 0.4);
+	--btn-shadow: none;
 	color-scheme: dark;
 }
 
@@ -78,20 +89,19 @@
 	--foreground: oklch(0.99 0 0);
 	--muted-foreground: oklch(0.87 0.035 260);
 	--sidebar-accent: oklch(1 0 0 / 10%);
-	--sb-active: oklch(1 0 0 / 20%);
+	--sb-active: oklch(1 0 0 / 94%);
+	--sb-active-fg: var(--sidebar);
 	--background: oklch(1 0 0 / 8%);
 	--border: oklch(1 0 0 / 24%);
 	--accent: oklch(1 0 0 / 14%);
-	--popover: oklch(0.36 0.09 260);
+	--popover: oklch(0.36 0.11 262);
 	--muted: oklch(1 0 0 / 14%);
-	--card: oklch(0.44 0.11 260);
+	--card: var(--sidebar);
 	--primary: oklch(0.99 0 0);
-	--primary-foreground: oklch(0.44 0.11 260);
+	--primary-foreground: var(--sidebar);
 }
 [data-theme='dark'] [data-sb] {
 	--popover: oklch(0.32 0.06 260);
-	--card: oklch(0.27 0.06 260);
-	--primary-foreground: oklch(0.27 0.06 260);
 }
 
 @theme inline {
@@ -178,7 +188,7 @@
 		gap: 8px;
 		height: 32px;
 		padding: 0 16px;
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 		border: 1px solid transparent;
 		background: transparent;
 		font-weight: 600;
@@ -205,6 +215,7 @@
 		border: none;
 		background: var(--primary);
 		color: var(--primary-foreground);
+		box-shadow: var(--btn-shadow);
 	}
 	.btn-primary:not(:disabled):hover {
 		filter: brightness(1.12);
@@ -229,8 +240,7 @@
 		background: var(--accent);
 	}
 	.btn-outline:not(:disabled):hover,
-	.btn-ghost:not(:disabled):hover,
-	.btn-danger:not(:disabled):hover {
+	.btn-ghost:not(:disabled):hover {
 		background: var(--accent);
 	}
 	.btn-ghost {
@@ -240,11 +250,15 @@
 	.btn-ghost:not(:disabled):hover {
 		color: var(--foreground);
 	}
+	/* 削除などの副ボタン。赤い枠で、背景に埋もれさせない */
 	.btn-danger {
-		border-color: var(--border);
-		background: var(--background);
+		border-color: color-mix(in oklch, var(--destructive) 55%, transparent);
+		background: var(--card);
 		color: var(--destructive);
-		font-weight: 500;
+		font-weight: 600;
+	}
+	.btn-danger:not(:disabled):hover {
+		border-color: var(--destructive);
 	}
 	.btn-destructive {
 		border: none;
@@ -263,7 +277,7 @@
 	.btn-xs {
 		height: 28px;
 		padding: 0 10px;
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 		font-size: 13px;
 	}
 	.icon-btn {
@@ -273,7 +287,7 @@
 		place-items: center;
 		flex-shrink: 0;
 		border: none;
-		border-radius: 6px;
+		border-radius: var(--radius-md);
 		background: transparent;
 		color: var(--muted-foreground);
 		cursor: pointer;
@@ -290,7 +304,7 @@
 		width: 32px;
 		height: 32px;
 		border: 1px solid var(--border);
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 		background: var(--background);
 		color: var(--foreground);
 	}
@@ -329,7 +343,7 @@
 		min-width: 0;
 		height: 32px;
 		padding: 0 12px;
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 		border: 1px solid var(--input);
 		background: transparent;
 		color: var(--foreground);
@@ -388,7 +402,8 @@
 		background: var(--card);
 		color: var(--card-foreground);
 		border: 1px solid var(--border);
-		border-radius: 6px;
+		border-radius: var(--radius-md);
+		box-shadow: var(--card-shadow);
 		display: flex;
 		flex-direction: column;
 		gap: 20px;
@@ -409,7 +424,7 @@
 	}
 	.empty {
 		border: 1px dashed var(--border);
-		border-radius: 6px;
+		border-radius: var(--radius-md);
 		padding: 56px 24px;
 		display: flex;
 		flex-direction: column;
@@ -420,7 +435,7 @@
 	.empty-icon {
 		width: 40px;
 		height: 40px;
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 		background: var(--muted);
 		display: grid;
 		place-items: center;
@@ -438,7 +453,7 @@
 		grid-template-columns: 16px 1fr;
 		gap: 2px 12px;
 		padding: 12px 16px;
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 		border: 1px solid var(--border);
 		background: var(--card);
 	}
@@ -497,7 +512,7 @@
 		gap: 6px;
 		height: 22px;
 		padding: 0 9px;
-		border-radius: 4px;
+		border-radius: var(--radius-pill);
 		border: 1px solid transparent;
 		font-size: 12px;
 		font-weight: 500;
@@ -554,13 +569,13 @@
 		color: color-mix(in oklch, var(--c) 60%, var(--foreground));
 	}
 	.avatar-square {
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 	}
 
 	/* list tables */
 	.grid-table {
 		border: 1px solid var(--border);
-		border-radius: 6px;
+		border-radius: var(--radius-md);
 		overflow-x: auto;
 		background: var(--card);
 	}
@@ -623,13 +638,13 @@
 		padding: 4px;
 		list-style: none;
 		border: 1px solid var(--border);
-		border-radius: 6px;
+		border-radius: var(--radius-md);
 		background: var(--popover, var(--background));
 		box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
 	}
 	.mention-menu li {
 		padding: 6px 8px;
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 		cursor: pointer;
 	}
 	.mention-menu li[aria-selected='true'],

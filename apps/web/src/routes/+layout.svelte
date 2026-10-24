@@ -188,6 +188,12 @@
 		display: grid;
 		gap: 24px;
 	}
+	/* 課題詳細ページは 2 カラムなので、大きい画面では幅を広く取る */
+	@media (min-width: 1400px) {
+		.container:has(:global(.detail:not(.sheet))) {
+			max-width: 1440px;
+		}
+	}
 	.auth {
 		min-height: 100vh;
 		display: flex;

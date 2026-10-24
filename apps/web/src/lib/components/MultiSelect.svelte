@@ -90,7 +90,7 @@
 		overflow-y: auto;
 		padding: 4px;
 		border: 1px solid var(--border);
-		border-radius: 6px;
+		border-radius: var(--radius-md);
 		background: var(--popover);
 		box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
 	}
@@ -100,7 +100,7 @@
 		gap: 8px;
 		min-width: 0;
 		padding: 6px 8px;
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 		cursor: pointer;
 	}
 	.option:hover {

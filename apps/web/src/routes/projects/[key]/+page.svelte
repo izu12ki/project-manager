@@ -233,7 +233,7 @@
 		white-space: nowrap;
 		padding: 1px 8px;
 		border: 1px solid var(--border);
-		border-radius: 4px;
+		border-radius: var(--radius-pill);
 		font-size: 12px;
 		color: var(--muted-foreground);
 	}
@@ -263,6 +263,6 @@
 	.title:focus-visible::after {
 		outline: 2px solid var(--ring);
 		outline-offset: -2px;
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 	}
 </style>

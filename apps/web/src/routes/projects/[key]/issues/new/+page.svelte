@@ -168,7 +168,7 @@
 		gap: 16px;
 		padding: 16px 20px 20px;
 		border: 1px solid var(--border);
-		border-radius: 6px;
+		border-radius: var(--radius-md);
 		background: var(--card);
 	}
 	.props {

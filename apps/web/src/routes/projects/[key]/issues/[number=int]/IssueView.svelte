@@ -605,10 +605,18 @@
 	@media (min-width: 1100px) {
 		.detail:not(.sheet) {
 			grid-template-columns: minmax(0, 1fr) 300px;
+			column-gap: 40px;
 		}
 		.side {
 			position: sticky;
 			top: 80px;
+		}
+	}
+	/* 大きい画面では本文と属性の間を広げ、画面幅を使い切る（+layout の .container も広がる） */
+	@media (min-width: 1400px) {
+		.detail:not(.sheet) {
+			grid-template-columns: minmax(0, 1fr) 340px;
+			column-gap: 64px;
 		}
 	}
 	.body {
@@ -630,7 +638,7 @@
 	.comment:target {
 		outline: 2px solid var(--ring);
 		outline-offset: 4px;
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 	}
 	.comment :global(.danger-hover:hover) {
 		color: var(--destructive);
@@ -640,7 +648,7 @@
 		gap: 2px;
 		margin: 0;
 		padding: 8px 12px;
-		border-radius: 6px;
+		border-radius: var(--radius-md);
 		background: var(--muted);
 		list-style: none;
 		font-size: 13px;

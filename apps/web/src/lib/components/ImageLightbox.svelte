@@ -50,7 +50,7 @@
 		max-width: 95vw;
 		max-height: 90vh;
 		object-fit: contain;
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 		background: white;
 	}
 	.close {

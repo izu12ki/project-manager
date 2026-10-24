@@ -1,6 +1,7 @@
 <script lang="ts" generics="T extends TimelineIssue & { title: string; canEdit: boolean }">
 	import { ChevronLeft, ChevronRight } from '@lucide/svelte';
-	import { STATUS_COLOR, STATUS_LABEL } from '$lib/labels';
+	import { page } from '$app/state';
+	import { DONE_STATUS, statusColor, statusName } from '$lib/labels';
 	import {
 		addDays,
 		applyDrag,
@@ -75,7 +76,7 @@
 		[
 			`${projectKey}-${item.number} ${item.title}`,
 			period(item),
-			`${STATUS_LABEL[item.status]} / ${item.assigneeName ?? '未割当'}`
+			`${statusName(page.data.statuses, item.status)} / ${item.assigneeName ?? '未割当'}`
 		].join('\n');
 	const href = (item: T) => `/projects/${projectKey}/issues/${item.number}`;
 
@@ -288,14 +289,14 @@
 										class="bar"
 										class:editable={item.canEdit && !!onsave}
 										class:dragging={drag?.moved && drag.item.id === item.id}
-										class:done={item.status === 'done'}
+										class:done={item.status === DONE_STATUS}
 										class:clip-start={span.clippedStart}
 										class:clip-end={span.clippedEnd}
 										class:open-start={span.missingStart}
 										class:open-end={span.missingDue}
 										style:left={px(span.startCol)}
 										style:width={px(span.endCol - span.startCol + 1)}
-										style:--c={STATUS_COLOR[item.status]}
+										style:--c={statusColor(page.data.statuses, item.status)}
 										data-testid={`bar-${item.number}`}
 										data-start={dates.startDate ?? ''}
 										data-due={dates.dueDate ?? ''}

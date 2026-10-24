@@ -1,5 +1,5 @@
 import { holidayName } from './holidays';
-import { STATUSES, type Status } from './labels';
+import { DONE_STATUS, type Status } from './labels';
 
 /** タイムラインの日付計算・グループ化（DOM 非依存）。日付はすべて 'YYYY-MM-DD'、計算は UTC。 */
 
@@ -100,8 +100,6 @@ export interface ViewParams {
 	filters: TimelineFilters;
 }
 
-const STATUS_FILTERS = ['open', ...STATUSES] as const;
-
 /** URL クエリを読み、不正な値は既定に戻す */
 export function parseView(q: URLSearchParams, today: string): ViewParams {
 	const pick = <T extends string>(v: string | null, all: readonly T[], d: T): T =>
@@ -112,7 +110,7 @@ export function parseView(q: URLSearchParams, today: string): ViewParams {
 		scale: pick(q.get('scale'), SCALES, 'day'),
 		from: isValidDate(from) ? from : defaultFrom(today),
 		filters: {
-			status: pick(q.get('status'), STATUS_FILTERS, '' as const),
+			status: q.get('status') ?? '',
 			assignee: q.get('assignee') ?? '',
 			category: q.get('category') ?? '',
 			milestone: q.get('milestone') ?? ''
@@ -127,7 +125,7 @@ const matches = (value: string | null, want: string) =>
 export function filterItems<T extends TimelineIssue>(items: T[], f: TimelineFilters): T[] {
 	return items.filter(
 		(i) =>
-			(!f.status || (f.status === 'open' ? i.status !== 'done' : i.status === f.status)) &&
+			(!f.status || (f.status === 'open' ? i.status !== DONE_STATUS : i.status === f.status)) &&
 			matches(i.assigneeId, f.assignee) &&
 			matches(i.categoryId, f.category) &&
 			matches(i.milestoneId, f.milestone)
@@ -258,7 +256,7 @@ export function groupItems<T extends TimelineIssue>(
 		key,
 		label,
 		releaseDate,
-		done: list.filter((i) => i.status === 'done').length,
+		done: list.filter((i) => i.status === DONE_STATUS).length,
 		total: list.length,
 		items: list
 	});

@@ -1,9 +1,12 @@
 <script lang="ts">
-	import { STATUS_COLOR, STATUS_LABEL, type Status } from '$lib/labels';
+	import { page } from '$app/state';
+	import { statusColor, statusName, type Status, type StatusDef } from '$lib/labels';
 
-	let { status }: { status: Status } = $props();
+	// 定義を渡さなければ、プロジェクト配下のページで読み込んだ定義を使う
+	let { status, statuses = page.data.statuses }: { status: Status; statuses?: StatusDef[] } =
+		$props();
 </script>
 
-<span class="pill pill-tint pill-status" style:--c={STATUS_COLOR[status]}
-	>{STATUS_LABEL[status]}</span
+<span class="pill pill-tint pill-status" style:--c={statusColor(statuses, status)}
+	>{statusName(statuses, status)}</span
 >

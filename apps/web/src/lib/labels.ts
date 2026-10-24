@@ -1,11 +1,62 @@
-export const STATUSES = ['todo', 'in_progress', 'in_review', 'done'] as const;
-export type Status = (typeof STATUSES)[number];
-export const STATUS_LABEL: Record<Status, string> = {
+/** プロジェクト作成時に用意する既定のステータス。todo（起票時の初期値）と done（完了）は削除できない */
+export const DEFAULT_STATUSES = ['todo', 'in_progress', 'in_review', 'done'] as const;
+/** ステータスはプロジェクトごとに追加できるので、キーは任意の文字列 */
+export type Status = string;
+export const STATUS_LABEL: Record<string, string> = {
 	todo: '未着手',
 	in_progress: '進行中',
 	in_review: 'レビュー',
 	done: '完了'
 };
+export const INITIAL_STATUS = 'todo';
+export const DONE_STATUS = 'done';
+export const FIXED_STATUSES: readonly string[] = [INITIAL_STATUS, DONE_STATUS];
+
+/** プロジェクトのステータス定義（表示順） */
+export interface StatusDef {
+	key: string;
+	name: string;
+	color: ColorName;
+}
+
+/** プロジェクト作成時に用意する既定の課題種別 */
+export const DEFAULT_ISSUE_TYPES: { name: string; color: ColorName }[] = [
+	{ name: 'タスク', color: 'blue' },
+	{ name: 'バグ', color: 'pink' },
+	{ name: '要望', color: 'teal' },
+	{ name: 'その他', color: 'gray' }
+];
+
+export const RESOLUTIONS = [
+	'fixed',
+	'wont_fix',
+	'invalid',
+	'duplicate',
+	'cannot_reproduce'
+] as const;
+export type Resolution = (typeof RESOLUTIONS)[number];
+export const RESOLUTION_LABEL: Record<Resolution, string> = {
+	fixed: '対応済み',
+	wont_fix: '対応しない',
+	invalid: '無効',
+	duplicate: '重複',
+	cannot_reproduce: '再現しない'
+};
+
+/** ステータス・課題種別・プロジェクトに設定できる色（layout.css の --c-*） */
+export const COLORS = ['gray', 'blue', 'teal', 'green', 'amber', 'orange', 'pink'] as const;
+export type ColorName = (typeof COLORS)[number];
+export const COLOR_LABEL: Record<ColorName, string> = {
+	gray: 'グレー',
+	blue: '青',
+	teal: '水色',
+	green: '緑',
+	amber: '黄',
+	orange: 'オレンジ',
+	pink: 'ピンク'
+};
+export const colorVar = (c: string | null | undefined): string =>
+	COLORS.includes(c as ColorName) ? `var(--c-${c})` : 'var(--c-gray)';
 
 export const PRIORITIES = ['none', 'low', 'medium', 'high', 'urgent'] as const;
 export type Priority = (typeof PRIORITIES)[number];
@@ -19,12 +70,24 @@ export const PRIORITY_LABEL: Record<Priority, string> = {
 
 export const ROLE_LABEL = { admin: '管理者', member: 'メンバー', guest: 'ゲスト' } as const;
 
-export const STATUS_COLOR: Record<Status, string> = {
-	todo: 'var(--c-gray)',
-	in_progress: 'var(--c-blue)',
-	in_review: 'var(--c-amber)',
-	done: 'var(--c-green)'
+export const DEFAULT_STATUS_COLOR: Record<(typeof DEFAULT_STATUSES)[number], ColorName> = {
+	todo: 'gray',
+	in_progress: 'blue',
+	in_review: 'amber',
+	done: 'green'
 };
+
+/** キーからステータスの表示名を引く。定義にないものは既定の名前で補う */
+export function statusName(statuses: readonly StatusDef[] | undefined, key: string): string {
+	return statuses?.find((s) => s.key === key)?.name ?? STATUS_LABEL[key] ?? '削除されたステータス';
+}
+
+export function statusColor(statuses: readonly StatusDef[] | undefined, key: string): string {
+	const c =
+		statuses?.find((s) => s.key === key)?.color ??
+		DEFAULT_STATUS_COLOR[key as keyof typeof DEFAULT_STATUS_COLOR];
+	return colorVar(c);
+}
 
 export const PRIORITY_CLASS: Record<Priority, string> = {
 	none: 'pill-outline',
@@ -55,6 +118,16 @@ const PALETTE = [
 	'var(--c-amber)'
 ];
 
+/** プロジェクトアイコンの色。未設定ならキーから選ぶ */
+export function projectColor(p: { key: string; color: string | null }): string {
+	return p.color ? colorVar(p.color) : colorFor(p.key);
+}
+
+/** プロジェクトアイコンの文字。未設定ならキーの頭文字 */
+export function projectIcon(p: { key: string; icon: string | null }): string {
+	return p.icon || p.key[0];
+}
+
 /** 名前やキーから安定した色を選ぶ（アバター・プロジェクトアイコン用） */
 export function colorFor(seed: string | null | undefined): string {
 	if (!seed) return 'var(--c-gray)';
@@ -79,7 +152,7 @@ export function milestoneLabel(m: { name: string; releaseDate: string | null }):
 }
 
 export function isDueAlert(due: string | null | undefined, status: Status): boolean {
-	return !!due && status !== 'done' && due <= todayJst();
+	return !!due && status !== DONE_STATUS && due <= todayJst();
 }
 
 export function formatDateTime(d: Date): string {

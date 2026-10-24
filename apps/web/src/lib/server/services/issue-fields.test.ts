@@ -4,11 +4,20 @@ import type { DB } from '../db';
 import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
 import {
 	createCategory,
+	createIssueType,
 	createMilestone,
+	createStatus,
 	deleteCategory,
+	deleteIssueType,
 	deleteMilestone,
+	deleteStatus,
 	listCategories,
+	listIssueTypes,
 	listMilestones,
+	listStatuses,
+	moveIssueType,
+	moveStatus,
+	updateStatus,
 	setMilestoneCompleted,
 	updateCategory,
 	updateMilestone
@@ -174,7 +183,95 @@ describe('issue-fields', () => {
 		const [row] = await listIssues(as(member), 'ACME', { q: 'ACME-2' });
 		expect(row).toMatchObject({ milestoneName: 'M', categoryName: null });
 
-		const board = await listBoard(as(member), 'ACME', { milestoneId: m.id });
+		const { columns: board } = await listBoard(as(member), 'ACME', { milestoneId: m.id });
 		expect(board.todo.map((i) => i.number)).toEqual([2]);
+	});
+
+	describe('ステータス', () => {
+		it('追加すると「完了」の直前に入り、ボードの列もその順になる', async () => {
+			await createStatus(as(admin), 'ACME', { name: '保留', color: 'pink' });
+			const names = (await listStatuses(as(member), 'ACME')).map((s) => s.name);
+			expect(names).toEqual(['未着手', '進行中', 'レビュー', '保留', '完了']);
+			const { statuses } = await listBoard(as(member), 'ACME');
+			expect(statuses.map((s) => s.name)).toEqual(names);
+			await expect(
+				createStatus(as(admin), 'ACME', { name: '保留', color: 'pink' })
+			).rejects.toMatchObject({ code: 'conflict' });
+			await expect(
+				createStatus(as(member), 'ACME', { name: 'X', color: 'pink' })
+			).rejects.toMatchObject({ code: 'forbidden' });
+		});
+
+		it('追加したステータスに課題を移せ、削除するとその課題は未着手の末尾に移る', async () => {
+			await createStatus(as(admin), 'ACME', { name: '保留', color: 'pink' });
+			const hold = (await listStatuses(as(admin), 'ACME')).find((s) => s.name === '保留')!;
+			await createIssue(as(member), 'ACME', { title: 'A' });
+			await createIssue(as(member), 'ACME', { title: 'B', status: hold.key });
+			await updateIssue(as(member), 'ACME', 1, { status: hold.key });
+			await createIssue(as(member), 'ACME', { title: 'C' });
+			await deleteStatus(as(admin), 'ACME', hold.key);
+			const { columns } = await listBoard(as(member), 'ACME');
+			expect(columns.todo.map((i) => i.title)).toEqual(['C', 'B', 'A']);
+			expect(columns[hold.key]).toBeUndefined();
+		});
+
+		it('未着手と完了は削除できない。名前と色は変えられる', async () => {
+			for (const key of ['todo', 'done']) {
+				await expect(deleteStatus(as(admin), 'ACME', key)).rejects.toMatchObject({
+					code: 'validation'
+				});
+			}
+			await updateStatus(as(admin), 'ACME', 'done', { name: '終了', color: 'teal' });
+			const done = (await listStatuses(as(member), 'ACME')).find((s) => s.key === 'done');
+			expect(done).toEqual({ key: 'done', name: '終了', color: 'teal' });
+		});
+
+		it('並び順を入れ替えられる', async () => {
+			await moveStatus(as(admin), 'ACME', 'done', -1);
+			await moveStatus(as(admin), 'ACME', 'todo', -1); // 先頭はそのまま
+			expect((await listStatuses(as(member), 'ACME')).map((s) => s.key)).toEqual([
+				'todo',
+				'in_progress',
+				'done',
+				'in_review'
+			]);
+		});
+
+		it('他のプロジェクトのステータスは使えない', async () => {
+			await createStatus(as(admin), 'OTHER', { name: '保留', color: 'pink' });
+			const hold = (await listStatuses(as(admin), 'OTHER')).find((s) => s.name === '保留')!;
+			await expect(
+				createIssue(as(member), 'ACME', { title: 'A', status: hold.key })
+			).rejects.toMatchObject({ code: 'validation' });
+		});
+	});
+
+	describe('課題種別', () => {
+		it('追加・並べ替え・削除。削除すると課題の種別は未設定になる', async () => {
+			await createIssueType(as(admin), 'ACME', { name: '調査', color: 'amber' });
+			let types = await listIssueTypes(as(member), 'ACME');
+			expect(types.map((t) => t.name)).toEqual(['タスク', 'バグ', '要望', 'その他', '調査']);
+			const research = types[4];
+			await moveIssueType(as(admin), 'ACME', research.id, -1);
+			types = await listIssueTypes(as(member), 'ACME');
+			expect(types.map((t) => t.name)).toEqual(['タスク', 'バグ', '要望', '調査', 'その他']);
+
+			await createIssue(as(member), 'ACME', { title: 'A', typeId: research.id });
+			await deleteIssueType(as(admin), 'ACME', research.id);
+			expect((await getIssue(as(member), 'ACME', 1)).issue.typeId).toBeNull();
+			await expect(
+				createIssueType(as(admin), 'ACME', { name: 'タスク', color: 'blue' })
+			).rejects.toMatchObject({ code: 'conflict' });
+			await expect(
+				createIssueType(as(member), 'ACME', { name: 'X', color: 'blue' })
+			).rejects.toMatchObject({ code: 'forbidden' });
+		});
+
+		it('他のプロジェクトの種別は設定できない', async () => {
+			const [other] = await listIssueTypes(as(admin), 'OTHER');
+			await expect(
+				createIssue(as(member), 'ACME', { title: 'A', typeId: other.id })
+			).rejects.toMatchObject({ code: 'validation' });
+		});
 	});
 });

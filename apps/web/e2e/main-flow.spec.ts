@@ -87,7 +87,9 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page.getByRole('heading', { name: 'ユーザーを招待' })).toBeVisible();
 	await page.getByLabel('メールアドレス').fill('member@example.com');
 	await page.getByLabel('ロール').selectOption('member');
-	await page.getByLabel('参加プロジェクト').selectOption({ label: 'ACME サイト改修' });
+	await page.locator('#invite-project').click();
+	await page.getByRole('checkbox', { name: 'ACME サイト改修' }).check();
+	await expect(page.locator('#invite-project')).toHaveText('ACME サイト改修');
 	await page.getByRole('button', { name: '招待する' }).click();
 	const memberUrl = await page.getByLabel('招待リンク').inputValue();
 	expect(memberUrl).toContain('/invite/');
@@ -117,6 +119,8 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 		.getByRole('link', { name: /ACME サイト改修/ })
 		.click();
 	await page.getByRole('link', { name: '新規課題' }).click();
+	await expect(page.getByLabel('種別').locator('option:checked')).toHaveText('タスク');
+	await page.getByLabel('種別').selectOption({ label: 'バグ' });
 	await page.getByLabel('タイトル').fill('ログインできない');
 	await page.getByLabel('カテゴリー').selectOption({ label: 'フロントエンド' });
 	// 本文は見たまま編集。「Markdown ソースのまま編集」との往復で内容が二重にならない
@@ -225,12 +229,15 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page.getByLabel('カテゴリー').locator('option:checked')).toHaveText(
 		'フロントエンド'
 	);
+	await expect(page.getByLabel('種別').locator('option:checked')).toHaveText('バグ');
 	await page.getByLabel('担当者').selectOption({ label: '顧客 太郎' });
 	await page.getByLabel('マイルストーン').selectOption({ label: 'v1.0（11/30 リリース）' });
+	await page.getByLabel('完了理由').selectOption({ label: '対応済み' });
 	await page.getByRole('button', { name: '保存' }).click();
 	await expect(page.getByText('保存しました')).toBeVisible();
 	await page.reload();
 	await expect(page.getByLabel('担当者').locator('option:checked')).toHaveText('顧客 太郎');
+	await expect(page.getByLabel('完了理由').locator('option:checked')).toHaveText('対応済み');
 	await expect(page.getByLabel('マイルストーン').locator('option:checked')).toHaveText(
 		'v1.0（11/30 リリース）'
 	);
@@ -511,14 +518,15 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await deleteDialog.getByRole('button', { name: '添付ファイルを削除する' }).click();
 	await expect(attachmentList.getByRole('link', { name: 'spec.pdf' })).toBeHidden();
 
-	// 8c. ゲストは自分が起票した課題だけタイムラインで動かせる
+	// 8c. ゲストは他の人が起票した課題もタイムラインで動かせる
 	await page.goto('/projects/ACME/timeline');
 	await expect(page.getByTestId('bar-1').locator('[data-handle]')).toHaveCount(2);
 	const guestBar2 = page.getByTestId('bar-2');
-	await expect(guestBar2.locator('[data-handle]')).toHaveCount(0);
+	await expect(guestBar2.locator('[data-handle]')).toHaveCount(2);
 	await dragBy(page, guestBar2, 64);
+	await expect(guestBar2).toHaveAttribute('data-start', jstDay(4));
 	await page.goto('/projects/ACME/timeline');
-	await expect(page.getByTestId('bar-2')).toHaveAttribute('data-start', jstDay(2));
+	await expect(page.getByTestId('bar-2')).toHaveAttribute('data-start', jstDay(4));
 
 	// 8d. 課題名のクリックで右側のシートに詳細を出し、そこからコメントできる
 	await page.getByTestId('open-1').click();

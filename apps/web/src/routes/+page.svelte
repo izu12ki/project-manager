@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Archive, ChevronDown, ChevronRight, FolderOpen, Plus } from '@lucide/svelte';
-	import { colorFor, formatDate } from '$lib/labels';
+	import { formatDate, projectColor, projectIcon } from '$lib/labels';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -43,8 +43,8 @@
 					<a href={`/projects/${p.key}`} class="card project">
 						<div class="grid gap-1.5">
 							<div class="mb-1.5 flex items-center gap-2.5">
-								<span class="avatar avatar-square" style="--size: 32px" style:--c={colorFor(p.key)}
-									>{p.key[0]}</span
+								<span class="avatar avatar-square" style="--size: 32px" style:--c={projectColor(p)}
+									>{projectIcon(p)}</span
 								>
 								<span class="mono text-xs font-medium text-muted-foreground">{p.key}</span>
 							</div>

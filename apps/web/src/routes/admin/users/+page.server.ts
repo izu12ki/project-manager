@@ -23,7 +23,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 export const actions: Actions = {
 	invite: async ({ request, locals }) => {
-		const input = formObject(await request.formData());
+		const fd = await request.formData();
+		const input = { ...formObject(fd), projectIds: fd.getAll('projectIds').map(String) };
 		return handleAction(async () => {
 			const { url } = await createInvitation(appContext(locals), input);
 			return { inviteUrl: url };

@@ -1,10 +1,10 @@
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
 import { authorize } from '../authz';
 import type { AppContext, BaseContext } from '../context';
 import type { DB } from '../db';
-import { invitation, project, projectMember, user } from '../db/schema';
+import { invitation, invitationProject, project, projectMember, user } from '../db/schema';
 import { AppError } from '../errors';
 import { invitationMail } from '../mailer/templates';
 import { randomToken, sha256Hex } from '../tokens';
@@ -17,8 +17,22 @@ const INVALID_INVITE = '招待リンクが無効か、期限切れです。管�
 const CreateInput = v.object({
 	email: EmailSchema,
 	role: v.picklist(['member', 'guest'], 'ロールを選択してください'),
-	projectId: v.optional(v.string())
+	projectIds: v.optional(v.array(v.string()), [])
 });
+
+/** 招待ごとの参加プロジェクト（名前順） */
+async function projectsOf(db: DB, invitationIds: string[]) {
+	if (invitationIds.length === 0) return new Map<string, { id: string; name: string }[]>();
+	const rows = await db
+		.select({ invitationId: invitationProject.invitationId, id: project.id, name: project.name })
+		.from(invitationProject)
+		.innerJoin(project, eq(project.id, invitationProject.projectId))
+		.where(inArray(invitationProject.invitationId, invitationIds))
+		.orderBy(asc(project.name));
+	const map = new Map<string, { id: string; name: string }[]>();
+	for (const r of rows) map.set(r.invitationId, [...(map.get(r.invitationId) ?? []), r]);
+	return map;
+}
 
 export async function createInvitation(
 	ctx: AppContext,
@@ -27,23 +41,21 @@ export async function createInvitation(
 ): Promise<{ url: string }> {
 	authorize(ctx.actor, 'user:manage');
 	const data = parse(CreateInput, input);
-	const projectId = data.projectId || null;
-	if (data.role === 'guest' && !projectId) {
-		throw new AppError('validation', 'ゲストを招待するにはプロジェクトを選択してください', {
-			projectId: ['プロジェクトを選択してください']
+	const projectIds = [...new Set(data.projectIds.filter(Boolean))];
+	if (projectIds.length === 0) {
+		throw new AppError('validation', '参加プロジェクトを選択してください', {
+			projectIds: ['参加プロジェクトを選択してください']
 		});
 	}
-	let projectName: string | null = null;
-	if (projectId) {
-		const [p] = await ctx.db
-			.select({ name: project.name })
-			.from(project)
-			.where(eq(project.id, projectId));
-		if (!p)
-			throw new AppError('validation', 'プロジェクトが見つかりません', {
-				projectId: ['プロジェクトが見つかりません']
-			});
-		projectName = p.name;
+	const projects = await ctx.db
+		.select({ id: project.id, name: project.name })
+		.from(project)
+		.where(inArray(project.id, projectIds))
+		.orderBy(asc(project.name));
+	if (projects.length !== projectIds.length) {
+		throw new AppError('validation', 'プロジェクトが見つかりません', {
+			projectIds: ['プロジェクトが見つかりません']
+		});
 	}
 	const [existing] = await ctx.db
 		.select({ id: user.id })
@@ -53,19 +65,22 @@ export async function createInvitation(
 		throw new AppError('conflict', 'このメールアドレスのユーザーは既に登録されています');
 
 	const token = randomToken();
+	const id = uuidv7();
 	await ctx.db.batch([
 		ctx.db
 			.delete(invitation)
 			.where(and(eq(invitation.email, data.email), isNull(invitation.acceptedAt))),
 		ctx.db.insert(invitation).values({
-			id: uuidv7(),
+			id,
 			email: data.email,
 			role: data.role,
-			projectId,
 			tokenHash: await sha256Hex(token),
 			invitedBy: ctx.actor.id,
 			expiresAt: new Date(Date.now() + INVITE_TTL_MS)
-		})
+		}),
+		ctx.db
+			.insert(invitationProject)
+			.values(projects.map((p) => ({ invitationId: id, projectId: p.id })))
 	]);
 
 	const url = `${ctx.baseUrl}/invite/${token}`;
@@ -74,7 +89,11 @@ export async function createInvitation(
 			ctx.mailer
 				.send({
 					to: data.email,
-					...invitationMail({ url, inviterName: ctx.actor.name, projectName })
+					...invitationMail({
+						url,
+						inviterName: ctx.actor.name,
+						projectNames: projects.map((p) => p.name)
+					})
 				})
 				.catch((e) => console.error('invitation mail failed', e))
 		);
@@ -97,9 +116,10 @@ export async function reissueInvitation(
 ): Promise<{ url: string }> {
 	authorize(ctx.actor, 'user:manage');
 	const row = await findPending(ctx, invitationId);
+	const projects = (await projectsOf(ctx.db, [row.id])).get(row.id) ?? [];
 	return createInvitation(
 		ctx,
-		{ email: row.email, role: row.role, projectId: row.projectId ?? undefined },
+		{ email: row.email, role: row.role, projectIds: projects.map((p) => p.id) },
 		{ sendMail: false }
 	);
 }
@@ -114,8 +134,7 @@ export interface PendingInvitation {
 	id: string;
 	email: string;
 	role: 'member' | 'guest';
-	projectId: string | null;
-	projectName: string | null;
+	projects: { id: string; name: string }[];
 	expiresAt: Date;
 	expired: boolean;
 }
@@ -126,22 +145,37 @@ export async function listPendingInvitations(
 ): Promise<PendingInvitation[]> {
 	authorize(ctx.actor, 'user:manage');
 	const conds = [isNull(invitation.acceptedAt)];
-	if (filter.projectId) conds.push(eq(invitation.projectId, filter.projectId));
+	if (filter.projectId) {
+		conds.push(
+			inArray(
+				invitation.id,
+				ctx.db
+					.select({ id: invitationProject.invitationId })
+					.from(invitationProject)
+					.where(eq(invitationProject.projectId, filter.projectId))
+			)
+		);
+	}
 	const rows = await ctx.db
 		.select({
 			id: invitation.id,
 			email: invitation.email,
 			role: invitation.role,
-			projectId: invitation.projectId,
-			projectName: project.name,
 			expiresAt: invitation.expiresAt
 		})
 		.from(invitation)
-		.leftJoin(project, eq(invitation.projectId, project.id))
 		.where(and(...conds))
 		.orderBy(desc(invitation.createdAt));
+	const projects = await projectsOf(
+		ctx.db,
+		rows.map((r) => r.id)
+	);
 	const now = Date.now();
-	return rows.map((r) => ({ ...r, expired: r.expiresAt.getTime() < now }));
+	return rows.map((r) => ({
+		...r,
+		projects: projects.get(r.id) ?? [],
+		expired: r.expiresAt.getTime() < now
+	}));
 }
 
 async function findValidByToken(db: DB, token: string) {
@@ -156,15 +190,8 @@ async function findValidByToken(db: DB, token: string) {
 export async function getInvitationByToken(db: DB, token: string) {
 	const row = await findValidByToken(db, token);
 	if (!row) return null;
-	let projectName: string | null = null;
-	if (row.projectId) {
-		const [p] = await db
-			.select({ name: project.name })
-			.from(project)
-			.where(eq(project.id, row.projectId));
-		projectName = p?.name ?? null;
-	}
-	return { email: row.email, role: row.role, projectName };
+	const projects = (await projectsOf(db, [row.id])).get(row.id) ?? [];
+	return { email: row.email, role: row.role, projectNames: projects.map((p) => p.name) };
 }
 
 const AcceptInput = v.object({ token: v.string(), name: NameSchema, password: PasswordSchema });
@@ -193,7 +220,15 @@ export async function acceptInvitation(
 			role: inv.role,
 			passwordHash
 		});
-		if (inv.projectId) await tx.insert(projectMember).values({ projectId: inv.projectId, userId });
+		const targets = await tx
+			.select({ projectId: invitationProject.projectId })
+			.from(invitationProject)
+			.where(eq(invitationProject.invitationId, inv.id));
+		if (targets.length > 0) {
+			await tx
+				.insert(projectMember)
+				.values(targets.map((t) => ({ projectId: t.projectId, userId })));
+		}
 	});
 	return { email: inv.email };
 }

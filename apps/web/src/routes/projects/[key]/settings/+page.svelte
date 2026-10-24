@@ -3,6 +3,8 @@
 	import {
 		Archive,
 		ArchiveRestore,
+		ChevronDown,
+		ChevronUp,
 		CircleCheck,
 		Flag,
 		Mail,
@@ -10,16 +12,28 @@
 		RotateCcw,
 		Tag
 	} from '@lucide/svelte';
+	import ColorPicker from '$lib/components/ColorPicker.svelte';
 	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
 	import FormAlert from '$lib/components/FormAlert.svelte';
 	import InviteLinkBox from '$lib/components/InviteLinkBox.svelte';
 	import RolePill from '$lib/components/RolePill.svelte';
-	import { ROLE_LABEL, colorFor } from '$lib/labels';
+	import {
+		FIXED_STATUSES,
+		ROLE_LABEL,
+		colorFor,
+		colorVar,
+		projectColor,
+		projectIcon
+	} from '$lib/labels';
 	import { toast } from '$lib/toast.svelte';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
 	const writable = $derived(!data.project.archivedAt);
+	// アイコン・色・キーの変更をその場でプレビューする
+	let icon = $derived(data.project.icon ?? '');
+	let color = $derived(data.project.color ?? '');
+	let key = $derived(data.project.key);
 
 	$effect(() => {
 		if (form?.saved) toast.success('保存しました');
@@ -47,7 +61,39 @@
 	>
 		<div class="card-head">
 			<h2 class="card-title">基本情報</h2>
-			<p class="card-desc">プロジェクト名と説明を変更します</p>
+			<p class="card-desc">プロジェクト名・キー・アイコン・色・説明を変更します</p>
+		</div>
+		<div class="flex flex-wrap items-end gap-4">
+			<span
+				class="avatar avatar-square"
+				style="--size: 40px; font-size: 18px"
+				style:--c={projectColor({ key: key || 'A', color: color || null })}
+				aria-hidden="true">{projectIcon({ key: key || '?', icon: icon || null })}</span
+			>
+			<div class="field">
+				<label class="label" for="project-icon">アイコン</label>
+				<input
+					class="input"
+					style="width: 120px"
+					id="project-icon"
+					name="icon"
+					maxlength={16}
+					placeholder={key[0] ?? ''}
+					aria-describedby="project-icon-hint"
+					bind:value={icon}
+				/>
+			</div>
+			<p class="hint pb-2" id="project-icon-hint">絵文字や2文字までの文字。空欄ならキーの頭文字</p>
+		</div>
+		<div class="field">
+			<span class="label">色</span>
+			<ColorPicker
+				name="color"
+				value={data.project.color ?? ''}
+				allowAuto
+				label="色"
+				onchange={(v) => (color = v)}
+			/>
 		</div>
 		<div class="field">
 			<label class="label" for="project-key">キー</label>
@@ -55,9 +101,16 @@
 				class="input mono"
 				style="width: 200px"
 				id="project-key"
-				readonly
-				value={data.project.key}
+				name="key"
+				required
+				maxlength={10}
+				aria-describedby="project-key-hint"
+				bind:value={key}
 			/>
+			<p class="hint" id="project-key-hint">
+				英字で始まる2〜10文字の英数字。変更すると URL と課題キー（{key.toUpperCase() ||
+					data.project.key}-1 など）も変わります
+			</p>
 		</div>
 		<div class="field">
 			<label class="label" for="project-name">プロジェクト名</label>
@@ -135,7 +188,9 @@
 	<div class="card">
 		<div class="card-head">
 			<h2 class="card-title">ゲスト</h2>
-			<p class="card-desc">ゲストはこのプロジェクトの閲覧とコメントのみ行えます</p>
+			<p class="card-desc">
+				ゲストはこのプロジェクトの課題の閲覧・作成・編集とコメントができます（課題の削除はできません）
+			</p>
 		</div>
 		<form
 			method="POST"
@@ -182,6 +237,190 @@
 				{/each}
 				<p class="hint pt-2">再発行すると以前のリンクは無効になります</p>
 			</div>
+		{/if}
+	</div>
+
+	{#snippet moveButtons(action: string, id: string, i: number, total: number, name: string)}
+		<form method="POST" {action} use:enhance class="row-meta flex">
+			<input type="hidden" name="id" value={id} />
+			<button
+				type="submit"
+				name="dir"
+				value="up"
+				class="icon-btn"
+				disabled={i === 0}
+				aria-label={`${name} を上へ`}
+				title="上へ"><ChevronUp /></button
+			>
+			<button
+				type="submit"
+				name="dir"
+				value="down"
+				class="icon-btn"
+				disabled={i === total - 1}
+				aria-label={`${name} を下へ`}
+				title="下へ"><ChevronDown /></button
+			>
+		</form>
+	{/snippet}
+
+	<div class="card">
+		<div class="card-head">
+			<h2 class="card-title">課題種別</h2>
+			<p class="card-desc">
+				課題の種類です。課題の作成・詳細画面でタイトルの上から選べます。削除すると、設定されていた課題は未設定になります
+			</p>
+		</div>
+		{#if data.issueTypes.length > 0}
+			<ul class="list">
+				{#each data.issueTypes as t, i (t.id)}
+					<li class="option-row">
+						<span class="dot row-icon" style:--c={colorVar(t.color)}></span>
+						{#if writable}
+							<details class="edit">
+								<summary>
+									<span class="truncate">{t.name}</span>
+									<Pencil size={14} class="shrink-0 text-muted-foreground" />
+									<span class="sr-only">を編集</span>
+								</summary>
+								<form
+									method="POST"
+									action="?/updateIssueType"
+									use:enhance={closeOnSuccess}
+									class="edit-form"
+								>
+									<input type="hidden" name="id" value={t.id} />
+									<div class="grid gap-2" style="grid-template-columns: minmax(0, 1fr) auto">
+										<input
+											class="input"
+											name="name"
+											aria-label={`${t.name} の名称`}
+											required
+											maxlength={50}
+											value={t.name}
+										/>
+										<button type="submit" class="btn btn-outline">保存</button>
+									</div>
+									<ColorPicker name="color" value={t.color} label={`${t.name} の色`} />
+								</form>
+							</details>
+							{@render moveButtons('?/moveIssueType', t.id, i, data.issueTypes.length, t.name)}
+							<ConfirmAction
+								action="?/deleteIssueType"
+								fields={{ id: t.id }}
+								title="課題種別の削除"
+								description={`課題種別「${t.name}」を削除してよろしいですか？\n設定されている課題は未設定になります。`}
+								confirmLabel="削除する"
+								triggerClass="btn btn-ghost btn-xs"
+							>
+								{#snippet trigger()}削除{/snippet}
+							</ConfirmAction>
+						{:else}
+							<span class="min-w-0 flex-1 truncate">{t.name}</span>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+		{/if}
+		{#if writable}
+			<form method="POST" action="?/addIssueType" use:enhance class="grid gap-3">
+				<div class="grid items-end gap-3" style="grid-template-columns: minmax(0, 1fr) auto">
+					<div class="field">
+						<label class="label" for="issue-type-name">課題種別名</label>
+						<input
+							class="input"
+							id="issue-type-name"
+							name="name"
+							required
+							maxlength={50}
+							placeholder="例: 調査"
+						/>
+					</div>
+					<button type="submit" class="btn btn-outline">追加</button>
+				</div>
+				<ColorPicker name="color" label="追加する課題種別の色" />
+			</form>
+		{/if}
+	</div>
+
+	<div class="card">
+		<div class="card-head">
+			<h2 class="card-title">ステータス</h2>
+			<p class="card-desc">
+				課題の進み具合です。並び順はボードの列の順になります。「未着手」と「完了」は削除できません。削除すると、そのステータスの課題は「未着手」になります
+			</p>
+		</div>
+		<ul class="list">
+			{#each data.statuses as st, i (st.key)}
+				<li class="option-row">
+					<span class="dot row-icon" style:--c={colorVar(st.color)}></span>
+					{#if writable}
+						<details class="edit">
+							<summary>
+								<span class="truncate">{st.name}</span>
+								<Pencil size={14} class="shrink-0 text-muted-foreground" />
+								<span class="sr-only">を編集</span>
+							</summary>
+							<form
+								method="POST"
+								action="?/updateStatus"
+								use:enhance={closeOnSuccess}
+								class="edit-form"
+							>
+								<input type="hidden" name="id" value={st.key} />
+								<div class="grid gap-2" style="grid-template-columns: minmax(0, 1fr) auto">
+									<input
+										class="input"
+										name="name"
+										aria-label={`${st.name} の名称`}
+										required
+										maxlength={50}
+										value={st.name}
+									/>
+									<button type="submit" class="btn btn-outline">保存</button>
+								</div>
+								<ColorPicker name="color" value={st.color} label={`${st.name} の色`} />
+							</form>
+						</details>
+						{@render moveButtons('?/moveStatus', st.key, i, data.statuses.length, st.name)}
+						{#if FIXED_STATUSES.includes(st.key)}
+							<span class="row-meta w-[52px] text-center text-xs text-muted-foreground">既定</span>
+						{:else}
+							<ConfirmAction
+								action="?/deleteStatus"
+								fields={{ id: st.key }}
+								title="ステータスの削除"
+								description={`ステータス「${st.name}」を削除してよろしいですか？\nこのステータスの課題は「未着手」になります。`}
+								confirmLabel="削除する"
+								triggerClass="btn btn-ghost btn-xs"
+							>
+								{#snippet trigger()}削除{/snippet}
+							</ConfirmAction>
+						{/if}
+					{:else}
+						<span class="min-w-0 flex-1 truncate">{st.name}</span>
+					{/if}
+				</li>
+			{/each}
+		</ul>
+		{#if writable}
+			<form method="POST" action="?/addStatus" use:enhance class="grid gap-3">
+				<div class="grid items-end gap-3" style="grid-template-columns: minmax(0, 1fr) auto">
+					<div class="field">
+						<label class="label" for="status-name">ステータス名</label>
+						<input
+							class="input"
+							id="status-name"
+							name="name"
+							required
+							maxlength={50}
+							placeholder="例: 保留"
+						/>
+					</div>
+					<button type="submit" class="btn btn-outline">追加</button>
+				</div>
+				<ColorPicker name="color" label="追加するステータスの色" />
+			</form>
 		{/if}
 	</div>
 
@@ -436,6 +675,16 @@
 	.option-row:has(details[open]) :global(.row-icon),
 	.option-row:has(details[open]) .row-meta {
 		margin-top: 10px;
+	}
+	.dot {
+		flex-shrink: 0;
+		width: 12px;
+		height: 12px;
+		border-radius: 999px;
+		background: var(--c);
+	}
+	.option-row:has(details[open]) .dot {
+		margin-top: 13px;
 	}
 	.edit {
 		flex: 1;

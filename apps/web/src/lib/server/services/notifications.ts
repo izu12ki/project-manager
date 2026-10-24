@@ -1,9 +1,11 @@
 import { and, count, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
-import { STATUS_LABEL } from '$lib/labels';
+import { alias } from 'drizzle-orm/sqlite-core';
+import { statusName } from '$lib/labels';
 import type { AppContext } from '../context';
 import {
 	comment,
 	issue,
+	issueStatus,
 	notification,
 	project,
 	projectMember,
@@ -48,8 +50,10 @@ function summaryOf(r: {
 	type: NotificationType;
 	commentId: string | null;
 	commentBody: string | null;
-	fromStatus: keyof typeof STATUS_LABEL | null;
-	toStatus: keyof typeof STATUS_LABEL | null;
+	fromStatus: string | null;
+	toStatus: string | null;
+	fromStatusName: string | null;
+	toStatusName: string | null;
 }): string {
 	const body = r.commentBody ? excerpt(r.commentBody, 80) : '';
 	switch (r.type) {
@@ -58,11 +62,14 @@ function summaryOf(r: {
 		case 'commented':
 			return `コメントしました: ${body}`;
 		case 'status_changed':
-			return `${STATUS_LABEL[r.fromStatus!]} → ${STATUS_LABEL[r.toStatus!]}`;
+			return `${r.fromStatusName ?? statusName([], r.fromStatus!)} → ${r.toStatusName ?? statusName([], r.toStatus!)}`;
 		case 'mentioned':
 			return r.commentId ? `メンションしました: ${body}` : '説明でメンションしました';
 	}
 }
+
+const fromStatus = alias(issueStatus, 'from_status');
+const toStatus = alias(issueStatus, 'to_status');
 
 const hrefOf = (key: string, n: number, commentId: string | null) =>
 	`/projects/${key}/issues/${n}${commentId ? `#comment-${commentId}` : ''}`;
@@ -75,6 +82,8 @@ export async function listNotifications(ctx: AppContext, limit = 50): Promise<No
 			commentId: notification.commentId,
 			fromStatus: notification.fromStatus,
 			toStatus: notification.toStatus,
+			fromStatusName: fromStatus.name,
+			toStatusName: toStatus.name,
 			readAt: notification.readAt,
 			createdAt: notification.createdAt,
 			actorName: user.name,
@@ -88,6 +97,14 @@ export async function listNotifications(ctx: AppContext, limit = 50): Promise<No
 		.innerJoin(issue, eq(issue.id, notification.issueId))
 		.innerJoin(project, eq(project.id, issue.projectId))
 		.leftJoin(comment, eq(comment.id, notification.commentId))
+		.leftJoin(
+			fromStatus,
+			and(eq(fromStatus.projectId, issue.projectId), eq(fromStatus.key, notification.fromStatus))
+		)
+		.leftJoin(
+			toStatus,
+			and(eq(toStatus.projectId, issue.projectId), eq(toStatus.key, notification.toStatus))
+		)
 		.where(mine(ctx))
 		.orderBy(desc(notification.createdAt), desc(notification.id))
 		.limit(limit);

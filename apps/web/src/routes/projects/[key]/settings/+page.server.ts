@@ -1,4 +1,4 @@
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { appContext } from '$lib/server/context';
 import { handleAction, handleLoad } from '$lib/server/errors';
 import {
@@ -9,14 +9,23 @@ import {
 } from '$lib/server/services/invitations';
 import {
 	createCategory,
+	createIssueType,
 	createMilestone,
+	createStatus,
 	deleteCategory,
+	deleteIssueType,
 	deleteMilestone,
+	deleteStatus,
 	listCategories,
+	listIssueTypes,
 	listMilestones,
+	moveIssueType,
+	moveStatus,
 	setMilestoneCompleted,
 	updateCategory,
-	updateMilestone
+	updateIssueType,
+	updateMilestone,
+	updateStatus
 } from '$lib/server/services/issue-fields';
 import {
 	addMember,
@@ -35,10 +44,11 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 	if (ctx.actor.role !== 'admin') error(404, 'Not found');
 	return handleLoad(async () => {
 		const p = await requireProject(ctx, params.key);
-		const [members, users, invitations, categories, milestones] = await Promise.all([
+		const [members, users, invitations, issueTypes, categories, milestones] = await Promise.all([
 			listMembers(ctx, params.key),
 			listUsers(ctx),
 			listPendingInvitations(ctx, { projectId: p.id }),
+			listIssueTypes(ctx, params.key),
 			listCategories(ctx, params.key),
 			listMilestones(ctx, params.key)
 		]);
@@ -50,6 +60,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			members,
 			candidates,
 			invitations,
+			issueTypes,
 			categories,
 			milestones
 		};
@@ -57,12 +68,20 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 };
 
 const idOf = async (request: Request) => String((await request.formData()).get('id') ?? '');
+const moveOf = async (request: Request) => {
+	const fd = await request.formData();
+	return {
+		id: String(fd.get('id') ?? ''),
+		dir: fd.get('dir') === 'up' ? (-1 as const) : (1 as const)
+	};
+};
 
 export const actions: Actions = {
 	update: async ({ request, locals, params }) => {
 		const input = formObject(await request.formData());
 		return handleAction(async () => {
-			await updateProject(appContext(locals), params.key, input);
+			const { key } = await updateProject(appContext(locals), params.key, input);
+			if (key !== params.key) redirect(303, `/projects/${key}/settings`);
 			return { saved: true };
 		});
 	},
@@ -89,7 +108,7 @@ export const actions: Actions = {
 		return handleAction(async () => {
 			const ctx = appContext(locals);
 			const p = await requireProject(ctx, params.key);
-			const { url } = await createInvitation(ctx, { email, role: 'guest', projectId: p.id });
+			const { url } = await createInvitation(ctx, { email, role: 'guest', projectIds: [p.id] });
 			return { inviteUrl: url };
 		});
 	},
@@ -98,6 +117,54 @@ export const actions: Actions = {
 		return handleAction(async () => {
 			const { url } = await reissueInvitation(appContext(locals), id);
 			return { inviteUrl: url };
+		});
+	},
+	addStatus: async ({ request, locals, params }) => {
+		const input = formObject(await request.formData());
+		return handleAction(async () => {
+			await createStatus(appContext(locals), params.key, input);
+		});
+	},
+	updateStatus: async ({ request, locals, params }) => {
+		const { id = '', ...input } = formObject(await request.formData());
+		return handleAction(async () => {
+			await updateStatus(appContext(locals), params.key, id, input);
+		});
+	},
+	deleteStatus: async ({ request, locals, params }) => {
+		const id = await idOf(request);
+		return handleAction(async () => {
+			await deleteStatus(appContext(locals), params.key, id);
+		});
+	},
+	moveStatus: async ({ request, locals, params }) => {
+		const { id, dir } = await moveOf(request);
+		return handleAction(async () => {
+			await moveStatus(appContext(locals), params.key, id, dir);
+		});
+	},
+	addIssueType: async ({ request, locals, params }) => {
+		const input = formObject(await request.formData());
+		return handleAction(async () => {
+			await createIssueType(appContext(locals), params.key, input);
+		});
+	},
+	updateIssueType: async ({ request, locals, params }) => {
+		const { id = '', ...input } = formObject(await request.formData());
+		return handleAction(async () => {
+			await updateIssueType(appContext(locals), params.key, id, input);
+		});
+	},
+	deleteIssueType: async ({ request, locals, params }) => {
+		const id = await idOf(request);
+		return handleAction(async () => {
+			await deleteIssueType(appContext(locals), params.key, id);
+		});
+	},
+	moveIssueType: async ({ request, locals, params }) => {
+		const { id, dir } = await moveOf(request);
+		return handleAction(async () => {
+			await moveIssueType(appContext(locals), params.key, id, dir);
 		});
 	},
 	addCategory: async ({ request, locals, params }) => {

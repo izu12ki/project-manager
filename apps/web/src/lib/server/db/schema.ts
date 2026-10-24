@@ -7,7 +7,7 @@ import {
 	text,
 	uniqueIndex
 } from 'drizzle-orm/sqlite-core';
-import { PRIORITIES, STATUSES } from '../../labels';
+import { COLORS, PRIORITIES, RESOLUTIONS } from '../../labels';
 
 const now = sql`(cast(unixepoch('subsecond') * 1000 as integer))`;
 const createdAt = () => integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now);
@@ -109,6 +109,10 @@ export const project = sqliteTable(
 		key: text().notNull(),
 		name: text().notNull(),
 		description: text().notNull().default(''),
+		/** アイコンに出す文字（絵文字など）。null はキーの頭文字 */
+		icon: text(),
+		/** null はキーから自動で選ぶ */
+		color: text({ enum: COLORS }),
 		nextIssueNumber: integer('next_issue_number').notNull().default(1),
 		archivedAt: integer('archived_at', { mode: 'timestamp_ms' }),
 		createdAt: createdAt(),
@@ -140,7 +144,6 @@ export const invitation = sqliteTable(
 		id: text().primaryKey(),
 		email: text().notNull(),
 		role: text({ enum: ['member', 'guest'] }).notNull(),
-		projectId: text('project_id').references(() => project.id, { onDelete: 'cascade' }),
 		tokenHash: text('token_hash').notNull(),
 		invitedBy: text('invited_by')
 			.notNull()
@@ -153,6 +156,55 @@ export const invitation = sqliteTable(
 		uniqueIndex('invitation_token_hash_uq').on(t.tokenHash),
 		index('invitation_email_idx').on(t.email)
 	]
+);
+
+/** 招待を受け入れたときに参加するプロジェクト */
+export const invitationProject = sqliteTable(
+	'invitation_project',
+	{
+		invitationId: text('invitation_id')
+			.notNull()
+			.references(() => invitation.id, { onDelete: 'cascade' }),
+		projectId: text('project_id')
+			.notNull()
+			.references(() => project.id, { onDelete: 'cascade' })
+	},
+	(t) => [
+		primaryKey({ columns: [t.invitationId, t.projectId] }),
+		index('invitation_project_project_idx').on(t.projectId)
+	]
+);
+
+/** プロジェクトごとのステータス。issue.status は key を持つ */
+export const issueStatus = sqliteTable(
+	'issue_status',
+	{
+		projectId: text('project_id')
+			.notNull()
+			.references(() => project.id, { onDelete: 'cascade' }),
+		/** 既定のものは 'todo' などの固定値、追加したものは UUID */
+		key: text().notNull(),
+		name: text().notNull(),
+		color: text({ enum: COLORS }).notNull().default('gray'),
+		position: integer().notNull(),
+		createdAt: createdAt()
+	},
+	(t) => [primaryKey({ columns: [t.projectId, t.key] })]
+);
+
+export const issueType = sqliteTable(
+	'issue_type',
+	{
+		id: text().primaryKey(),
+		projectId: text('project_id')
+			.notNull()
+			.references(() => project.id, { onDelete: 'cascade' }),
+		name: text().notNull(),
+		color: text({ enum: COLORS }).notNull().default('gray'),
+		position: integer().notNull(),
+		createdAt: createdAt()
+	},
+	(t) => [uniqueIndex('issue_type_project_name_uq').on(t.projectId, t.name)]
 );
 
 export const category = sqliteTable(
@@ -195,7 +247,10 @@ export const issue = sqliteTable(
 		number: integer().notNull(),
 		title: text().notNull(),
 		description: text().notNull().default(''),
-		status: text({ enum: STATUSES }).notNull().default('todo'),
+		typeId: text('type_id').references(() => issueType.id, { onDelete: 'set null' }),
+		status: text().notNull().default('todo'),
+		/** 完了理由 */
+		resolution: text({ enum: RESOLUTIONS }),
 		priority: text({ enum: PRIORITIES }).notNull().default('none'),
 		assigneeId: text('assignee_id').references(() => user.id),
 		reporterId: text('reporter_id')
@@ -206,6 +261,9 @@ export const issue = sqliteTable(
 		categoryId: text('category_id').references(() => category.id, { onDelete: 'set null' }),
 		milestoneId: text('milestone_id').references(() => milestone.id, { onDelete: 'set null' }),
 		position: text().notNull(),
+		/** 削除した日時。削除した課題は一覧から外し、削除履歴として閲覧だけできる */
+		deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
+		deletedBy: text('deleted_by').references(() => user.id),
 		createdAt: createdAt(),
 		updatedAt: updatedAt()
 	},
@@ -277,8 +335,8 @@ export const notification = sqliteTable(
 			.references(() => issue.id, { onDelete: 'cascade' }),
 		type: text({ enum: NOTIFICATION_TYPES }).notNull(),
 		commentId: text('comment_id').references(() => comment.id, { onDelete: 'cascade' }),
-		fromStatus: text('from_status', { enum: STATUSES }),
-		toStatus: text('to_status', { enum: STATUSES }),
+		fromStatus: text('from_status'),
+		toStatus: text('to_status'),
 		readAt: integer('read_at', { mode: 'timestamp_ms' }),
 		createdAt: createdAt()
 	},

@@ -10,7 +10,7 @@
 		LogOut,
 		Users
 	} from '@lucide/svelte';
-	import { ROLE_LABEL, colorFor } from '$lib/labels';
+	import { ROLE_LABEL, colorFor, projectColor, projectIcon } from '$lib/labels';
 	import { getUnreadCount } from '$lib/notifications.remote';
 	import ThemeToggle from './ThemeToggle.svelte';
 
@@ -21,7 +21,13 @@
 		mobileOpen = false
 	}: {
 		user: { name: string; email: string; role: 'admin' | 'member' | 'guest' };
-		projects: { key: string; name: string; archived: boolean }[];
+		projects: {
+			key: string;
+			name: string;
+			icon: string | null;
+			color: string | null;
+			archived: boolean;
+		}[];
 		inert?: boolean;
 		mobileOpen?: boolean;
 	} = $props();
@@ -95,7 +101,7 @@
 					class="item row"
 					aria-current={isCurrent(p.key) ? 'page' : undefined}
 				>
-					<span class="proj-icon" style:--c={colorFor(p.key)}>{p.key[0]}</span>
+					<span class="proj-icon" style:--c={projectColor(p)}>{projectIcon(p)}</span>
 					<span class="truncate">{p.name}</span>
 				</a>
 			{/each}

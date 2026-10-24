@@ -10,11 +10,11 @@ const BoardRef = v.object({ key: v.string(), milestone: v.string() });
 export const getBoard = query(BoardRef, ({ key, milestone }) => {
 	const ctx = remoteContext();
 	return runQuery(async () => {
-		const [columns, milestones] = await Promise.all([
+		const [{ statuses, columns }, milestones] = await Promise.all([
 			listBoard(ctx, key, { milestoneId: milestone || undefined }),
 			listMilestones(ctx, key)
 		]);
-		return { columns, milestones };
+		return { statuses, columns, milestones };
 	});
 });
 

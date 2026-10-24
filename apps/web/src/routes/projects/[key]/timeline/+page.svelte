@@ -2,7 +2,7 @@
 	import { ChevronLeft, ChevronRight, SearchX } from '@lucide/svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { STATUSES, STATUS_LABEL, milestoneLabel, todayJst } from '$lib/labels';
+	import { milestoneLabel, todayJst } from '$lib/labels';
 	import { toast } from '$lib/toast.svelte';
 	import {
 		addDays,
@@ -20,7 +20,7 @@
 	import { getTimeline, setIssueDates } from './timeline.remote';
 	import type { PageProps } from './$types';
 
-	let { params }: PageProps = $props();
+	let { data, params }: PageProps = $props();
 	const today = todayJst();
 	const view = $derived(parseView(new URLSearchParams(page.url.search), today));
 	const timeline = $derived(await getTimeline(params.key));
@@ -113,8 +113,8 @@
 				>
 					<option value="">すべて</option>
 					<option value="open">完了以外</option>
-					{#each STATUSES as s (s)}
-						<option value={s}>{STATUS_LABEL[s]}</option>
+					{#each data.statuses as s (s.key)}
+						<option value={s.key}>{s.name}</option>
 					{/each}
 				</select>
 			</div>

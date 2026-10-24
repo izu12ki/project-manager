@@ -131,7 +131,6 @@
 				name="description"
 				rows="3"
 				value={data.project.description}></textarea>
-			<p class="hint">Markdown が使えます</p>
 		</div>
 		<div><button type="submit" class="btn btn-primary">保存</button></div>
 	</form>

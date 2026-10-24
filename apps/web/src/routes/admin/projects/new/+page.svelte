@@ -39,13 +39,7 @@
 		</div>
 		<div class="field">
 			<label class="label" for="description">説明</label>
-			<textarea
-				class="textarea"
-				id="description"
-				name="description"
-				rows="3"
-				aria-describedby="description-hint"></textarea>
-			<p class="hint" id="description-hint">Markdown が使えます</p>
+			<textarea class="textarea" id="description" name="description" rows="3"></textarea>
 		</div>
 		<div class="flex justify-end gap-2">
 			<a href="/" class="btn btn-outline">キャンセル</a>

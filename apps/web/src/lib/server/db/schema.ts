@@ -7,7 +7,7 @@ import {
 	text,
 	uniqueIndex
 } from 'drizzle-orm/sqlite-core';
-import { COLORS, PRIORITIES, RESOLUTIONS } from '../../labels';
+import { COLORS, PRIORITIES, RESOLUTIONS, type IssueChangeItem } from '../../labels';
 
 const now = sql`(cast(unixepoch('subsecond') * 1000 as integer))`;
 const createdAt = () => integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now);
@@ -201,6 +201,8 @@ export const issueType = sqliteTable(
 			.references(() => project.id, { onDelete: 'cascade' }),
 		name: text().notNull(),
 		color: text({ enum: COLORS }).notNull().default('gray'),
+		/** 起票時に本文へ入れるテンプレート（Markdown） */
+		template: text().notNull().default(''),
 		position: integer().notNull(),
 		createdAt: createdAt()
 	},
@@ -289,6 +291,23 @@ export const comment = sqliteTable(
 		updatedAt: updatedAt()
 	},
 	(t) => [index('comment_issue_idx').on(t.issueId)]
+);
+
+/** 課題の編集履歴。1 回の保存で 1 行 */
+export const issueChange = sqliteTable(
+	'issue_change',
+	{
+		id: text().primaryKey(),
+		issueId: text('issue_id')
+			.notNull()
+			.references(() => issue.id, { onDelete: 'cascade' }),
+		actorId: text('actor_id')
+			.notNull()
+			.references(() => user.id),
+		changes: text({ mode: 'json' }).$type<IssueChangeItem[]>().notNull(),
+		createdAt: createdAt()
+	},
+	(t) => [index('issue_change_issue_idx').on(t.issueId)]
 );
 
 // issueId が null の行は「仮置き」（起票・コメント投稿前にアップロードしたもの）

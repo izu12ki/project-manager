@@ -432,7 +432,17 @@ export async function listIssueTypes(ctx: AppContext, key: string): Promise<Issu
 	return listIssueTypesOf(ctx.db, p.id);
 }
 
-const IssueTypeInput = v.object({ name: NameSchema('課題種別'), color: ColorSchema });
+const IssueTypeInput = v.object({
+	name: NameSchema('課題種別'),
+	color: ColorSchema,
+	template: v.optional(
+		v.pipe(
+			v.string(),
+			v.transform((t) => t.replace(/\r\n/g, '\n')),
+			v.maxLength(50_000, 'テンプレートは50,000文字以内で入力してください')
+		)
+	)
+});
 
 async function assertUniqueTypeName(db: DB, projectId: string, name: string, except?: string) {
 	const [dup] = await db

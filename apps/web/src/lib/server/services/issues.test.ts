@@ -10,6 +10,7 @@ import {
 	getIssue,
 	listBoard,
 	listDeletedIssues,
+	listIssueChanges,
 	listIssues,
 	listTimeline,
 	moveIssue,
@@ -276,6 +277,48 @@ describe('issues', () => {
 		await expect(updateIssue(as(member), 'ACME', 1, { typeId: 'nope' })).rejects.toMatchObject({
 			code: 'validation'
 		});
+	});
+
+	it('編集すると、変わった項目が変更時点の表示名で履歴に残る', async () => {
+		const types = await listIssueTypes(as(member), 'ACME');
+		await createIssue(as(member), 'ACME', { title: 'A', typeId: types[0].id });
+		expect(await listIssueChanges(as(member), 'ACME', 1)).toEqual([]);
+		await updateIssue(as(guest), 'ACME', 1, {
+			title: 'B',
+			description: '本文',
+			typeId: types[1].id,
+			status: 'in_progress',
+			priority: 'high',
+			assigneeId: member.id,
+			dueDate: '2026-12-31'
+		});
+		// 何も変わらない保存は残さない
+		await updateIssue(as(guest), 'ACME', 1, { title: 'B', priority: 'high' });
+		const changes = await listIssueChanges(as(member), 'ACME', 1);
+		expect(changes).toHaveLength(1);
+		expect(changes[0]).toMatchObject({ actorId: guest.id, actorName: 'guest' });
+		expect(changes[0].changes).toEqual([
+			{ field: 'title', from: 'A', to: 'B' },
+			{ field: 'description', from: '', to: '本文' },
+			{ field: 'type', from: 'タスク', to: 'バグ' },
+			{ field: 'status', from: '未着手', to: '進行中' },
+			{ field: 'priority', from: 'なし', to: '高' },
+			{ field: 'assignee', from: null, to: 'member' },
+			{ field: 'dueDate', from: null, to: '2026-12-31' }
+		]);
+	});
+
+	it('カンバン移動: 列が変わったときだけ履歴に残る', async () => {
+		await createIssue(as(member), 'ACME', { title: 'A' });
+		const { id: a } = (await getIssue(as(member), 'ACME', 1)).issue;
+		await createIssue(as(member), 'ACME', { title: 'B' });
+		await moveIssue(as(member), 'ACME', { issueId: a, status: 'todo', beforeId: undefined });
+		expect(await listIssueChanges(as(member), 'ACME', 1)).toEqual([]);
+		await moveIssue(as(member), 'ACME', { issueId: a, status: 'done' });
+		const changes = await listIssueChanges(as(member), 'ACME', 1);
+		expect(changes.map((c) => c.changes)).toEqual([
+			[{ field: 'status', from: '未着手', to: '完了' }]
+		]);
 	});
 
 	it('別プロジェクトの課題は番号を推測しても見えない', async () => {

@@ -131,7 +131,6 @@
 				name="description"
 				rows="3"
 				value={data.project.description}></textarea>
-			<p class="hint">Markdown が使えます</p>
 		</div>
 		<div><button type="submit" class="btn btn-primary">保存</button></div>
 	</form>
@@ -268,7 +267,7 @@
 		<div class="card-head">
 			<h2 class="card-title">課題種別</h2>
 			<p class="card-desc">
-				課題の種類です。課題の作成・詳細画面でタイトルの上から選べます。削除すると、設定されていた課題は未設定になります
+				課題の種類です。課題の作成・詳細画面でタイトルの上から選べます。種別ごとに起票時の本文テンプレートを設定できます。削除すると、設定されていた課題は未設定になります
 			</p>
 		</div>
 		{#if data.issueTypes.length > 0}
@@ -302,6 +301,19 @@
 										<button type="submit" class="btn btn-outline">保存</button>
 									</div>
 									<ColorPicker name="color" value={t.color} label={`${t.name} の色`} />
+									<div class="field">
+										<label class="label" for={`issue-type-template-${t.id}`}>本文テンプレート</label
+										>
+										<textarea
+											class="textarea"
+											id={`issue-type-template-${t.id}`}
+											name="template"
+											rows="6"
+											maxlength={50000}
+											placeholder="## 背景&#10;&#10;## やること"
+											value={t.template}></textarea>
+										<p class="hint">この種別で起票するとき、本文に入ります（Markdown）</p>
+									</div>
 								</form>
 							</details>
 							{@render moveButtons('?/moveIssueType', t.id, i, data.issueTypes.length, t.name)}

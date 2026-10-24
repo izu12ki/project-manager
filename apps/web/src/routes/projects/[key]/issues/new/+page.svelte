@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { enhance } from '$app/forms';
 	import { UserRoundCheck } from '@lucide/svelte';
 	import FormAlert from '$lib/components/FormAlert.svelte';
@@ -10,6 +11,20 @@
 	const cancelHref = $derived(`/projects/${data.project.key}`);
 	let assigneeId = $state('');
 	const meAssignable = $derived(data.assignees.some((u) => u.id === data.user?.id));
+	const templateOf = (id: string | undefined) =>
+		data.issueTypes.find((t) => t.id === id)?.template ?? '';
+	// 入力中にデータが取り直されても本文を上書きしないよう、初期値だけ取る
+	let typeId = $state(untrack(() => data.issueTypes[0]?.id));
+	let description = $state(untrack(() => templateOf(data.issueTypes[0]?.id)));
+
+	/** 本文が空か、前の種別のテンプレートのままなら、選んだ種別のテンプレートに入れ替える */
+	function changeType(next: string) {
+		const prev = templateOf(typeId);
+		if (description.trim() === '' || description.trim() === prev.trim()) {
+			description = templateOf(next);
+		}
+		typeId = next;
+	}
 </script>
 
 {#snippet actions()}
@@ -28,7 +43,13 @@
 	{#if data.issueTypes.length > 0}
 		<div class="flex items-center gap-2">
 			<label for="issue-type" class="text-[13px] text-muted-foreground">種別</label>
-			<select class="select type-select" id="issue-type" name="typeId">
+			<select
+				class="select type-select"
+				id="issue-type"
+				name="typeId"
+				value={typeId}
+				onchange={(e) => changeType(e.currentTarget.value)}
+			>
 				{#each data.issueTypes as t (t.id)}
 					<option value={t.id}>{t.name}</option>
 				{/each}
@@ -49,6 +70,7 @@
 		<MarkdownEditor
 			id="issue-description"
 			name="description"
+			bind:value={description}
 			label="本文"
 			rows={10}
 			placeholder="課題の詳細"

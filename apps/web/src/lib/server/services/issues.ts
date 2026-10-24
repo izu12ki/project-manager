@@ -20,7 +20,10 @@ import {
 	DONE_STATUS,
 	INITIAL_STATUS,
 	PRIORITIES,
+	PRIORITY_LABEL,
 	RESOLUTIONS,
+	RESOLUTION_LABEL,
+	type IssueChangeItem,
 	type Priority,
 	type Status,
 	type StatusDef
@@ -28,7 +31,7 @@ import {
 import { authorize, can } from '../authz';
 import type { AppContext } from '../context';
 import type { DB } from '../db';
-import { category, issue, issueType, milestone, project, user } from '../db/schema';
+import { category, issue, issueChange, issueType, milestone, project, user } from '../db/schema';
 import { AppError } from '../errors';
 import { notify, type IssueEvent } from '../notifications';
 import { emptyToNull, parse } from '../validation';
@@ -370,6 +373,117 @@ export async function createIssue(
 	return { number: row.number };
 }
 
+type IssuePatch = Partial<typeof issue.$inferInsert>;
+type IssueRow = typeof issue.$inferSelect;
+
+/** 変わった項目を、変更時点の表示名で書き出す（履歴に残すため） */
+async function describeChanges(
+	db: DB,
+	projectId: string,
+	cur: IssueRow,
+	patch: IssuePatch
+): Promise<IssueChangeItem[]> {
+	const nameOf = async (
+		table: typeof issueType | typeof category | typeof milestone | typeof user,
+		ids: (string | null | undefined)[]
+	): Promise<Map<string, string>> => {
+		const wanted = ids.filter((id): id is string => !!id);
+		if (wanted.length === 0) return new Map();
+		const rows = await db
+			.select({ id: table.id, name: table.name })
+			.from(table)
+			.where(inArray(table.id, wanted));
+		return new Map(rows.map((r) => [r.id, r.name]));
+	};
+	const pair = (a: string | null | undefined, b: string | null | undefined) => [a, b];
+	// カンバンで同じ列の中を動かしたときは status が同じ値で来る
+	const statusChanged = patch.status !== undefined && patch.status !== cur.status;
+	const [types, categories, users, milestones, statuses] = await Promise.all([
+		patch.typeId !== undefined ? nameOf(issueType, pair(cur.typeId, patch.typeId)) : null,
+		patch.categoryId !== undefined
+			? nameOf(category, pair(cur.categoryId, patch.categoryId))
+			: null,
+		patch.assigneeId !== undefined ? nameOf(user, pair(cur.assigneeId, patch.assigneeId)) : null,
+		patch.milestoneId !== undefined
+			? nameOf(milestone, pair(cur.milestoneId, patch.milestoneId))
+			: null,
+		statusChanged ? listStatusesOf(db, projectId) : null
+	]);
+	const changes: IssueChangeItem[] = [];
+	const add = (
+		field: IssueChangeItem['field'],
+		from: string | null | undefined,
+		to: string | null | undefined
+	) => changes.push({ field, from: from ?? null, to: to ?? null });
+	const lookup = (m: Map<string, string> | null, id: string | null | undefined) =>
+		id ? (m?.get(id) ?? null) : null;
+
+	if (patch.title !== undefined) add('title', cur.title, patch.title);
+	if (patch.description !== undefined) add('description', cur.description, patch.description);
+	if (patch.typeId !== undefined)
+		add('type', lookup(types, cur.typeId), lookup(types, patch.typeId));
+	if (statusChanged) {
+		const name = (k: string) => statuses?.find((st) => st.key === k)?.name ?? k;
+		add('status', name(cur.status), name(patch.status!));
+	}
+	if (patch.resolution !== undefined)
+		add(
+			'resolution',
+			cur.resolution && RESOLUTION_LABEL[cur.resolution],
+			patch.resolution && RESOLUTION_LABEL[patch.resolution]
+		);
+	if (patch.priority !== undefined)
+		add('priority', PRIORITY_LABEL[cur.priority], PRIORITY_LABEL[patch.priority]);
+	if (patch.assigneeId !== undefined)
+		add('assignee', lookup(users, cur.assigneeId), lookup(users, patch.assigneeId));
+	if (patch.categoryId !== undefined)
+		add('category', lookup(categories, cur.categoryId), lookup(categories, patch.categoryId));
+	if (patch.milestoneId !== undefined)
+		add('milestone', lookup(milestones, cur.milestoneId), lookup(milestones, patch.milestoneId));
+	if (patch.startDate !== undefined) add('startDate', cur.startDate, patch.startDate);
+	if (patch.dueDate !== undefined) add('dueDate', cur.dueDate, patch.dueDate);
+	return changes;
+}
+
+/** 課題を更新し、同時に編集履歴を残す */
+async function applyPatch(
+	ctx: AppContext,
+	projectId: string,
+	cur: IssueRow,
+	patch: IssuePatch
+): Promise<void> {
+	const changes = await describeChanges(ctx.db, projectId, cur, patch);
+	const update = ctx.db.update(issue).set(patch).where(eq(issue.id, cur.id));
+	if (changes.length === 0) {
+		await update;
+		return;
+	}
+	await ctx.db.batch([
+		update,
+		ctx.db
+			.insert(issueChange)
+			.values({ id: uuidv7(), issueId: cur.id, actorId: ctx.actor.id, changes })
+	]);
+}
+
+/** 編集履歴（古い順）。課題が存在しない場合は空配列 */
+export async function listIssueChanges(ctx: AppContext, key: string, number: number) {
+	const p = await requireProject(ctx, key);
+	return ctx.db
+		.select({
+			id: issueChange.id,
+			actorId: issueChange.actorId,
+			actorName: user.name,
+			changes: issueChange.changes,
+			createdAt: issueChange.createdAt
+		})
+		.from(issueChange)
+		.innerJoin(user, eq(user.id, issueChange.actorId))
+		.innerJoin(issue, eq(issue.id, issueChange.issueId))
+		.where(and(eq(issue.projectId, p.id), eq(issue.number, number)))
+		.orderBy(asc(issueChange.createdAt), asc(issueChange.id));
+}
+
 const UpdateInput = v.object({
 	title: v.optional(TitleSchema),
 	typeId: v.optional(v.string()),
@@ -396,7 +510,7 @@ export async function updateIssue(
 	assertNotDeleted(cur);
 	const data = parse(UpdateInput, input);
 	const res = { reporterId: cur.reporterId, assigneeId: cur.assigneeId };
-	const patch: Partial<typeof issue.$inferInsert> = {};
+	const patch: IssuePatch = {};
 
 	const startDate = emptyToNull(data.startDate);
 	const dueDate = emptyToNull(data.dueDate);
@@ -440,7 +554,7 @@ export async function updateIssue(
 	}
 
 	if (Object.keys(patch).length === 0) return;
-	await ctx.db.update(issue).set(patch).where(eq(issue.id, cur.id));
+	await applyPatch(ctx, p.id, cur, patch);
 	if (patch.description !== undefined) {
 		await linkAttachments(ctx, { projectId: p.id, issueId: cur.id }, patch.description);
 	}
@@ -537,7 +651,7 @@ export async function moveIssue(ctx: AppContext, key: string, input: unknown): P
 	} catch {
 		throw new AppError('validation', STALE);
 	}
-	await ctx.db.update(issue).set({ status: data.status, position }).where(eq(issue.id, cur.id));
+	await applyPatch(ctx, p.id, cur, { status: data.status, position });
 	if (data.status !== cur.status) {
 		await notify(ctx, {
 			project: p,

@@ -440,7 +440,7 @@
 	.editor {
 		display: grid;
 		border: 1px solid var(--input);
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 		overflow: hidden;
 		transition:
 			border-color 0.15s ease,
@@ -512,7 +512,7 @@
 		width: min(320px, calc(100% - 16px));
 		padding: 6px;
 		border: 1px solid var(--border);
-		border-radius: 6px;
+		border-radius: var(--radius-md);
 		background: var(--popover, var(--background));
 		box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
 	}

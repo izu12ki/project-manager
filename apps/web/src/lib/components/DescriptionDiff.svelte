@@ -33,7 +33,7 @@
 		display: grid;
 		overflow: hidden;
 		border: 1px solid var(--border);
-		border-radius: 6px;
+		border-radius: var(--radius-md);
 		background: var(--card);
 		font-size: 13px;
 		line-height: 1.6;

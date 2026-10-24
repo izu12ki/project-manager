@@ -213,7 +213,7 @@
 		align-items: center;
 		gap: 10px;
 		padding: 8px;
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 	}
 	.brand:hover,
 	.user:hover {
@@ -223,7 +223,7 @@
 		width: 32px;
 		height: 32px;
 		flex-shrink: 0;
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 		background: var(--primary);
 		color: var(--primary-foreground);
 		display: grid;
@@ -257,7 +257,7 @@
 		height: 32px;
 		padding: 0 8px;
 		border: none;
-		border-radius: 6px;
+		border-radius: var(--radius-md);
 		background: transparent;
 		text-align: left;
 		cursor: pointer;
@@ -279,7 +279,7 @@
 		width: 22px;
 		height: 22px;
 		flex-shrink: 0;
-		border-radius: 6px;
+		border-radius: var(--radius-md);
 		background: color-mix(in oklch, var(--c) 24%, var(--card));
 		color: color-mix(in oklch, var(--c) 60%, var(--foreground));
 		display: grid;
@@ -302,7 +302,7 @@
 		gap: 8px;
 		padding: 8px;
 		border: none;
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 		background: transparent;
 		text-align: left;
 		cursor: pointer;
@@ -318,7 +318,7 @@
 		bottom: calc(100% - 4px);
 		padding: 4px;
 		border: 1px solid var(--border);
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 		background: var(--popover);
 		box-shadow: var(--shadow-pop);
 		z-index: 60;

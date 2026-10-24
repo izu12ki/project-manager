@@ -125,7 +125,7 @@
 		gap: 6px;
 		padding: 16px 20px;
 		border: 1px solid var(--border);
-		border-radius: 6px;
+		border-radius: var(--radius-md);
 		background: var(--muted);
 		color: var(--muted-foreground);
 	}
@@ -138,7 +138,7 @@
 		align-items: center;
 		height: 20px;
 		padding: 0 6px;
-		border-radius: 6px;
+		border-radius: var(--radius-pill);
 		background: var(--background);
 		font-size: 11px;
 		font-weight: 500;

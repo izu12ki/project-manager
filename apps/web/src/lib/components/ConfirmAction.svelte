@@ -110,7 +110,7 @@
 		max-width: 420px;
 		padding: 0;
 		border: none;
-		border-radius: 6px;
+		border-radius: var(--radius-md);
 		overflow: hidden;
 		background: var(--background);
 		color: var(--foreground);
@@ -142,7 +142,7 @@
 		width: 32px;
 		height: 32px;
 		border: none;
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 		background: transparent;
 		color: inherit;
 		cursor: pointer;

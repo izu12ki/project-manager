@@ -243,7 +243,7 @@
 		background: var(--col);
 		border: 1px solid var(--border);
 		border-top: 3px solid var(--c);
-		border-radius: 6px;
+		border-radius: var(--radius-md);
 		padding: 12px;
 		display: flex;
 		flex-direction: column;
@@ -265,7 +265,7 @@
 		align-items: center;
 		height: 20px;
 		padding: 0 8px;
-		border-radius: 4px;
+		border-radius: var(--radius-pill);
 		background: color-mix(in oklch, var(--c) 16%, transparent);
 		color: color-mix(in oklch, var(--c) 75%, var(--foreground));
 		font-size: 12px;
@@ -279,25 +279,37 @@
 		flex-direction: column;
 		gap: 10px;
 		min-height: 80px;
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 	}
 	.card-item {
 		background: var(--card);
 		border: 1px solid var(--border);
-		border-radius: 4px;
+		border-radius: var(--radius-card);
 		padding: 12px;
 		display: grid;
 		gap: 10px;
+		box-shadow: var(--card-shadow);
 		cursor: grab;
-		transition: border-color 0.15s ease;
+		transition:
+			border-color 0.15s ease,
+			box-shadow 0.15s ease;
 	}
 	.card-item:hover {
 		border-color: var(--primary);
+		box-shadow: var(--card-shadow-hover);
 	}
 	.card-item.selected {
 		border-color: var(--primary);
 		background: color-mix(in oklch, var(--primary) 8%, var(--card));
-		box-shadow: inset 3px 0 0 var(--primary);
+		box-shadow:
+			inset 3px 0 0 var(--primary),
+			var(--card-shadow);
+	}
+	/* デザイン案 B: 件数を状態色で塗る（一時的） */
+	:global([data-design='b']) .count {
+		background: var(--c);
+		color: var(--solid-ink);
+		font-weight: 700;
 	}
 	.title {
 		font-weight: 500;
@@ -314,6 +326,6 @@
 		white-space: nowrap;
 		padding: 0 6px;
 		border: 1px solid var(--border);
-		border-radius: 4px;
+		border-radius: var(--radius-pill);
 	}
 </style>

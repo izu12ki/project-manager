@@ -386,7 +386,7 @@
 	.scroller {
 		overflow-x: auto;
 		border: 1px solid var(--border);
-		border-radius: 6px;
+		border-radius: var(--radius-md);
 		background: var(--card);
 	}
 	.canvas {
@@ -557,7 +557,7 @@
 		padding: 0 6px;
 		overflow: hidden;
 		border: 1px solid var(--c);
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 		background: color-mix(in oklch, var(--c) 28%, var(--card));
 		color: var(--foreground);
 		font-size: 11px;
@@ -617,7 +617,7 @@
 		height: 28px;
 		padding: 0 10px;
 		border: 1px solid var(--border);
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 		background: var(--card);
 		font-size: 13px;
 		user-select: none;
@@ -670,7 +670,7 @@
 		z-index: 50;
 		padding: 2px 8px;
 		border: 1px solid var(--primary);
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 		background: var(--card);
 		font-size: 12px;
 		pointer-events: none;

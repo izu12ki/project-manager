@@ -630,7 +630,7 @@
 	.comment:target {
 		outline: 2px solid var(--ring);
 		outline-offset: 4px;
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 	}
 	.comment :global(.danger-hover:hover) {
 		color: var(--destructive);
@@ -640,7 +640,7 @@
 		gap: 2px;
 		margin: 0;
 		padding: 8px 12px;
-		border-radius: 6px;
+		border-radius: var(--radius-md);
 		background: var(--muted);
 		list-style: none;
 		font-size: 13px;

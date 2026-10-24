@@ -10,6 +10,7 @@
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import ImageLightbox from '$lib/components/ImageLightbox.svelte';
 	import Toaster from '$lib/components/Toaster.svelte';
+	import DesignSwitcher from '$lib/components/DesignSwitcher.svelte';
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();
@@ -66,6 +67,7 @@
 </svelte:head>
 
 <Toaster />
+<DesignSwitcher />
 <ImageLightbox />
 <NavProgress />
 

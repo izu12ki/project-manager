@@ -15,7 +15,7 @@
 		height: 20px;
 		padding: 0 7px;
 		overflow: hidden;
-		border-radius: 4px;
+		border-radius: var(--radius-pill);
 		background: var(--c);
 		color: white;
 		font-size: 12px;

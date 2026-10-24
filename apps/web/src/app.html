@@ -14,6 +14,13 @@
 				if (t !== 'light' && t !== 'dark')
 					t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 				document.documentElement.dataset.theme = t;
+				// デザイン案の比較（一時的）。?design=a|b で指定でき、選択は保存する
+				var d = new URLSearchParams(location.search).get('design');
+				try {
+					if (d !== null) localStorage.setItem('design', d);
+					else d = localStorage.getItem('design');
+				} catch (e) {}
+				if (d === 'a' || d === 'b') document.documentElement.dataset.design = d;
 			})();
 		</script>
 		<link rel="preconnect" href="https://fonts.googleapis.com" />

@@ -40,7 +40,7 @@
 		display: flex;
 		height: 32px;
 		border: 1px solid var(--input);
-		border-radius: 4px;
+		border-radius: var(--radius-sm);
 		overflow: hidden;
 	}
 	input {

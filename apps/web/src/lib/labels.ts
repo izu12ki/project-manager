@@ -189,7 +189,7 @@ export const ISSUE_CHANGE_FIELDS = [
 	'dueDate'
 ] as const;
 export type IssueChangeField = (typeof ISSUE_CHANGE_FIELDS)[number];
-/** from / to は変更時点の表示名（後で名前が変わったり削除されたりしても当時のまま出す）。本文は値を持たない */
+/** from / to は変更時点の表示名（後で名前が変わったり削除されたりしても当時のまま出す）。本文は変更前後の全文 */
 export type IssueChangeItem = { field: IssueChangeField; from: string | null; to: string | null };
 
 export const ISSUE_CHANGE_FIELD_LABEL: Record<IssueChangeField, string> = {

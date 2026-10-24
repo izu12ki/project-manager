@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Copy, Paperclip, Pencil, Trash2, X } from '@lucide/svelte';
 	import { untrack } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { formatBytes } from '$lib/attachment-rules';
 	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
@@ -83,6 +84,8 @@
 	const perms = $derived(detail.perms);
 	const canSave = $derived(perms.edit || perms.changeStatus || perms.assign);
 	let editing = $state(false);
+	/** 差分を開いている履歴（差分の計算は開いたときだけ行う） */
+	const openDiffs = new SvelteSet<string>();
 	let editingComment = $state<string | null>(null);
 	const attrFormId = $derived(`issue-attributes-${variant}`);
 
@@ -422,8 +425,24 @@
 							</div>
 							<ul class="change-list">
 								{#each h.changes as ch (ch.field)}
-									<li>
-										{#if ch.field === 'description'}
+									<li class:full={ch.field === 'description'}>
+										{#if ch.field === 'description' && ch.from !== null && ch.to !== null}
+											{@const before = ch.from}
+											{@const after = ch.to}
+											<details
+												class="desc-diff"
+												ontoggle={(e) =>
+													e.currentTarget.open ? openDiffs.add(h.id) : openDiffs.delete(h.id)}
+											>
+												<summary>本文を変更しました（差分を表示）</summary>
+												{#if openDiffs.has(h.id)}
+													{#await import('$lib/components/DescriptionDiff.svelte') then { default: DescriptionDiff }}
+														<DescriptionDiff {before} {after} />
+													{/await}
+												{/if}
+											</details>
+										{:else if ch.field === 'description'}
+											<!-- 差分の保存を始める前の履歴 -->
 											<span>本文を変更しました</span>
 										{:else}
 											<span class="change-field">{ISSUE_CHANGE_FIELD_LABEL[ch.field]}</span>
@@ -633,8 +652,18 @@
 		gap: 4px 6px;
 		min-width: 0;
 	}
+	.change-list li.full {
+		display: block;
+	}
 	.change-field {
 		color: var(--muted-foreground);
+	}
+	.desc-diff summary {
+		width: fit-content;
+		cursor: pointer;
+	}
+	.desc-diff[open] summary {
+		margin-bottom: 6px;
 	}
 	.change-field::after {
 		content: ':';

@@ -419,7 +419,7 @@ async function describeChanges(
 		id ? (m?.get(id) ?? null) : null;
 
 	if (patch.title !== undefined) add('title', cur.title, patch.title);
-	if (patch.description !== undefined) add('description', null, null);
+	if (patch.description !== undefined) add('description', cur.description, patch.description);
 	if (patch.typeId !== undefined)
 		add('type', lookup(types, cur.typeId), lookup(types, patch.typeId));
 	if (statusChanged) {

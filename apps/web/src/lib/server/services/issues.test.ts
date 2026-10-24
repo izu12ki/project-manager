@@ -299,7 +299,7 @@ describe('issues', () => {
 		expect(changes[0]).toMatchObject({ actorId: guest.id, actorName: 'guest' });
 		expect(changes[0].changes).toEqual([
 			{ field: 'title', from: 'A', to: 'B' },
-			{ field: 'description', from: null, to: null },
+			{ field: 'description', from: '', to: '本文' },
 			{ field: 'type', from: 'タスク', to: 'バグ' },
 			{ field: 'status', from: '未着手', to: '進行中' },
 			{ field: 'priority', from: 'なし', to: '高' },

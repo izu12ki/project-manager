@@ -250,16 +250,15 @@
 	.btn-ghost:not(:disabled):hover {
 		color: var(--foreground);
 	}
-	/* 削除などの副ボタン。赤みのある面と枠で、背景に埋もれさせない */
+	/* 削除などの副ボタン。赤い枠で、背景に埋もれさせない */
 	.btn-danger {
-		border-color: color-mix(in oklch, var(--destructive) 45%, transparent);
-		background: color-mix(in oklch, var(--destructive) 7%, var(--card));
+		border-color: color-mix(in oklch, var(--destructive) 55%, transparent);
+		background: var(--card);
 		color: var(--destructive);
 		font-weight: 600;
 	}
 	.btn-danger:not(:disabled):hover {
 		border-color: var(--destructive);
-		background: color-mix(in oklch, var(--destructive) 14%, var(--card));
 	}
 	.btn-destructive {
 		border: none;

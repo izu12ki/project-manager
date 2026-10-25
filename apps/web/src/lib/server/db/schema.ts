@@ -143,7 +143,7 @@ export const invitation = sqliteTable(
 	{
 		id: text().primaryKey(),
 		email: text().notNull(),
-		role: text({ enum: ['member', 'guest'] }).notNull(),
+		role: text({ enum: ['admin', 'member', 'guest'] }).notNull(),
 		tokenHash: text('token_hash').notNull(),
 		invitedBy: text('invited_by')
 			.notNull()

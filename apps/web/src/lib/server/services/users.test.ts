@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { session } from '../db/schema';
+import { eq } from 'drizzle-orm';
+import { session, user } from '../db/schema';
 import { createTestBase, createTestDb, ctxOf, seedUser } from '../test-utils';
-import { disableUser, enableUser, isDisabledEmail, listUsers } from './users';
+import { changeUserRole, disableUser, enableUser, isDisabledEmail, listUsers } from './users';
 
 describe('users', () => {
 	it('無効化するとセッションが消え、ログイン拒否の判定が true になる', async () => {
@@ -53,5 +54,75 @@ describe('users', () => {
 		});
 		await enableUser(ctxOf(base, admin), member.id);
 		expect(await isDisabledEmail(db, member.email)).toBe(false);
+	});
+
+	describe('changeUserRole', () => {
+		it('ロールを変更でき、その人のセッションが消える', async () => {
+			const db = await createTestDb();
+			const base = createTestBase(db);
+			const admin = await seedUser(db, 'admin');
+			const member = await seedUser(db, 'member');
+			await db.insert(session).values({
+				id: 's1',
+				token: 't1',
+				userId: member.id,
+				expiresAt: new Date(Date.now() + 60_000)
+			});
+
+			await changeUserRole(ctxOf(base, admin), member.id, 'admin');
+
+			const users = await listUsers(ctxOf(base, admin));
+			expect(users.find((u) => u.id === member.id)?.role).toBe('admin');
+			expect(await db.select().from(session)).toHaveLength(0);
+		});
+
+		it('自分自身のロールは変更できない', async () => {
+			const db = await createTestDb();
+			const base = createTestBase(db);
+			const admin = await seedUser(db, 'admin');
+			await expect(changeUserRole(ctxOf(base, admin), admin.id, 'member')).rejects.toMatchObject({
+				code: 'validation',
+				message: '自分自身のロールは変更できません'
+			});
+		});
+
+		it('有効なアドミンが 0 人になる変更は拒否する', async () => {
+			const db = await createTestDb();
+			const base = createTestBase(db);
+			// 操作者 A は admin だが DB 上は無効化済み（B も同様）
+			const a = await seedUser(db, 'admin', 'A');
+			const b = await seedUser(db, 'admin', 'B');
+			const c = await seedUser(db, 'admin', 'C');
+			await db.update(user).set({ disabledAt: new Date() }).where(eq(user.id, a.id));
+			await db.update(user).set({ disabledAt: new Date() }).where(eq(user.id, b.id));
+
+			await expect(changeUserRole(ctxOf(base, a), c.id, 'member')).rejects.toMatchObject({
+				code: 'validation',
+				message: 'アドミンが 1 人もいなくなるため変更できません'
+			});
+
+			// 他に有効な admin がいれば成功する
+			const d = await seedUser(db, 'admin', 'D');
+			await changeUserRole(ctxOf(base, a), c.id, 'member');
+			const [row] = await db.select({ role: user.role }).from(user).where(eq(user.id, c.id));
+			expect(row.role).toBe('member');
+			expect(d.role).toBe('admin');
+		});
+
+		it('member は変更できない / 未知の ID は not_found / 不正なロールは validation', async () => {
+			const db = await createTestDb();
+			const base = createTestBase(db);
+			const admin = await seedUser(db, 'admin');
+			const member = await seedUser(db, 'member');
+			await expect(changeUserRole(ctxOf(base, member), admin.id, 'member')).rejects.toMatchObject({
+				code: 'forbidden'
+			});
+			await expect(changeUserRole(ctxOf(base, admin), 'nope', 'member')).rejects.toMatchObject({
+				code: 'not_found'
+			});
+			await expect(changeUserRole(ctxOf(base, admin), member.id, 'owner')).rejects.toMatchObject({
+				code: 'validation'
+			});
+		});
 	});
 });

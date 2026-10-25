@@ -16,7 +16,7 @@ const INVALID_INVITE = '招待リンクが無効か、期限切れです。管�
 
 const CreateInput = v.object({
 	email: EmailSchema,
-	role: v.picklist(['member', 'guest'], 'ロールを選択してください'),
+	role: v.picklist(['admin', 'member', 'guest'], 'ロールを選択してください'),
 	projectIds: v.optional(v.array(v.string()), [])
 });
 
@@ -133,7 +133,7 @@ export async function revokeInvitation(ctx: AppContext, invitationId: string): P
 export interface PendingInvitation {
 	id: string;
 	email: string;
-	role: 'member' | 'guest';
+	role: 'admin' | 'member' | 'guest';
 	projects: { id: string; name: string }[];
 	expiresAt: Date;
 	expired: boolean;

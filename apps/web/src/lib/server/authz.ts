@@ -12,6 +12,7 @@ export interface Actor {
 export type Action =
 	| 'user:manage'
 	| 'project:manage'
+	| 'api:use'
 	| 'issue:create'
 	| 'issue:edit'
 	| 'issue:changeStatus'
@@ -35,6 +36,7 @@ export function can(actor: Actor, action: Action, res: Resource = {}): boolean {
 	switch (action) {
 		case 'user:manage':
 		case 'project:manage':
+		case 'api:use':
 			return false;
 		// ゲストも参加しているプロジェクトの課題は作成・編集できる（削除はメンバー以上）
 		case 'issue:create':

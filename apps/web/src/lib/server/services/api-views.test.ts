@@ -2,7 +2,14 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { DB } from '../db';
 import { category, milestone } from '../db/schema';
 import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
-import { getProjectDetail, listProjectSummaries } from './api-views';
+import {
+	getApiIssue,
+	getProjectDetail,
+	listApiIssues,
+	listProjectSummaries,
+	toServiceInput
+} from './api-views';
+import { createIssue, deleteIssue, listIssueChanges, updateIssue } from './issues';
 
 let db: DB;
 let base: ReturnType<typeof createTestBase>;
@@ -43,5 +50,61 @@ describe('api views', () => {
 		expect(list).toEqual([
 			{ key: 'AAA', name: 'A', archived: true, url: 'http://localhost:5173/projects/AAA' }
 		]);
+	});
+});
+
+describe('api issues', () => {
+	it('limit/offset でページングでき、total は絞り込み後の件数', async () => {
+		const admin = await seedUser(db, 'admin');
+		await seedProject(db);
+		const ctx = ctxOf(base, admin);
+		for (const title of ['a', 'b', 'c']) await createIssue(ctx, 'ACME', { title });
+		await createIssue(ctx, 'ACME', { title: 'x', priority: 'high' });
+		const page = await listApiIssues(ctx, 'ACME', new URLSearchParams('limit=2&offset=1'));
+		expect(page.total).toBe(4);
+		expect(page.limit).toBe(2);
+		expect(page.offset).toBe(1);
+		expect(page.items.map((i) => i.key)).toEqual(['ACME-3', 'ACME-2']);
+		const filtered = await listApiIssues(ctx, 'ACME', new URLSearchParams('q=x&limit=1'));
+		expect(filtered.total).toBe(1);
+		expect(filtered.items[0].url).toBe('http://localhost:5173/projects/ACME/issues/4');
+		expect(JSON.stringify(page)).not.toContain('@');
+	});
+
+	it('limit=1000 は validation', async () => {
+		const admin = await seedUser(db, 'admin');
+		await seedProject(db);
+		await expect(
+			listApiIssues(ctxOf(base, admin), 'ACME', new URLSearchParams('limit=1000'))
+		).rejects.toMatchObject({ code: 'validation', fields: { limit: expect.any(Array) } });
+	});
+
+	it('削除済み課題の取得は not_found', async () => {
+		const admin = await seedUser(db, 'admin');
+		await seedProject(db);
+		const ctx = ctxOf(base, admin);
+		await createIssue(ctx, 'ACME', { title: 'a' });
+		expect((await getApiIssue(ctx, 'ACME', 1)).description).toBe('');
+		await deleteIssue(ctx, 'ACME', 1);
+		await expect(getApiIssue(ctx, 'ACME', 1)).rejects.toMatchObject({ code: 'not_found' });
+	});
+
+	it("toServiceInput は null を '' にし、undefined のキーは残さない", () => {
+		expect(toServiceInput({ dueDate: null, title: 'a', x: undefined })).toEqual({
+			dueDate: '',
+			title: 'a'
+		});
+		expect(toServiceInput('str')).toBe('str');
+	});
+
+	it('PATCH で dueDate: null を送ると期限が空になり、変更履歴の actor がキーの持ち主', async () => {
+		const admin = await seedUser(db, 'admin');
+		await seedProject(db);
+		const ctx = ctxOf(base, admin);
+		await createIssue(ctx, 'ACME', { title: 'a', dueDate: '2026-12-31' });
+		await updateIssue(ctx, 'ACME', 1, toServiceInput({ dueDate: null }));
+		expect((await getApiIssue(ctx, 'ACME', 1)).dueDate).toBeNull();
+		const changes = await listIssueChanges(ctx, 'ACME', 1);
+		expect(changes.at(-1)?.actorId).toBe(admin.id);
 	});
 });

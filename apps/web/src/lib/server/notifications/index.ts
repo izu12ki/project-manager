@@ -168,8 +168,17 @@ export async function notify(ctx: AppContext, input: NotifyInput): Promise<void>
 }
 
 /** まとめ通知の受信者ごとの集計 */
+export type BulkType = 'bulk_assigned' | 'bulk_mentioned' | 'bulk_updated';
+
+interface BulkRow {
+	userId: string;
+	type: BulkType;
+	count: number;
+}
+
 interface BulkTally {
 	assigned: number;
+	mentioned: number;
 	notified: number;
 }
 
@@ -210,18 +219,22 @@ export async function notifyBulk(ctx: AppContext, input: BulkNotifyInput): Promi
 				canReceive: (id) => names.has(id)
 			});
 			for (const n of planned) {
-				const t = tally.get(n.userId) ?? { assigned: 0, notified: 0 };
+				const t = tally.get(n.userId) ?? { assigned: 0, mentioned: 0, notified: 0 };
 				t.notified++;
 				if (n.type === 'assigned') t.assigned++;
+				else if (n.type === 'mentioned') t.mentioned++;
 				tally.set(n.userId, t);
 			}
 		}
 		if (tally.size === 0) return;
-		const rows = [...tally].map(([userId, t]) => ({
-			userId,
-			type: t.assigned > 0 ? ('bulk_assigned' as const) : ('bulk_updated' as const),
-			count: t.assigned > 0 ? t.assigned : t.notified
-		}));
+		// 1 件の通知と同じ優先度（担当 > メンション > その他）で理由を 1 つ選ぶ
+		const rows: BulkRow[] = [...tally].map(([userId, t]) =>
+			t.assigned > 0
+				? { userId, type: 'bulk_assigned', count: t.assigned }
+				: t.mentioned > 0
+					? { userId, type: 'bulk_mentioned', count: t.mentioned }
+					: { userId, type: 'bulk_updated', count: t.notified }
+		);
 		await ctx.db.insert(notification).values(
 			rows.map((r) => ({
 				id: uuidv7(),
@@ -239,7 +252,7 @@ export async function notifyBulk(ctx: AppContext, input: BulkNotifyInput): Promi
 async function sendBulkDirectMessages(
 	ctx: AppContext,
 	project: BulkNotifyInput['project'],
-	rows: { userId: string; type: 'bulk_assigned' | 'bulk_updated'; count: number }[]
+	rows: BulkRow[]
 ): Promise<void> {
 	const target = await slackLinks(
 		ctx,

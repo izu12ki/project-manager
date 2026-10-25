@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
+import { mentionToken } from '$lib/mentions';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
 import {
@@ -269,6 +270,26 @@ describe('issue-bulk', () => {
 			]);
 		});
 
+		it('説明でメンションされただけの人は bulk_mentioned、担当にもなった人は bulk_assigned', async () => {
+			const desc = mentionToken(member);
+			await create([
+				{ title: 'A', description: desc },
+				{ title: 'B', description: desc },
+				{ title: 'C', description: desc, assigneeId: member.id }
+			]);
+			expect(await notes()).toEqual([
+				{ userId: member.id, type: 'bulk_assigned', count: 1, issueId: null }
+			]);
+			await db.delete(notification);
+			await create([
+				{ title: 'D', description: desc },
+				{ title: 'E', description: desc }
+			]);
+			expect(await notes()).toEqual([
+				{ userId: member.id, type: 'bulk_mentioned', count: 2, issueId: null }
+			]);
+		});
+
 		it('一括更新でステータスを変えると、報告者に bulk_updated が 1 件', async () => {
 			await createIssue(as(member), 'ACME', { title: 'A' });
 			await createIssue(as(member), 'ACME', { title: 'B' });
@@ -314,7 +335,9 @@ describe('issue-bulk', () => {
 			expect(posts).toHaveLength(1);
 			const body = posts[0].body as { channel: string; text: string };
 			expect(body.channel).toBe('U_MEMBER');
-			expect(body.text).toContain('adminさんが ACME で 30 件の課題をあなたに割り当てました。');
+			expect(body.text).toContain(
+				'adminさんが ACME の 30 件の課題で あなたを担当者に設定しました。'
+			);
 		});
 
 		it('1 件 API（createIssue）の通知は従来どおり assigned', async () => {

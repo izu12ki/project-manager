@@ -2,6 +2,7 @@ import { PRIORITY_LABEL, statusName, type Priority, type StatusDef } from '$lib/
 import type { IssueEvent } from '../events';
 import { excerpt } from '../format';
 import type { PlannedNotification } from '../recipients';
+import type { BulkType } from '../index';
 import type { DirectMessage } from './types';
 
 export interface DmSource {
@@ -14,7 +15,10 @@ export interface DmSource {
 	statuses?: StatusDef[];
 }
 
-const VERB: Record<Exclude<DirectMessage['type'], 'bulk_assigned' | 'bulk_updated'>, string> = {
+const VERB: Record<
+	Exclude<DirectMessage['type'], 'bulk_assigned' | 'bulk_mentioned' | 'bulk_updated'>,
+	string
+> = {
 	assigned: 'あなたを担当者に設定',
 	mentioned: 'あなたを メンション',
 	commented: 'コメント',
@@ -24,7 +28,9 @@ const VERB: Record<Exclude<DirectMessage['type'], 'bulk_assigned' | 'bulk_update
 export function headline(m: DirectMessage): string {
 	switch (m.type) {
 		case 'bulk_assigned':
-			return `${m.actor.name}さんが ${m.issue.key} で ${m.count} 件の課題をあなたに割り当てました。`;
+			return `${m.actor.name}さんが ${m.issue.key} の ${m.count} 件の課題で あなたを担当者に設定しました。`;
+		case 'bulk_mentioned':
+			return `${m.actor.name}さんが ${m.issue.key} の ${m.count} 件の課題で あなたをメンションしました。`;
 		case 'bulk_updated':
 			return `${m.actor.name}さんが ${m.issue.key} の課題 ${m.count} 件を更新しました。`;
 		default:
@@ -33,18 +39,14 @@ export function headline(m: DirectMessage): string {
 }
 
 /** まとめ通知のリンク先（課題一覧。割り当ては受信者で絞り込む）。baseUrl を除いたパス */
-export function bulkPath(
-	projectKey: string,
-	type: 'bulk_assigned' | 'bulk_updated',
-	userId: string
-): string {
+export function bulkPath(projectKey: string, type: BulkType, userId: string): string {
 	const path = `/projects/${projectKey}`;
 	return type === 'bulk_assigned' ? `${path}?assignee=${encodeURIComponent(userId)}` : path;
 }
 
 export function bulkDirectMessage(
 	src: { baseUrl: string; project: { key: string; name: string }; actorName: string },
-	n: { userId: string; type: 'bulk_assigned' | 'bulk_updated'; count: number }
+	n: { userId: string; type: BulkType; count: number }
 ): DirectMessage {
 	return {
 		type: n.type,

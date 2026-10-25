@@ -13,6 +13,26 @@ const src: DmSource = {
 };
 const none = { commentId: null, fromStatus: null, toStatus: null };
 
+describe('bulk headline', () => {
+	const bulk = (type: 'bulk_assigned' | 'bulk_mentioned') => ({
+		type,
+		actor: { name: '花子' },
+		issue: { key: 'ACME', title: 'Acme', url: 'http://x/projects/ACME' },
+		count: 3,
+		detail: ''
+	});
+	it('bulk_assigned', () => {
+		expect(headline(bulk('bulk_assigned'))).toBe(
+			'花子さんが ACME の 3 件の課題で あなたを担当者に設定しました。'
+		);
+	});
+	it('bulk_mentioned', () => {
+		expect(headline(bulk('bulk_mentioned'))).toBe(
+			'花子さんが ACME の 3 件の課題で あなたをメンションしました。'
+		);
+	});
+});
+
 describe('toDirectMessage', () => {
 	it('assigned は優先度、リンクは課題', () => {
 		const m = toDirectMessage(src, { userId: 'u', type: 'assigned', ...none });

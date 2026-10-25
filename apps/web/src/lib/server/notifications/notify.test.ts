@@ -266,7 +266,7 @@ describe('notifyBulk', () => {
 	});
 	afterEach(() => vi.restoreAllMocks());
 
-	it('受信者ごとに 1 件。メンションだけの人は bulk_updated（count = 通知対象の課題数）', async () => {
+	it('受信者ごとに 1 件。メンションだけの人は bulk_mentioned（count = メンションされた課題数）', async () => {
 		const after = mentionToken(member);
 		await notifyBulk(as(admin), {
 			project,
@@ -276,7 +276,30 @@ describe('notifyBulk', () => {
 			}))
 		});
 		expect(await rows()).toEqual([
-			{ userId: member.id, type: 'bulk_updated', count: 2, projectId: project.id, issueId: null }
+			{ userId: member.id, type: 'bulk_mentioned', count: 2, projectId: project.id, issueId: null }
+		]);
+	});
+
+	it('担当にもメンションにもなった人は bulk_assigned だけ（count = 担当にした課題数）', async () => {
+		const after = mentionToken(member);
+		await notifyBulk(as(admin), {
+			project,
+			items: [
+				{
+					issue: issues[0],
+					events: [
+						{ kind: 'assignee_changed', assigneeId: member.id },
+						{ kind: 'mentions_added', commentId: null, before: '', after }
+					]
+				},
+				{
+					issue: issues[1],
+					events: [{ kind: 'mentions_added', commentId: null, before: '', after }]
+				}
+			]
+		});
+		expect(await rows()).toEqual([
+			{ userId: member.id, type: 'bulk_assigned', count: 1, projectId: project.id, issueId: null }
 		]);
 	});
 
@@ -317,7 +340,7 @@ describe('notifyBulk', () => {
 			.sort((a, b) => a.channel.localeCompare(b.channel));
 		expect(posts.map((p) => `${p.channel}:${p.text}`)).toEqual([
 			'U_GUEST:管理さんが ACME の課題 2 件を更新しました。 ACME Acme',
-			'U_MEMBER:管理さんが ACME で 2 件の課題をあなたに割り当てました。 ACME Acme'
+			'U_MEMBER:管理さんが ACME の 2 件の課題で あなたを担当者に設定しました。 ACME Acme'
 		]);
 		expect(posts[0].blocks[0].text!.text).toContain('http://localhost:5173/projects/ACME|');
 		expect(posts[1].blocks[0].text!.text).toContain(

@@ -74,7 +74,9 @@ function summaryOf(r: {
 		case 'mentioned':
 			return r.commentId ? `メンションしました: ${body}` : '説明でメンションしました';
 		case 'bulk_assigned':
-			return `${r.count} 件の課題をあなたに割り当てました`;
+			return `${r.count} 件の課題であなたを担当者に設定しました`;
+		case 'bulk_mentioned':
+			return `${r.count} 件の課題であなたをメンションしました`;
 		case 'bulk_updated':
 			return `${r.count} 件の課題を更新しました`;
 	}
@@ -87,7 +89,7 @@ function hrefOf(
 	ctx: AppContext,
 	r: { type: NotificationType; key: string; number: number | null; commentId: string | null }
 ): string {
-	if (r.type === 'bulk_assigned' || r.type === 'bulk_updated')
+	if (r.type === 'bulk_assigned' || r.type === 'bulk_mentioned' || r.type === 'bulk_updated')
 		return bulkPath(r.key, r.type, ctx.actor.id);
 	return `/projects/${r.key}/issues/${r.number}${r.commentId ? `#comment-${r.commentId}` : ''}`;
 }

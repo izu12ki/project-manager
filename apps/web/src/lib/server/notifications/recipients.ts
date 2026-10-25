@@ -29,6 +29,7 @@ const PRIORITY: Record<NotificationType, number> = {
 	status_changed: 1,
 	// まとめ通知は notifyBulk が作る。planNotifications は出さない
 	bulk_assigned: 0,
+	bulk_mentioned: 0,
 	bulk_updated: 0
 };
 

@@ -114,7 +114,7 @@ describe('notifications service', () => {
 			const [n] = await listNotifications(as(member));
 			expect(n).toMatchObject({
 				type: 'bulk_assigned',
-				summary: '2 件の課題をあなたに割り当てました',
+				summary: '2 件の課題であなたを担当者に設定しました',
 				actorName: '管理',
 				projectKey: 'ACME',
 				issueNumber: null,
@@ -131,6 +131,16 @@ describe('notifications service', () => {
 				href: `/projects/ACME?assignee=${member.id}`
 			});
 			expect(await countUnread(as(member))).toBe(0);
+		});
+
+		it('bulk_mentioned の要約とリンク', async () => {
+			await db
+				.update(notification)
+				.set({ type: 'bulk_mentioned', count: 4 })
+				.where(eq(notification.userId, member.id));
+			const [n] = await listNotifications(as(member));
+			expect(n.summary).toBe('4 件の課題であなたをメンションしました');
+			expect(n.href).toBe('/projects/ACME');
 		});
 
 		it('bulk_updated の要約とリンク', async () => {

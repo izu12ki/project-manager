@@ -364,6 +364,7 @@ export const NOTIFICATION_TYPES = [
 	'mentioned',
 	/** 一括 API のまとめ通知。issueId は null で、projectId と count を持つ */
 	'bulk_assigned',
+	'bulk_mentioned',
 	'bulk_updated'
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

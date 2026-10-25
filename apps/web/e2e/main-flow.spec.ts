@@ -65,7 +65,11 @@ async function dragBy(page: Page, target: Locator, dx: number) {
 	await page.mouse.up();
 }
 
-test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 → コメント', async ({ page }) => {
+test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 → コメント', async ({
+	page,
+	playwright,
+	baseURL
+}) => {
 	// 1. 初期セットアップ
 	await page.goto('/login');
 	await expect(page).toHaveURL(/\/setup/);
@@ -746,6 +750,18 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	const tokenBox = page.getByTestId('api-key-token');
 	await expect(tokenBox).toHaveValue(/^pm_/);
 	await expect(apiKeyCard).toContainText('この画面を離れると二度と表示されません');
+	// 作成したキーで /api/v1 を呼べる（Cookie は使わず Bearer のみ）
+	const request = await playwright.request.newContext({ baseURL });
+	const apiToken = await tokenBox.inputValue();
+	const bearer = { Authorization: `Bearer ${apiToken}` };
+	const meRes = await request.get('/api/v1/me', { headers: bearer });
+	expect(meRes.status()).toBe(200);
+	expect(await meRes.json()).toMatchObject({ role: 'admin' });
+	const projectRes = await request.get('/api/v1/projects/ACME', { headers: bearer });
+	expect(projectRes.status()).toBe(200);
+	expect((await projectRes.json()).key).toBe('ACME');
+	expect((await request.get('/api/v1/me')).status()).toBe(401);
+	await request.dispose();
 	const keyList = apiKeyCard.getByRole('list', { name: 'API キー一覧' });
 	await expect(keyList).toContainText('e2e');
 	await expect(keyList).toContainText('未使用');

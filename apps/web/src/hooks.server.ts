@@ -46,6 +46,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 		memo: new Map()
 	};
 
+	// 外部 API は Cookie セッションを一切使わない（Bearer 認証は各ハンドラで行う）
+	if (event.url.pathname.startsWith('/api/v1/')) {
+		event.locals.user = null;
+		return resolve(event);
+	}
+
 	const s = await auth.api.getSession({ headers: event.request.headers });
 	if (s?.user.disabledAt) {
 		await authCtx.internalAdapter.deleteUserSessions(s.user.id);

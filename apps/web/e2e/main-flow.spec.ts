@@ -86,7 +86,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.goto('/admin/users');
 	await expect(page.getByRole('heading', { name: 'ユーザーを招待' })).toBeVisible();
 	await page.getByLabel('メールアドレス').fill('member@example.com');
-	await page.getByLabel('ロール').selectOption('member');
+	await page.getByLabel('ロール', { exact: true }).selectOption('member');
 	await page.locator('#invite-project').click();
 	await page.getByRole('checkbox', { name: 'ACME サイト改修' }).check();
 	await expect(page.locator('#invite-project')).toHaveText('ACME サイト改修');
@@ -698,4 +698,41 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 		.evaluate((el) => el.scrollWidth > el.clientWidth);
 	expect(codeScrolls).toBe(false);
 	expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+
+	// 15. アドミン招待とロール変更（確認ダイアログ・自分の行は変更不可）
+	await page.context().clearCookies();
+	await login(page, 'admin@example.com');
+	await page.goto('/admin/users');
+	await page.getByLabel('メールアドレス').fill('admin2@example.com');
+	await page.getByLabel('ロール', { exact: true }).selectOption({ label: 'アドミン' });
+	await page.locator('#invite-project').click();
+	await page.getByRole('checkbox', { name: 'ACME サイト改修' }).check();
+	await page.getByRole('button', { name: '招待する' }).click();
+	const admin2Url = await page.getByLabel('招待リンク').inputValue();
+	await logout(page);
+	await acceptInvite(page, admin2Url, '副管理者');
+	await logout(page);
+	await login(page, 'admin@example.com');
+	await page.goto('/admin/users');
+	const roleSelect = page.getByLabel('副管理者 さんのロール');
+	await expect(roleSelect).toHaveValue('admin');
+	await expect(roleSelect.locator('option:checked')).toHaveText('アドミン');
+	// 自分の行には select が無い
+	await expect(page.getByLabel('管理者 さんのロール', { exact: true })).toHaveCount(0);
+	// キャンセルすると変更されない
+	await roleSelect.selectOption('member');
+	const dialog = page.getByRole('alertdialog');
+	await expect(dialog).toContainText(
+		'副管理者さんのロールを「メンバー」に変更します。このユーザーはログアウトされ、再ログインが必要になります。'
+	);
+	await dialog.getByRole('button', { name: 'キャンセル' }).click();
+	await expect(roleSelect).toHaveValue('admin');
+	// 確定すると変更される
+	await roleSelect.selectOption('member');
+	await dialog.getByRole('button', { name: '変更する' }).click();
+	await expect(
+		page.getByText('ロールを変更しました。対象のユーザーはログアウトされました')
+	).toBeVisible();
+	await expect(roleSelect).toHaveValue('member');
+	await expect(roleSelect.locator('option:checked')).toHaveText('メンバー');
 });

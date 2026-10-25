@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { X } from '@lucide/svelte';
-	import { enhance } from '$app/forms';
+	import { enhance, type ActionResult } from '$app/forms';
 
 	let {
 		action,
@@ -12,7 +12,10 @@
 		confirmLabel,
 		triggerClass = 'btn btn-outline btn-sm',
 		triggerLabel,
-		trigger
+		trigger,
+		dialog = $bindable(),
+		onclose,
+		onresult
 	}: {
 		/** 送信先の form action（onconfirm を渡す場合は不要） */
 		action?: string;
@@ -27,11 +30,17 @@
 		triggerClass?: string;
 		/** アイコンのみのトリガーに付けるアクセシブルネーム */
 		triggerLabel?: string;
-		trigger: Snippet;
+		/** 省略すると既定のトリガーボタンを出さない（dialog を bind して外から開く） */
+		trigger?: Snippet;
+		/** 確認ダイアログ本体。外のコントロールから showModal() するために bind する */
+		dialog?: HTMLDialogElement;
+		/** ダイアログが閉じたとき（キャンセル・確定のどちらでも）に呼ぶ */
+		onclose?: () => void;
+		/** form action の応答が返ったときに呼ぶ */
+		onresult?: (result: ActionResult) => void;
 	} = $props();
 
 	const titleId = $props.id();
-	let dialog = $state<HTMLDialogElement>();
 	let pending = $state(false);
 </script>
 
@@ -39,18 +48,26 @@
 	{#each Object.entries(fields) as [name, value] (name)}
 		<input type="hidden" {name} {value} />
 	{/each}
-	<button
-		type="button"
-		class={triggerClass}
-		aria-label={triggerLabel}
-		title={triggerLabel}
-		onclick={() => dialog?.showModal()}
-	>
-		{@render trigger()}
-	</button>
-	<noscript><button type="submit" class={triggerClass}>{@render trigger()}</button></noscript>
+	{#if trigger}
+		<button
+			type="button"
+			class={triggerClass}
+			aria-label={triggerLabel}
+			title={triggerLabel}
+			onclick={() => dialog?.showModal()}
+		>
+			{@render trigger()}
+		</button>
+		<noscript><button type="submit" class={triggerClass}>{@render trigger()}</button></noscript>
+	{/if}
 
-	<dialog bind:this={dialog} role="alertdialog" aria-modal="true" aria-labelledby={titleId}>
+	<dialog
+		bind:this={dialog}
+		{onclose}
+		role="alertdialog"
+		aria-modal="true"
+		aria-labelledby={titleId}
+	>
 		<header>
 			<h2 id={titleId}>{title}</h2>
 			<button type="button" class="close" aria-label="閉じる" onclick={() => dialog?.close()}>
@@ -92,9 +109,10 @@
 		style="display: contents"
 		use:enhance={() => {
 			pending = true;
-			return async ({ update }) => {
+			return async ({ result, update }) => {
 				dialog?.close();
 				pending = false;
+				onresult?.(result);
 				await update();
 			};
 		}}

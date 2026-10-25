@@ -699,12 +699,12 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	expect(codeScrolls).toBe(false);
 	expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
 
-	// 15. アドミン招待とロール変更（確認ダイアログ・自分の行は変更不可）
+	// 15. 管理者の招待とロール変更（確認ダイアログ・自分の行は変更不可）
 	await page.context().clearCookies();
 	await login(page, 'admin@example.com');
 	await page.goto('/admin/users');
 	await page.getByLabel('メールアドレス').fill('admin2@example.com');
-	await page.getByLabel('ロール', { exact: true }).selectOption({ label: 'アドミン' });
+	await page.getByLabel('ロール', { exact: true }).selectOption({ label: '管理者' });
 	await page.locator('#invite-project').click();
 	await page.getByRole('checkbox', { name: 'ACME サイト改修' }).check();
 	await page.getByRole('button', { name: '招待する' }).click();
@@ -716,7 +716,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.goto('/admin/users');
 	const roleSelect = page.getByLabel('副管理者 さんのロール');
 	await expect(roleSelect).toHaveValue('admin');
-	await expect(roleSelect.locator('option:checked')).toHaveText('アドミン');
+	await expect(roleSelect.locator('option:checked')).toHaveText('管理者');
 	// 自分の行には select が無い
 	await expect(page.getByLabel('管理者 さんのロール', { exact: true })).toHaveCount(0);
 	// キャンセルすると変更されない

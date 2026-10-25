@@ -12,28 +12,26 @@
 
 	let { data, form }: PageProps = $props();
 
-	// ロール選択の表示語。アドミンだけは招待フォームと同じ「アドミン」にそろえる
-	const roleOptions = [
-		['admin', 'アドミン'],
-		['member', ROLE_LABEL.member],
-		['guest', ROLE_LABEL.guest]
-	] as const;
+	const roles = ['admin', 'member', 'guest'] as const;
 
 	// 変更確認中の行（select で選んだ値を保持する）
-	let pendingChange = $state<{ id: string; name: string; role: string } | null>(null);
+	let pendingChange = $state<{ id: string; name: string; role: (typeof roles)[number] } | null>(
+		null
+	);
 	let roleDialog = $state<HTMLDialogElement>();
 	let roleSelects: Record<string, HTMLSelectElement> = {};
 
 	function requestRoleChange(u: { id: string; name: string }, select: HTMLSelectElement) {
-		pendingChange = { id: u.id, name: u.name, role: select.value };
+		pendingChange = { id: u.id, name: u.name, role: select.value as (typeof roles)[number] };
 		roleDialog?.showModal();
 	}
 
 	// キャンセル・確定のどちらでも閉じたら select を DB の値に戻す（確定後は再読込で新しい値になる）
 	function resetRoleSelect() {
 		if (!pendingChange) return;
-		const u = data.users.find((x) => x.id === pendingChange!.id);
-		const el = roleSelects[pendingChange.id];
+		const { id } = pendingChange;
+		const u = data.users.find((x) => x.id === id);
+		const el = roleSelects[id];
 		if (u && el) el.value = u.role;
 		pendingChange = null;
 	}
@@ -63,7 +61,7 @@
 					<select class="select" id="invite-role" name="role">
 						<option value="member">メンバー</option>
 						<option value="guest">ゲスト</option>
-						<option value="admin">アドミン</option>
+						<option value="admin">{ROLE_LABEL.admin}</option>
 					</select>
 				</div>
 				<div class="field">
@@ -113,8 +111,8 @@
 									bind:this={roleSelects[u.id]}
 									onchange={(e) => requestRoleChange(u, e.currentTarget)}
 								>
-									{#each roleOptions as [value, label] (value)}
-										<option {value}>{label}</option>
+									{#each roles as value (value)}
+										<option {value}>{ROLE_LABEL[value]}</option>
 									{/each}
 								</select>
 							{/if}
@@ -157,7 +155,7 @@
 		fields={{ id: pendingChange?.id ?? '', role: pendingChange?.role ?? '' }}
 		title="ロールの変更"
 		description={pendingChange
-			? `${pendingChange.name}さんのロールを「${roleOptions.find(([v]) => v === pendingChange!.role)?.[1]}」に変更します。このユーザーはログアウトされ、再ログインが必要になります。`
+			? `${pendingChange.name}さんのロールを「${ROLE_LABEL[pendingChange.role]}」に変更します。このユーザーはログアウトされ、再ログインが必要になります。`
 			: ''}
 		confirmLabel="変更する"
 		onclose={resetRoleSelect}

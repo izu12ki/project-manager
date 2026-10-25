@@ -761,6 +761,8 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	expect(projectRes.status()).toBe(200);
 	expect((await projectRes.json()).key).toBe('ACME');
 	expect((await request.get('/api/v1/me')).status()).toBe(401);
+	// ログイン済みの Cookie セッションでは API を呼べない
+	expect((await page.request.get('/api/v1/me')).status()).toBe(401);
 	await request.dispose();
 	const keyList = apiKeyCard.getByRole('list', { name: 'API キー一覧' });
 	await expect(keyList).toContainText('e2e');

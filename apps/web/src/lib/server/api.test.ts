@@ -52,6 +52,16 @@ describe('apiHandler', () => {
 		}
 	});
 
+	it('Bearer スキーム名は大文字小文字を区別しない', async () => {
+		const token = await adminToken();
+		for (const scheme of ['bearer', 'BEARER']) {
+			const res = await apiHandler(eventOf({ Authorization: `${scheme} ${token}` }), async () => ({
+				ok: true
+			}));
+			expect(res.status).toBe(200);
+		}
+	});
+
 	it('member のキーは 401', async () => {
 		const admin = await seedUser(db, 'admin');
 		const { token } = await createApiKey(ctxOf(base, admin), { name: 'x' });

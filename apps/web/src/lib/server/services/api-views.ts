@@ -145,12 +145,75 @@ export async function getApiIssue(
 	return { ...apiIssue(ctx, p.key, i), description: i.description };
 }
 
+const CREATE_KEYS = [
+	'title',
+	'description',
+	'typeId',
+	'status',
+	'priority',
+	'assigneeId',
+	'startDate',
+	'dueDate',
+	'categoryId',
+	'milestoneId'
+];
+// resolution は起票では受け付けない（起票時は未完了のため）
+const ALLOWED_KEYS = {
+	create: CREATE_KEYS,
+	update: [...CREATE_KEYS, 'resolution'],
+	bulkUpdate: [...CREATE_KEYS, 'resolution', 'number']
+} as const;
+export type ApiInputKind = keyof typeof ALLOWED_KEYS;
+
+const isRecord = (x: unknown): x is Record<string, unknown> =>
+	typeof x === 'object' && x !== null && !Array.isArray(x);
+
+const UNKNOWN_MSG = '不明な項目です';
+
+function unknownKeys(body: Record<string, unknown>, kind: ApiInputKind): string[] {
+	const allowed: readonly string[] = ALLOWED_KEYS[kind];
+	return Object.keys(body).filter((k) => !allowed.includes(k));
+}
+
 /** API の null（クリア）をサービス層の空文字に変える。undefined のキーは落とす */
-export function toServiceInput(body: unknown): unknown {
-	if (typeof body !== 'object' || body === null || Array.isArray(body)) return body;
+function convert(body: Record<string, unknown>): Record<string, unknown> {
 	return Object.fromEntries(
 		Object.entries(body)
 			.filter(([, val]) => val !== undefined)
 			.map(([k, val]) => [k, val === null ? '' : val])
 	);
+}
+
+/** 単発の本文を検証用に変換する。許可リスト外のキーは 400 */
+export function toServiceInput(body: unknown, kind: Exclude<ApiInputKind, 'bulkUpdate'>): unknown {
+	if (!isRecord(body)) return body;
+	const unknown = unknownKeys(body, kind);
+	if (unknown.length > 0) {
+		throw new AppError(
+			'validation',
+			`不明な項目があります: ${unknown.join(', ')}`,
+			Object.fromEntries(unknown.map((k) => [k, [UNKNOWN_MSG]]))
+		);
+	}
+	return convert(body);
+}
+
+/** 一括の本文を変換する。全要素の不明キーを集めてからまとめて 400 にする */
+export function toBulkServiceInput(body: unknown, kind: 'create' | 'bulkUpdate'): unknown {
+	if (!isRecord(body)) return body;
+	const fields: Record<string, string[]> = {};
+	for (const k of Object.keys(body)) if (k !== 'items') fields[k] = [UNKNOWN_MSG];
+	const items = body.items;
+	const converted = Array.isArray(items)
+		? items.map((item, i) => {
+				if (!isRecord(item)) return item;
+				for (const k of unknownKeys(item, kind)) fields[`items.${i}.${k}`] = [UNKNOWN_MSG];
+				return convert(item);
+			})
+		: items;
+	const names = Object.keys(fields);
+	if (names.length > 0) {
+		throw new AppError('validation', `不明な項目があります: ${names.join(', ')}`, fields);
+	}
+	return { ...body, items: converted };
 }

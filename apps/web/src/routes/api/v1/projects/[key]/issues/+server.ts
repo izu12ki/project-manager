@@ -13,7 +13,7 @@ export const POST: RequestHandler = (event) =>
 		event,
 		async (ctx) => {
 			const key = event.params.key.toUpperCase();
-			const input = toServiceInput(await readJson(event.request));
+			const input = toServiceInput(await readJson(event.request), 'create');
 			const { number } = await createIssue(ctx, key, input);
 			return getApiIssue(ctx, key, number);
 		},

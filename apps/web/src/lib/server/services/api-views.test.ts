@@ -7,6 +7,7 @@ import {
 	getProjectDetail,
 	listApiIssues,
 	listProjectSummaries,
+	toBulkServiceInput,
 	toServiceInput
 } from './api-views';
 import { createIssue, deleteIssue, listIssueChanges, updateIssue } from './issues';
@@ -90,11 +91,54 @@ describe('api issues', () => {
 	});
 
 	it("toServiceInput は null を '' にし、undefined のキーは残さない", () => {
-		expect(toServiceInput({ dueDate: null, title: 'a', x: undefined })).toEqual({
+		expect(toServiceInput({ dueDate: null, title: 'a', status: undefined }, 'create')).toEqual({
 			dueDate: '',
 			title: 'a'
 		});
-		expect(toServiceInput('str')).toBe('str');
+		expect(toServiceInput('str', 'create')).toBe('str');
+	});
+
+	it('toServiceInput は許可リスト外のキーを 400 にする。resolution は更新のみ可', () => {
+		expect(() => toServiceInput({ title: 'a', foo: 1, bar: 2 }, 'create')).toThrowError(
+			expect.objectContaining({
+				code: 'validation',
+				fields: { foo: ['不明な項目です'], bar: ['不明な項目です'] }
+			})
+		);
+		expect(() => toServiceInput({ resolution: 'fixed' }, 'create')).toThrowError(
+			expect.objectContaining({ fields: { resolution: ['不明な項目です'] } })
+		);
+		expect(toServiceInput({ resolution: 'fixed' }, 'update')).toEqual({ resolution: 'fixed' });
+		expect(() => toServiceInput({ number: 1 }, 'update')).toThrowError(
+			expect.objectContaining({ fields: { number: ['不明な項目です'] } })
+		);
+	});
+
+	it('toBulkServiceInput は全要素の不明キーを集める。number は更新のみ可', () => {
+		expect(() =>
+			toBulkServiceInput(
+				{
+					items: [{ title: 'a', x: 1 }, { title: 'b' }, { title: 'c', resolution: 'fixed' }],
+					y: 1
+				},
+				'create'
+			)
+		).toThrowError(
+			expect.objectContaining({
+				code: 'validation',
+				fields: {
+					y: ['不明な項目です'],
+					'items.0.x': ['不明な項目です'],
+					'items.2.resolution': ['不明な項目です']
+				}
+			})
+		);
+		expect(toBulkServiceInput({ items: [{ number: 1, dueDate: null }] }, 'bulkUpdate')).toEqual({
+			items: [{ number: 1, dueDate: '' }]
+		});
+		expect(() => toBulkServiceInput({ items: [{ number: 1 }] }, 'create')).toThrowError(
+			expect.objectContaining({ fields: { 'items.0.number': ['不明な項目です'] } })
+		);
 	});
 
 	it('PATCH で dueDate: null を送ると期限が空になり、変更履歴の actor がキーの持ち主', async () => {
@@ -102,7 +146,7 @@ describe('api issues', () => {
 		await seedProject(db);
 		const ctx = ctxOf(base, admin);
 		await createIssue(ctx, 'ACME', { title: 'a', dueDate: '2026-12-31' });
-		await updateIssue(ctx, 'ACME', 1, toServiceInput({ dueDate: null }));
+		await updateIssue(ctx, 'ACME', 1, toServiceInput({ dueDate: null }, 'update'));
 		expect((await getApiIssue(ctx, 'ACME', 1)).dueDate).toBeNull();
 		const changes = await listIssueChanges(ctx, 'ACME', 1);
 		expect(changes.at(-1)?.actorId).toBe(admin.id);

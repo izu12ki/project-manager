@@ -53,7 +53,7 @@ export async function changeUserRole(
 			.from(user)
 			.where(and(eq(user.role, 'admin'), isNull(user.disabledAt), ne(user.id, userId)))
 			.limit(1);
-		if (!other) throw new AppError('validation', 'アドミンが 1 人もいなくなるため変更できません');
+		if (!other) throw new AppError('validation', '管理者が 1 人もいなくなるため変更できません');
 	}
 	await ctx.db.update(user).set({ role: newRole }).where(eq(user.id, userId));
 	// 古い権限のままのセッションを残さない

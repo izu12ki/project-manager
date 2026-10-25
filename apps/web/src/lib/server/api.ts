@@ -29,7 +29,7 @@ export function apiError(e: unknown): Response {
 }
 
 function bearerToken(request: Request): string | null {
-	const m = /^Bearer (\S+)$/.exec(request.headers.get('Authorization') ?? '');
+	const m = /^Bearer\s+(\S+)$/i.exec(request.headers.get('Authorization') ?? '');
 	return m ? m[1] : null;
 }
 

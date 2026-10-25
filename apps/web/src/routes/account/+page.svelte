@@ -4,7 +4,7 @@
 	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
 	import FormAlert from '$lib/components/FormAlert.svelte';
 	import PasswordInput from '$lib/components/PasswordInput.svelte';
-	import { formatDate } from '$lib/labels';
+	import { formatDate, formatDateTime } from '$lib/labels';
 	import { toast } from '$lib/toast.svelte';
 	import type { PageProps } from './$types';
 
@@ -186,7 +186,7 @@
 								<span class="font-medium break-all">{key.name}</span>
 								<span class="text-xs text-muted-foreground">
 									<code>{key.prefix}…</code> ・ 作成 {formatDate(key.createdAt)} ・ 最終利用
-									{key.lastUsedAt ? formatDate(key.lastUsedAt) : '未使用'}
+									{key.lastUsedAt ? formatDateTime(key.lastUsedAt) : '未使用'}
 								</span>
 							</div>
 							<ConfirmAction

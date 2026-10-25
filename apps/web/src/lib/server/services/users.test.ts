@@ -98,7 +98,7 @@ describe('users', () => {
 
 			await expect(changeUserRole(ctxOf(base, a), c.id, 'member')).rejects.toMatchObject({
 				code: 'validation',
-				message: 'アドミンが 1 人もいなくなるため変更できません'
+				message: '管理者が 1 人もいなくなるため変更できません'
 			});
 
 			// 他に有効な admin がいれば成功する

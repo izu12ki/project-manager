@@ -9,6 +9,11 @@ export const GET: RequestHandler = (event) =>
 export const PATCH: RequestHandler = (event) =>
 	apiHandler(event, async (ctx) => {
 		const key = event.params.key.toUpperCase();
-		await updateIssue(ctx, key, event.params.number, toServiceInput(await readJson(event.request)));
+		await updateIssue(
+			ctx,
+			key,
+			event.params.number,
+			toServiceInput(await readJson(event.request), 'update')
+		);
 		return getApiIssue(ctx, key, event.params.number);
 	});

@@ -735,4 +735,30 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	).toBeVisible();
 	await expect(roleSelect).toHaveValue('member');
 	await expect(roleSelect.locator('option:checked')).toHaveText('メンバー');
+
+	// 9. 管理者は /account で API キーを作成・無効化できる。メンバーには欄が出ない
+	await page.goto('/account');
+	const apiKeyCard = page.locator('.card', {
+		has: page.getByRole('heading', { name: 'API キー' })
+	});
+	await apiKeyCard.getByLabel('名前').fill('e2e');
+	await apiKeyCard.getByRole('button', { name: '作成' }).click();
+	const tokenBox = page.getByTestId('api-key-token');
+	await expect(tokenBox).toHaveValue(/^pm_/);
+	await expect(apiKeyCard).toContainText('この画面を離れると二度と表示されません');
+	const keyList = apiKeyCard.getByRole('list', { name: 'API キー一覧' });
+	await expect(keyList).toContainText('e2e');
+	await expect(keyList).toContainText('未使用');
+	await page.reload();
+	await expect(page.getByTestId('api-key-token')).toHaveCount(0);
+	await expect(keyList).toContainText('e2e');
+	await page.getByRole('button', { name: 'e2e を無効化' }).click();
+	await page.getByRole('alertdialog').getByRole('button', { name: '無効化する' }).click();
+	await expect(page.getByText('API キーを無効化しました')).toBeVisible();
+	await expect(keyList).toHaveCount(0);
+	await logout(page);
+	await login(page, 'member@example.com');
+	await page.goto('/account');
+	await expect(page.getByRole('heading', { name: 'パスワード変更' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'API キー' })).toHaveCount(0);
 });

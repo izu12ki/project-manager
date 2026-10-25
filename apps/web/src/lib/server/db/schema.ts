@@ -175,6 +175,27 @@ export const invitationProject = sqliteTable(
 	]
 );
 
+/** 管理者の個人 API キー。平文は保存せず sha256 のみ持つ */
+export const apiKey = sqliteTable(
+	'api_key',
+	{
+		id: text().primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		name: text().notNull(),
+		tokenHash: text('token_hash').notNull(),
+		prefix: text().notNull(),
+		lastUsedAt: integer('last_used_at', { mode: 'timestamp_ms' }),
+		revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+		createdAt: createdAt()
+	},
+	(t) => [
+		index('api_key_user_idx').on(t.userId),
+		uniqueIndex('api_key_token_hash_uq').on(t.tokenHash)
+	]
+);
+
 /** プロジェクトごとのステータス。issue.status は key を持つ */
 export const issueStatus = sqliteTable(
 	'issue_status',

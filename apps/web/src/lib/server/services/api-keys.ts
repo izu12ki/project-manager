@@ -97,6 +97,7 @@ export async function authenticateApiKey(
 				.update(apiKey)
 				.set({ lastUsedAt: new Date(now) })
 				.where(eq(apiKey.id, row.id))
+				.catch((e) => console.error('api key lastUsedAt update failed', e))
 		);
 	}
 	return {

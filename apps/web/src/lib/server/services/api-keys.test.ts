@@ -79,11 +79,12 @@ describe('api keys', () => {
 	it('他人のキーは revoke できない（not_found）', async () => {
 		const a = await seedUser(db, 'admin', 'a');
 		const b = await seedUser(db, 'admin', 'b');
-		await createApiKey(ctxOf(base, a), { name: 'CLI' });
+		const { token } = await createApiKey(ctxOf(base, a), { name: 'CLI' });
 		const [k] = await listApiKeys(ctxOf(base, a));
 		await expect(revokeApiKey(ctxOf(base, b), k.id)).rejects.toMatchObject({
 			code: 'not_found'
 		});
+		expect((await authenticateApiKey(base, token))?.actor.id).toBe(a.id);
 		await expect(revokeApiKey(ctxOf(base, a), 'unknown')).rejects.toMatchObject({
 			code: 'not_found'
 		});

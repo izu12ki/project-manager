@@ -210,32 +210,6 @@ export async function deleteMilestone(ctx: AppContext, key: string, id: string):
 	]);
 }
 
-export async function assertCategoryOf(db: DB, projectId: string, id: string): Promise<void> {
-	const [row] = await db
-		.select({ id: category.id })
-		.from(category)
-		.where(and(eq(category.projectId, projectId), eq(category.id, id)));
-	if (!row) {
-		throw new AppError('validation', 'カテゴリーが見つかりません', {
-			categoryId: ['カテゴリーが見つかりません']
-		});
-	}
-}
-
-/** 新しく割り当てる場合に使う。完了済みのマイルストーンは割り当てられない。 */
-export async function assertMilestoneOf(db: DB, projectId: string, id: string): Promise<void> {
-	const [row] = await db
-		.select({ id: milestone.id, completedAt: milestone.completedAt })
-		.from(milestone)
-		.where(and(eq(milestone.projectId, projectId), eq(milestone.id, id)));
-	const msg = !row
-		? 'マイルストーンが見つかりません'
-		: row.completedAt
-			? '完了済みのマイルストーンは設定できません'
-			: null;
-	if (msg) throw new AppError('validation', msg, { milestoneId: [msg] });
-}
-
 // ---- ステータス ----
 
 /** プロジェクト作成時に既定のステータスと課題種別を入れる文 */

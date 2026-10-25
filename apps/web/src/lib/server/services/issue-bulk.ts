@@ -8,11 +8,14 @@ import type { AppContext } from '../context';
 import type { DB } from '../db';
 import { issue, issueChange, project } from '../db/schema';
 import { AppError } from '../errors';
+import { notifyBulk, type IssueEvent } from '../notifications';
 import { parse } from '../validation';
 import { linkAttachmentsQuery } from './attachment-links';
 import {
 	describeChanges,
 	loadFieldSets,
+	type IssuePatch,
+	type IssueRow,
 	loadFormerAssigneeNames,
 	prepareCreate,
 	preparePatch
@@ -93,6 +96,26 @@ function numberOf(item: unknown): number {
 	return n;
 }
 
+/** updateIssue と同じ出来事を組み立てる */
+function eventsOf(cur: IssueRow, patch: IssuePatch): IssueEvent[] {
+	const events: IssueEvent[] = [];
+	if (patch.assigneeId !== undefined) {
+		events.push({ kind: 'assignee_changed', assigneeId: patch.assigneeId });
+	}
+	if (patch.status !== undefined) {
+		events.push({ kind: 'status_changed', from: cur.status, to: patch.status });
+	}
+	if (patch.description !== undefined) {
+		events.push({
+			kind: 'mentions_added',
+			commentId: null,
+			before: cur.description,
+			after: patch.description
+		});
+	}
+	return events;
+}
+
 export async function bulkCreateIssues(
 	ctx: AppContext,
 	key: string,
@@ -142,6 +165,20 @@ export async function bulkCreateIssues(
 	forgetProject(ctx, key); // nextIssueNumber が変わった
 	const rows = results[results.length - 1] as { id: string; number: number }[];
 	const numberById = new Map(rows.map((r) => [r.id, r.number]));
+	await notifyBulk(ctx, {
+		project: p,
+		items: values.map((val) => ({
+			issue: { id: val.id, number: numberById.get(val.id)!, title: val.title },
+			events: [
+				{
+					kind: 'issue_created',
+					assigneeId: val.assigneeId ?? null,
+					priority: val.priority ?? 'none',
+					description: val.description
+				}
+			]
+		}))
+	});
 	return { numbers: ids.map((id) => numberById.get(id)!) };
 }
 
@@ -220,5 +257,12 @@ export async function bulkUpdateIssues(
 	}
 	const [first, ...rest] = stmts;
 	await ctx.db.batch([first, ...rest]);
+	await notifyBulk(ctx, {
+		project: p,
+		items: changed.map(({ cur, patch }) => ({
+			issue: { id: cur.id, number: cur.number, title: patch.title ?? cur.title },
+			events: eventsOf(cur, patch)
+		}))
+	});
 	return { numbers };
 }

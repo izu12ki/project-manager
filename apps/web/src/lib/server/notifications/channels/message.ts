@@ -14,7 +14,7 @@ export interface DmSource {
 	statuses?: StatusDef[];
 }
 
-const VERB: Record<DirectMessage['type'], string> = {
+const VERB: Record<Exclude<DirectMessage['type'], 'bulk_assigned' | 'bulk_updated'>, string> = {
 	assigned: 'あなたを担当者に設定',
 	mentioned: 'あなたを メンション',
 	commented: 'コメント',
@@ -22,7 +22,41 @@ const VERB: Record<DirectMessage['type'], string> = {
 };
 
 export function headline(m: DirectMessage): string {
-	return `${m.actor.name}さんが ${VERB[m.type]} しました。`;
+	switch (m.type) {
+		case 'bulk_assigned':
+			return `${m.actor.name}さんが ${m.issue.key} で ${m.count} 件の課題をあなたに割り当てました。`;
+		case 'bulk_updated':
+			return `${m.actor.name}さんが ${m.issue.key} の課題 ${m.count} 件を更新しました。`;
+		default:
+			return `${m.actor.name}さんが ${VERB[m.type]} しました。`;
+	}
+}
+
+/** まとめ通知のリンク先（課題一覧。割り当ては受信者で絞り込む）。baseUrl を除いたパス */
+export function bulkPath(
+	projectKey: string,
+	type: 'bulk_assigned' | 'bulk_updated',
+	userId: string
+): string {
+	const path = `/projects/${projectKey}`;
+	return type === 'bulk_assigned' ? `${path}?assignee=${encodeURIComponent(userId)}` : path;
+}
+
+export function bulkDirectMessage(
+	src: { baseUrl: string; project: { key: string; name: string }; actorName: string },
+	n: { userId: string; type: 'bulk_assigned' | 'bulk_updated'; count: number }
+): DirectMessage {
+	return {
+		type: n.type,
+		actor: { name: src.actorName },
+		issue: {
+			key: src.project.key,
+			title: src.project.name,
+			url: src.baseUrl + bulkPath(src.project.key, n.type, n.userId)
+		},
+		count: n.count,
+		detail: ''
+	};
 }
 
 /** commentId（null は説明）→ その本文 */

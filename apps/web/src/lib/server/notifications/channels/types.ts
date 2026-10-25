@@ -16,8 +16,10 @@ export type SendResult = { ok: true } | { ok: false; error: string };
 export interface DirectMessage {
 	type: NotificationType;
 	actor: { name: string };
-	/** key は "ACME-12" */
+	/** key は "ACME-12"。まとめ通知ではプロジェクト（key = "ACME"、title = プロジェクト名、url = 課題一覧） */
 	issue: { key: string; title: string; url: string };
+	/** まとめ通知の課題数 */
+	count?: number;
 	/** 2 行目。空なら出さない */
 	detail: string;
 }

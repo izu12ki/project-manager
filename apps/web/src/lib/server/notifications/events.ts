@@ -14,3 +14,9 @@ export interface NotifyInput {
 	issue: { id: string; number: number; title: string };
 	events: IssueEvent[];
 }
+
+/** 一括 API の更新。課題ごとの出来事を notifyBulk がまとめる */
+export interface BulkNotifyInput {
+	project: NotifyInput['project'];
+	items: { issue: NotifyInput['issue']; events: IssueEvent[] }[];
+}

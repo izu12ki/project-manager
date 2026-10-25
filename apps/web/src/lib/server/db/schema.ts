@@ -357,7 +357,15 @@ export const attachment = sqliteTable(
 	]
 );
 
-export const NOTIFICATION_TYPES = ['assigned', 'commented', 'status_changed', 'mentioned'] as const;
+export const NOTIFICATION_TYPES = [
+	'assigned',
+	'commented',
+	'status_changed',
+	'mentioned',
+	/** 一括 API のまとめ通知。issueId は null で、projectId と count を持つ */
+	'bulk_assigned',
+	'bulk_updated'
+] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
 export const notification = sqliteTable(
@@ -370,10 +378,13 @@ export const notification = sqliteTable(
 		actorId: text('actor_id')
 			.notNull()
 			.references(() => user.id),
-		issueId: text('issue_id')
-			.notNull()
-			.references(() => issue.id, { onDelete: 'cascade' }),
+		/** まとめ通知では null */
+		issueId: text('issue_id').references(() => issue.id, { onDelete: 'cascade' }),
+		/** まとめ通知の対象プロジェクト。課題ごとの通知では null */
+		projectId: text('project_id').references(() => project.id, { onDelete: 'cascade' }),
 		type: text({ enum: NOTIFICATION_TYPES }).notNull(),
+		/** まとめ通知の課題数 */
+		count: integer(),
 		commentId: text('comment_id').references(() => comment.id, { onDelete: 'cascade' }),
 		fromStatus: text('from_status'),
 		toStatus: text('to_status'),
@@ -382,7 +393,8 @@ export const notification = sqliteTable(
 	},
 	(t) => [
 		index('notification_user_read_idx').on(t.userId, t.readAt),
-		index('notification_user_created_idx').on(t.userId, t.createdAt)
+		index('notification_user_created_idx').on(t.userId, t.createdAt),
+		index('notification_project_idx').on(t.projectId)
 	]
 );
 

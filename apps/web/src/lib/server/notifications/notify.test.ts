@@ -6,7 +6,7 @@ import type { DB } from '../db';
 import { comment, issue, notification, user, userIntegration } from '../db/schema';
 import { createIssue } from '../services/issues';
 import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
-import { notify, type NotifyInput } from '.';
+import { notify, notifyBulk, type NotifyInput } from '.';
 
 describe('notify (in-app)', () => {
 	let db: DB;
@@ -224,5 +224,123 @@ describe('notify (slack dm)', () => {
 		await Promise.all(base.pending);
 		expect(err).toHaveBeenCalledWith(expect.stringContaining('channel_not_found'));
 		expect(await db.select().from(notification)).toHaveLength(1);
+	});
+});
+
+describe('notifyBulk', () => {
+	let db: DB;
+	let base: ReturnType<typeof createTestBase>;
+	let admin: Actor, member: Actor, guest: Actor;
+	let project: NotifyInput['project'];
+	let issues: NotifyInput['issue'][];
+	const as = (a: Actor) => ctxOf(base, a);
+	const rows = () =>
+		db
+			.select({
+				userId: notification.userId,
+				type: notification.type,
+				count: notification.count,
+				projectId: notification.projectId,
+				issueId: notification.issueId
+			})
+			.from(notification);
+
+	beforeEach(async () => {
+		db = await createTestDb();
+		base = createTestBase(db, { slackBotToken: 'xoxb-t' });
+		admin = await seedUser(db, 'admin', '管理');
+		member = await seedUser(db, 'member', '花子');
+		guest = await seedUser(db, 'guest', '太郎');
+		const p = await seedProject(db, { key: 'ACME', members: [member, guest] });
+		project = { id: p.id, key: 'ACME', name: 'Acme' };
+		await createIssue(as(guest), 'ACME', { title: 'A' });
+		await createIssue(as(guest), 'ACME', { title: 'B' });
+		await Promise.all(base.pending);
+		base.fetched.length = 0;
+		base.pending.length = 0;
+		issues = (await db.select().from(issue)).map((i) => ({
+			id: i.id,
+			number: i.number,
+			title: i.title
+		}));
+	});
+	afterEach(() => vi.restoreAllMocks());
+
+	it('受信者ごとに 1 件。メンションだけの人は bulk_updated（count = 通知対象の課題数）', async () => {
+		const after = mentionToken(member);
+		await notifyBulk(as(admin), {
+			project,
+			items: issues.map((i) => ({
+				issue: i,
+				events: [{ kind: 'mentions_added', commentId: null, before: '', after }]
+			}))
+		});
+		expect(await rows()).toEqual([
+			{ userId: member.id, type: 'bulk_updated', count: 2, projectId: project.id, issueId: null }
+		]);
+	});
+
+	it('受信者がいなければ何も書かず、送らない', async () => {
+		await notifyBulk(as(admin), {
+			project,
+			items: issues.map((i) => ({
+				issue: i,
+				events: [{ kind: 'assignee_changed', assigneeId: null }]
+			}))
+		});
+		expect(await rows()).toEqual([]);
+		expect(base.fetched).toEqual([]);
+	});
+
+	it('Slack DM は受信者ごとに 1 通で、リンクはプロジェクトの課題一覧', async () => {
+		await db.insert(userIntegration).values([
+			{ userId: member.id, provider: 'slack', externalId: 'U_MEMBER' },
+			{ userId: guest.id, provider: 'slack', externalId: 'U_GUEST' }
+		]);
+		await db.update(issue).set({ assigneeId: member.id });
+		await notifyBulk(as(admin), {
+			project,
+			items: issues.map((i) => ({
+				issue: i,
+				events: [
+					{ kind: 'assignee_changed', assigneeId: member.id },
+					{ kind: 'status_changed', from: 'todo', to: 'done' }
+				]
+			}))
+		});
+		await Promise.all(base.pending);
+		const posts = base.fetched
+			.filter((f) => f.url.endsWith('chat.postMessage'))
+			.map(
+				(f) => f.body as { channel: string; text: string; blocks: { text?: { text: string } }[] }
+			)
+			.sort((a, b) => a.channel.localeCompare(b.channel));
+		expect(posts.map((p) => `${p.channel}:${p.text}`)).toEqual([
+			'U_GUEST:管理さんが ACME の課題 2 件を更新しました。 ACME Acme',
+			'U_MEMBER:管理さんが ACME で 2 件の課題をあなたに割り当てました。 ACME Acme'
+		]);
+		expect(posts[0].blocks[0].text!.text).toContain('http://localhost:5173/projects/ACME|');
+		expect(posts[1].blocks[0].text!.text).toContain(
+			`http://localhost:5173/projects/ACME?assignee=${member.id}|`
+		);
+	});
+
+	it('内部で失敗しても例外を投げずにログする', async () => {
+		const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const broken = {
+			...as(admin),
+			db: {
+				select: () => {
+					throw new Error('boom');
+				}
+			} as unknown as DB
+		};
+		await expect(
+			notifyBulk(broken, {
+				project,
+				items: [{ issue: issues[0], events: [{ kind: 'assignee_changed', assigneeId: member.id }] }]
+			})
+		).resolves.toBeUndefined();
+		expect(err).toHaveBeenCalled();
 	});
 });

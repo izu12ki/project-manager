@@ -26,7 +26,10 @@ const PRIORITY: Record<NotificationType, number> = {
 	assigned: 3,
 	mentioned: 2,
 	commented: 1,
-	status_changed: 1
+	status_changed: 1,
+	// まとめ通知は notifyBulk が作る。planNotifications は出さない
+	bulk_assigned: 0,
+	bulk_updated: 0
 };
 
 /** 1 操作ぶんの変更から、受信者ごとに最も優先度の高い通知を 1 件ずつ決める */

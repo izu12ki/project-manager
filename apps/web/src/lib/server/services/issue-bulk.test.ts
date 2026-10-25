@@ -2,7 +2,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
-import { issue as issueTable, project as projectTable, user as userTable } from '../db/schema';
+import {
+	issue as issueTable,
+	notification,
+	project as projectTable,
+	user as userTable,
+	userIntegration
+} from '../db/schema';
 import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
 import { bulkCreateIssues, bulkUpdateIssues } from './issue-bulk';
 import { createIssue, deleteIssue, getIssue, listIssueChanges, listIssues } from './issues';
@@ -242,5 +248,81 @@ describe('issue-bulk', () => {
 		await expect(
 			bulkCreateIssues(as(member), 'HIDDEN', { items: [{ title: 'A' }] }, { dryRun: false })
 		).rejects.toMatchObject({ code: 'not_found' });
+	});
+	describe('まとめ通知', () => {
+		const notes = () =>
+			db
+				.select({
+					userId: notification.userId,
+					type: notification.type,
+					count: notification.count,
+					issueId: notification.issueId
+				})
+				.from(notification);
+
+		it('30 件を同じ担当者に一括起票すると、その人の通知は bulk_assigned 1 件で count = 30。自分自身には届かない', async () => {
+			await create(
+				Array.from({ length: 30 }, (_, i) => ({ title: `T${i}`, assigneeId: member.id }))
+			);
+			expect(await notes()).toEqual([
+				{ userId: member.id, type: 'bulk_assigned', count: 30, issueId: null }
+			]);
+		});
+
+		it('一括更新でステータスを変えると、報告者に bulk_updated が 1 件', async () => {
+			await createIssue(as(member), 'ACME', { title: 'A' });
+			await createIssue(as(member), 'ACME', { title: 'B' });
+			await createIssue(as(member), 'ACME', { title: 'C' });
+			await update([
+				{ number: 1, status: 'done' },
+				{ number: 2, status: 'in_progress' },
+				{ number: 3, title: 'C2' }
+			]);
+			// 3 件目はタイトルだけの変更なので通知対象にならない
+			expect(await notes()).toEqual([
+				{ userId: member.id, type: 'bulk_updated', count: 2, issueId: null }
+			]);
+		});
+
+		it('割り当てとステータス変更が混ざると bulk_assigned で、count は割り当てた件数', async () => {
+			await createIssue(as(member), 'ACME', { title: 'A' });
+			await createIssue(as(member), 'ACME', { title: 'B' });
+			await update([
+				{ number: 1, status: 'done' },
+				{ number: 2, assigneeId: member.id }
+			]);
+			expect(await notes()).toEqual([
+				{ userId: member.id, type: 'bulk_assigned', count: 1, issueId: null }
+			]);
+		});
+
+		it('dryRun では通知しない', async () => {
+			await create([{ title: 'A', assigneeId: member.id }], true);
+			expect(await notes()).toEqual([]);
+		});
+
+		it('Slack 連携済みの受信者には fetch が 1 回だけ走る', async () => {
+			base.slackBotToken = 'xoxb-t';
+			await db
+				.insert(userIntegration)
+				.values({ userId: member.id, provider: 'slack', externalId: 'U_MEMBER' });
+			await create(
+				Array.from({ length: 30 }, (_, i) => ({ title: `T${i}`, assigneeId: member.id }))
+			);
+			await Promise.all(base.pending);
+			const posts = base.fetched.filter((f) => f.url.endsWith('chat.postMessage'));
+			expect(posts).toHaveLength(1);
+			const body = posts[0].body as { channel: string; text: string };
+			expect(body.channel).toBe('U_MEMBER');
+			expect(body.text).toContain('adminさんが ACME で 30 件の課題をあなたに割り当てました。');
+		});
+
+		it('1 件 API（createIssue）の通知は従来どおり assigned', async () => {
+			await createIssue(as(admin), 'ACME', { title: 'A', assigneeId: member.id });
+			const rows = await notes();
+			expect(rows).toHaveLength(1);
+			expect(rows[0]).toMatchObject({ userId: member.id, type: 'assigned', count: null });
+			expect(rows[0].issueId).not.toBeNull();
+		});
 	});
 });

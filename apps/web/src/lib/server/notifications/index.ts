@@ -7,11 +7,17 @@ import type { DB } from '../db';
 import { comment, issue, notification, userIntegration } from '../db/schema';
 import { listStatusesOf } from '../services/issue-fields';
 import { listAssignableUsers } from '../services/projects';
-import { channelConfig, providers, toDirectMessage, type DmSource } from './channels';
-import type { IssueEvent, NotifyInput } from './events';
+import {
+	bulkDirectMessage,
+	channelConfig,
+	providers,
+	toDirectMessage,
+	type DmSource
+} from './channels';
+import type { BulkNotifyInput, IssueEvent, NotifyInput } from './events';
 import { planNotifications, type Change, type PlannedNotification } from './recipients';
 
-export type { IssueEvent, NotifyInput } from './events';
+export type { BulkNotifyInput, IssueEvent, NotifyInput } from './events';
 
 /** イベントでメンションが増えた人（受信可否で絞る前） */
 export function addedMentions(e: IssueEvent): string[] {
@@ -147,5 +153,107 @@ export async function notify(ctx: AppContext, input: NotifyInput): Promise<void>
 		await sendDirectMessages(ctx, input, facts.priority, planned);
 	} catch (e) {
 		console.error('[notify] failed', e);
+	}
+}
+
+/** まとめ通知の受信者ごとの集計 */
+interface BulkTally {
+	assigned: number;
+	notified: number;
+}
+
+/**
+ * 一括 API の更新が確定した後に呼ぶ。課題ごとに planNotifications を適用し、
+ * 受信者ごとに 1 件のまとめ通知（アプリ内 + Slack DM）にする。失敗しても元の操作には影響させない
+ */
+export async function notifyBulk(ctx: AppContext, input: BulkNotifyInput): Promise<void> {
+	try {
+		const items = input.items.filter((it) => it.events.length > 0);
+		if (items.length === 0) return;
+		const ids = items.map((it) => it.issue.id);
+		const [issues, commenters, receivers] = await Promise.all([
+			ctx.db
+				.select({ id: issue.id, reporterId: issue.reporterId, assigneeId: issue.assigneeId })
+				.from(issue)
+				.where(inArray(issue.id, ids)),
+			ctx.db
+				.selectDistinct({ issueId: comment.issueId, id: comment.authorId })
+				.from(comment)
+				.where(inArray(comment.issueId, ids)),
+			listAssignableUsers(ctx.db, input.project.id)
+		]);
+		const names = new Set(receivers.map((u) => u.id));
+		const byIssue = new Map(issues.map((i) => [i.id, i]));
+		const tally = new Map<string, BulkTally>();
+		for (const it of items) {
+			const cur = byIssue.get(it.issue.id);
+			if (!cur) continue;
+			const planned = planNotifications({
+				actorId: ctx.actor.id,
+				participants: {
+					reporterId: cur.reporterId,
+					assigneeId: cur.assigneeId,
+					commenterIds: commenters.filter((c) => c.issueId === cur.id).map((c) => c.id)
+				},
+				changes: it.events.flatMap(toChanges),
+				canReceive: (id) => names.has(id)
+			});
+			for (const n of planned) {
+				const t = tally.get(n.userId) ?? { assigned: 0, notified: 0 };
+				t.notified++;
+				if (n.type === 'assigned') t.assigned++;
+				tally.set(n.userId, t);
+			}
+		}
+		if (tally.size === 0) return;
+		const rows = [...tally].map(([userId, t]) => ({
+			userId,
+			type: t.assigned > 0 ? ('bulk_assigned' as const) : ('bulk_updated' as const),
+			count: t.assigned > 0 ? t.assigned : t.notified
+		}));
+		await ctx.db.insert(notification).values(
+			rows.map((r) => ({
+				id: uuidv7(),
+				actorId: ctx.actor.id,
+				projectId: input.project.id,
+				...r
+			}))
+		);
+		await sendBulkDirectMessages(ctx, input.project, rows);
+	} catch (e) {
+		console.error('[notify] bulk failed', e);
+	}
+}
+
+async function sendBulkDirectMessages(
+	ctx: AppContext,
+	project: BulkNotifyInput['project'],
+	rows: { userId: string; type: 'bulk_assigned' | 'bulk_updated'; count: number }[]
+): Promise<void> {
+	const cfg = channelConfig(ctx, 'slack');
+	if (!cfg) return;
+	const links = await ctx.db
+		.select({ userId: userIntegration.userId, externalId: userIntegration.externalId })
+		.from(userIntegration)
+		.where(
+			and(
+				eq(userIntegration.provider, 'slack'),
+				inArray(
+					userIntegration.userId,
+					rows.map((r) => r.userId)
+				)
+			)
+		);
+	const byUser = new Map(rows.map((r) => [r.userId, r]));
+	for (const l of links) {
+		const m = bulkDirectMessage(
+			{ baseUrl: ctx.baseUrl, project, actorName: ctx.actor.name },
+			byUser.get(l.userId)!
+		);
+		ctx.waitUntil(
+			providers.slack.send(cfg, l.externalId, m).then((r) => {
+				if (!r.ok) console.error(`[dm] slack ${l.userId}: ${r.error}`);
+			})
+		);
 	}
 }

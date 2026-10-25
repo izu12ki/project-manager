@@ -6,6 +6,7 @@ import type { DB } from '../db';
 import { notification } from '../db/schema';
 import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
 import { addComment, listComments } from './comments';
+import { bulkCreateIssues } from './issue-bulk';
 import { createIssue, updateIssue } from './issues';
 import {
 	countUnread,
@@ -93,5 +94,62 @@ describe('notifications service', () => {
 		expect(await countUnread(as(guest))).toBe(0);
 		const [n] = await db.select().from(notification).where(eq(notification.userId, guest.id));
 		await expect(markRead(as(guest), n.id)).rejects.toMatchObject({ code: 'not_found' });
+	});
+	describe('まとめ通知', () => {
+		beforeEach(async () => {
+			await bulkCreateIssues(
+				as(admin),
+				'ACME',
+				{
+					items: [
+						{ title: 'X', assigneeId: member.id },
+						{ title: 'Y', assigneeId: member.id }
+					]
+				},
+				{ dryRun: false }
+			);
+		});
+
+		it('一覧では件数の要約と、自分で絞り込んだ課題一覧へのリンクを返す', async () => {
+			const [n] = await listNotifications(as(member));
+			expect(n).toMatchObject({
+				type: 'bulk_assigned',
+				summary: '2 件の課題をあなたに割り当てました',
+				actorName: '管理',
+				projectKey: 'ACME',
+				issueNumber: null,
+				issueTitle: null,
+				count: 2,
+				href: `/projects/ACME?assignee=${member.id}`,
+				read: false
+			});
+		});
+
+		it('markRead でまとめ通知を既読にすると、href が課題一覧の URL', async () => {
+			const [n] = await listNotifications(as(member));
+			expect(await markRead(as(member), n.id)).toEqual({
+				href: `/projects/ACME?assignee=${member.id}`
+			});
+			expect(await countUnread(as(member))).toBe(0);
+		});
+
+		it('bulk_updated の要約とリンク', async () => {
+			await db
+				.update(notification)
+				.set({ type: 'bulk_updated', count: 3 })
+				.where(eq(notification.userId, member.id));
+			const [n] = await listNotifications(as(member));
+			expect(n.summary).toBe('3 件の課題を更新しました');
+			expect(n.href).toBe('/projects/ACME');
+		});
+
+		it('member は、自分が参加していないプロジェクトのまとめ通知を listNotifications で見られず、countUnread にも数えない', async () => {
+			expect(await countUnread(as(member))).toBe(1);
+			await removeMember(as(admin), 'ACME', member.id);
+			expect(await listNotifications(as(member))).toEqual([]);
+			expect(await countUnread(as(member))).toBe(0);
+			const [n] = await db.select().from(notification).where(eq(notification.userId, member.id));
+			await expect(markRead(as(member), n.id)).rejects.toMatchObject({ code: 'not_found' });
+		});
 	});
 });

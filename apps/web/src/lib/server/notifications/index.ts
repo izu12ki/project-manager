@@ -12,6 +12,8 @@ import {
 	channelConfig,
 	providers,
 	toDirectMessage,
+	type ChannelConfig,
+	type DirectMessage,
 	type DmSource
 } from './channels';
 import type { BulkNotifyInput, IssueEvent, NotifyInput } from './events';
@@ -86,6 +88,31 @@ async function loadFacts(db: DB, input: NotifyInput) {
 	};
 }
 
+/** Slack をオンにしている受信者の連携先。トークン未設定・該当者なしなら null */
+async function slackLinks(ctx: AppContext, userIds: string[]) {
+	const cfg = channelConfig(ctx, 'slack');
+	if (!cfg || userIds.length === 0) return null;
+	const links = await ctx.db
+		.select({ userId: userIntegration.userId, externalId: userIntegration.externalId })
+		.from(userIntegration)
+		.where(and(eq(userIntegration.provider, 'slack'), inArray(userIntegration.userId, userIds)));
+	return links.length > 0 ? { cfg, links } : null;
+}
+
+/** 1 通をレスポンス後に送る。失敗はログだけ */
+function sendLater(
+	ctx: AppContext,
+	cfg: ChannelConfig,
+	link: { userId: string; externalId: string },
+	m: DirectMessage
+): void {
+	ctx.waitUntil(
+		providers.slack.send(cfg, link.externalId, m).then((r) => {
+			if (!r.ok) console.error(`[dm] slack ${link.userId}: ${r.error}`);
+		})
+	);
+}
+
 /** オンにしている受信者に DM を送る。送信はレスポンス後に行う */
 async function sendDirectMessages(
 	ctx: AppContext,
@@ -93,21 +120,11 @@ async function sendDirectMessages(
 	priority: Priority,
 	planned: PlannedNotification[]
 ): Promise<void> {
-	const cfg = channelConfig(ctx, 'slack');
-	if (!cfg || planned.length === 0) return;
-	const links = await ctx.db
-		.select({ userId: userIntegration.userId, externalId: userIntegration.externalId })
-		.from(userIntegration)
-		.where(
-			and(
-				eq(userIntegration.provider, 'slack'),
-				inArray(
-					userIntegration.userId,
-					planned.map((n) => n.userId)
-				)
-			)
-		);
-	if (links.length === 0) return;
+	const target = await slackLinks(
+		ctx,
+		planned.map((n) => n.userId)
+	);
+	if (!target) return;
 	const statuses = planned.some((n) => n.type === 'status_changed')
 		? await listStatusesOf(ctx.db, input.project.id)
 		: [];
@@ -120,14 +137,8 @@ async function sendDirectMessages(
 		events: input.events,
 		statuses
 	};
-	for (const l of links) {
-		const m = toDirectMessage(src, byUser.get(l.userId)!);
-		ctx.waitUntil(
-			providers.slack.send(cfg, l.externalId, m).then((r) => {
-				if (!r.ok) console.error(`[dm] slack ${l.userId}: ${r.error}`);
-			})
-		);
-	}
+	for (const l of target.links)
+		sendLater(ctx, target.cfg, l, toDirectMessage(src, byUser.get(l.userId)!));
 }
 
 /** 更新が確定した後に呼ぶ。失敗しても元の操作には影響させない */
@@ -230,30 +241,13 @@ async function sendBulkDirectMessages(
 	project: BulkNotifyInput['project'],
 	rows: { userId: string; type: 'bulk_assigned' | 'bulk_updated'; count: number }[]
 ): Promise<void> {
-	const cfg = channelConfig(ctx, 'slack');
-	if (!cfg) return;
-	const links = await ctx.db
-		.select({ userId: userIntegration.userId, externalId: userIntegration.externalId })
-		.from(userIntegration)
-		.where(
-			and(
-				eq(userIntegration.provider, 'slack'),
-				inArray(
-					userIntegration.userId,
-					rows.map((r) => r.userId)
-				)
-			)
-		);
+	const target = await slackLinks(
+		ctx,
+		rows.map((r) => r.userId)
+	);
+	if (!target) return;
 	const byUser = new Map(rows.map((r) => [r.userId, r]));
-	for (const l of links) {
-		const m = bulkDirectMessage(
-			{ baseUrl: ctx.baseUrl, project, actorName: ctx.actor.name },
-			byUser.get(l.userId)!
-		);
-		ctx.waitUntil(
-			providers.slack.send(cfg, l.externalId, m).then((r) => {
-				if (!r.ok) console.error(`[dm] slack ${l.userId}: ${r.error}`);
-			})
-		);
-	}
+	const src = { baseUrl: ctx.baseUrl, project, actorName: ctx.actor.name };
+	for (const l of target.links)
+		sendLater(ctx, target.cfg, l, bulkDirectMessage(src, byUser.get(l.userId)!));
 }

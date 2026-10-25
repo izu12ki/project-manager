@@ -16,6 +16,7 @@ import { authorize, type Actor } from '../authz';
 import type { DB } from '../db';
 import { category, issue, issueType, milestone, user } from '../db/schema';
 import { AppError } from '../errors';
+import type { IssueEvent } from '../notifications';
 import { emptyToNull, parse } from '../validation';
 import { listStatusesOf } from './issue-fields';
 import { listAssignableUsers } from './projects';
@@ -321,4 +322,36 @@ export function describeChanges(
 	if (patch.startDate !== undefined) add('startDate', cur.startDate, patch.startDate);
 	if (patch.dueDate !== undefined) add('dueDate', cur.dueDate, patch.dueDate);
 	return changes;
+}
+
+/** 起票の通知に渡す出来事（1 件・一括で共通） */
+export function createEventsOf(values: CreateValues): IssueEvent[] {
+	return [
+		{
+			kind: 'issue_created',
+			assigneeId: values.assigneeId ?? null,
+			priority: values.priority ?? 'none',
+			description: values.description
+		}
+	];
+}
+
+/** 更新の通知に渡す出来事（1 件・一括で共通）。通知に関わる変更がなければ空 */
+export function updateEventsOf(cur: IssueRow, patch: IssuePatch): IssueEvent[] {
+	const events: IssueEvent[] = [];
+	if (patch.assigneeId !== undefined) {
+		events.push({ kind: 'assignee_changed', assigneeId: patch.assigneeId });
+	}
+	if (patch.status !== undefined) {
+		events.push({ kind: 'status_changed', from: cur.status, to: patch.status });
+	}
+	if (patch.description !== undefined) {
+		events.push({
+			kind: 'mentions_added',
+			commentId: null,
+			before: cur.description,
+			after: patch.description
+		});
+	}
+	return events;
 }

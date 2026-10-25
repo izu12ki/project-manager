@@ -29,20 +29,22 @@ import type { AppContext } from '../context';
 import type { DB } from '../db';
 import { category, issue, issueChange, issueType, milestone, project, user } from '../db/schema';
 import { AppError } from '../errors';
-import { notify, type IssueEvent } from '../notifications';
+import { notify } from '../notifications';
 import { emptyToNull, parse } from '../validation';
 import { linkAttachments } from './attachment-links';
 import { listStatusesOf } from './issue-fields';
 import {
 	StatusSchema,
 	assertStatusIn,
+	createEventsOf,
 	describeChanges,
 	loadFieldSets,
 	loadFormerAssigneeNames,
 	prepareCreate,
 	preparePatch,
 	type IssuePatch,
-	type IssueRow
+	type IssueRow,
+	updateEventsOf
 } from './issue-input';
 import { assertWritable, forgetProject, requireProject, type ProjectRow } from './projects';
 
@@ -291,14 +293,7 @@ export async function createIssue(
 	await notify(ctx, {
 		project: p,
 		issue: { id, number: row.number, title: values.title },
-		events: [
-			{
-				kind: 'issue_created',
-				assigneeId: values.assigneeId ?? null,
-				priority: values.priority ?? 'none',
-				description: values.description
-			}
-		]
+		events: createEventsOf(values)
 	});
 	return { number: row.number };
 }
@@ -365,21 +360,7 @@ export async function updateIssue(
 	if (patch.description !== undefined) {
 		await linkAttachments(ctx, { projectId: p.id, issueId: cur.id }, patch.description);
 	}
-	const events: IssueEvent[] = [];
-	if (patch.assigneeId !== undefined) {
-		events.push({ kind: 'assignee_changed', assigneeId: patch.assigneeId });
-	}
-	if (patch.status !== undefined) {
-		events.push({ kind: 'status_changed', from: cur.status, to: patch.status });
-	}
-	if (patch.description !== undefined) {
-		events.push({
-			kind: 'mentions_added',
-			commentId: null,
-			before: cur.description,
-			after: patch.description
-		});
-	}
+	const events = updateEventsOf(cur, patch);
 	if (events.length > 0) {
 		await notify(ctx, {
 			project: p,

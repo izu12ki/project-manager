@@ -7,11 +7,19 @@ import type { DB } from '../db';
 import { comment, issue, notification, userIntegration } from '../db/schema';
 import { listStatusesOf } from '../services/issue-fields';
 import { listAssignableUsers } from '../services/projects';
-import { channelConfig, providers, toDirectMessage, type DmSource } from './channels';
-import type { IssueEvent, NotifyInput } from './events';
+import {
+	bulkDirectMessage,
+	channelConfig,
+	providers,
+	toDirectMessage,
+	type ChannelConfig,
+	type DirectMessage,
+	type DmSource
+} from './channels';
+import type { BulkNotifyInput, IssueEvent, NotifyInput } from './events';
 import { planNotifications, type Change, type PlannedNotification } from './recipients';
 
-export type { IssueEvent, NotifyInput } from './events';
+export type { BulkNotifyInput, IssueEvent, NotifyInput } from './events';
 
 /** イベントでメンションが増えた人（受信可否で絞る前） */
 export function addedMentions(e: IssueEvent): string[] {
@@ -80,6 +88,31 @@ async function loadFacts(db: DB, input: NotifyInput) {
 	};
 }
 
+/** Slack をオンにしている受信者の連携先。トークン未設定・該当者なしなら null */
+async function slackLinks(ctx: AppContext, userIds: string[]) {
+	const cfg = channelConfig(ctx, 'slack');
+	if (!cfg || userIds.length === 0) return null;
+	const links = await ctx.db
+		.select({ userId: userIntegration.userId, externalId: userIntegration.externalId })
+		.from(userIntegration)
+		.where(and(eq(userIntegration.provider, 'slack'), inArray(userIntegration.userId, userIds)));
+	return links.length > 0 ? { cfg, links } : null;
+}
+
+/** 1 通をレスポンス後に送る。失敗はログだけ */
+function sendLater(
+	ctx: AppContext,
+	cfg: ChannelConfig,
+	link: { userId: string; externalId: string },
+	m: DirectMessage
+): void {
+	ctx.waitUntil(
+		providers.slack.send(cfg, link.externalId, m).then((r) => {
+			if (!r.ok) console.error(`[dm] slack ${link.userId}: ${r.error}`);
+		})
+	);
+}
+
 /** オンにしている受信者に DM を送る。送信はレスポンス後に行う */
 async function sendDirectMessages(
 	ctx: AppContext,
@@ -87,21 +120,11 @@ async function sendDirectMessages(
 	priority: Priority,
 	planned: PlannedNotification[]
 ): Promise<void> {
-	const cfg = channelConfig(ctx, 'slack');
-	if (!cfg || planned.length === 0) return;
-	const links = await ctx.db
-		.select({ userId: userIntegration.userId, externalId: userIntegration.externalId })
-		.from(userIntegration)
-		.where(
-			and(
-				eq(userIntegration.provider, 'slack'),
-				inArray(
-					userIntegration.userId,
-					planned.map((n) => n.userId)
-				)
-			)
-		);
-	if (links.length === 0) return;
+	const target = await slackLinks(
+		ctx,
+		planned.map((n) => n.userId)
+	);
+	if (!target) return;
 	const statuses = planned.some((n) => n.type === 'status_changed')
 		? await listStatusesOf(ctx.db, input.project.id)
 		: [];
@@ -114,14 +137,8 @@ async function sendDirectMessages(
 		events: input.events,
 		statuses
 	};
-	for (const l of links) {
-		const m = toDirectMessage(src, byUser.get(l.userId)!);
-		ctx.waitUntil(
-			providers.slack.send(cfg, l.externalId, m).then((r) => {
-				if (!r.ok) console.error(`[dm] slack ${l.userId}: ${r.error}`);
-			})
-		);
-	}
+	for (const l of target.links)
+		sendLater(ctx, target.cfg, l, toDirectMessage(src, byUser.get(l.userId)!));
 }
 
 /** 更新が確定した後に呼ぶ。失敗しても元の操作には影響させない */
@@ -148,4 +165,102 @@ export async function notify(ctx: AppContext, input: NotifyInput): Promise<void>
 	} catch (e) {
 		console.error('[notify] failed', e);
 	}
+}
+
+/** まとめ通知の受信者ごとの集計 */
+export type BulkType = 'bulk_assigned' | 'bulk_mentioned' | 'bulk_updated';
+
+interface BulkRow {
+	userId: string;
+	type: BulkType;
+	count: number;
+}
+
+interface BulkTally {
+	assigned: number;
+	mentioned: number;
+	notified: number;
+}
+
+/**
+ * 一括 API の更新が確定した後に呼ぶ。課題ごとに planNotifications を適用し、
+ * 受信者ごとに 1 件のまとめ通知（アプリ内 + Slack DM）にする。失敗しても元の操作には影響させない
+ */
+export async function notifyBulk(ctx: AppContext, input: BulkNotifyInput): Promise<void> {
+	try {
+		const items = input.items.filter((it) => it.events.length > 0);
+		if (items.length === 0) return;
+		const ids = items.map((it) => it.issue.id);
+		const [issues, commenters, receivers] = await Promise.all([
+			ctx.db
+				.select({ id: issue.id, reporterId: issue.reporterId, assigneeId: issue.assigneeId })
+				.from(issue)
+				.where(inArray(issue.id, ids)),
+			ctx.db
+				.selectDistinct({ issueId: comment.issueId, id: comment.authorId })
+				.from(comment)
+				.where(inArray(comment.issueId, ids)),
+			listAssignableUsers(ctx.db, input.project.id)
+		]);
+		const names = new Set(receivers.map((u) => u.id));
+		const byIssue = new Map(issues.map((i) => [i.id, i]));
+		const tally = new Map<string, BulkTally>();
+		for (const it of items) {
+			const cur = byIssue.get(it.issue.id);
+			if (!cur) continue;
+			const planned = planNotifications({
+				actorId: ctx.actor.id,
+				participants: {
+					reporterId: cur.reporterId,
+					assigneeId: cur.assigneeId,
+					commenterIds: commenters.filter((c) => c.issueId === cur.id).map((c) => c.id)
+				},
+				changes: it.events.flatMap(toChanges),
+				canReceive: (id) => names.has(id)
+			});
+			for (const n of planned) {
+				const t = tally.get(n.userId) ?? { assigned: 0, mentioned: 0, notified: 0 };
+				t.notified++;
+				if (n.type === 'assigned') t.assigned++;
+				else if (n.type === 'mentioned') t.mentioned++;
+				tally.set(n.userId, t);
+			}
+		}
+		if (tally.size === 0) return;
+		// 1 件の通知と同じ優先度（担当 > メンション > その他）で理由を 1 つ選ぶ
+		const rows: BulkRow[] = [...tally].map(([userId, t]) =>
+			t.assigned > 0
+				? { userId, type: 'bulk_assigned', count: t.assigned }
+				: t.mentioned > 0
+					? { userId, type: 'bulk_mentioned', count: t.mentioned }
+					: { userId, type: 'bulk_updated', count: t.notified }
+		);
+		await ctx.db.insert(notification).values(
+			rows.map((r) => ({
+				id: uuidv7(),
+				actorId: ctx.actor.id,
+				projectId: input.project.id,
+				...r
+			}))
+		);
+		await sendBulkDirectMessages(ctx, input.project, rows);
+	} catch (e) {
+		console.error('[notify] bulk failed', e);
+	}
+}
+
+async function sendBulkDirectMessages(
+	ctx: AppContext,
+	project: BulkNotifyInput['project'],
+	rows: BulkRow[]
+): Promise<void> {
+	const target = await slackLinks(
+		ctx,
+		rows.map((r) => r.userId)
+	);
+	if (!target) return;
+	const byUser = new Map(rows.map((r) => [r.userId, r]));
+	const src = { baseUrl: ctx.baseUrl, project, actorName: ctx.actor.name };
+	for (const l of target.links)
+		sendLater(ctx, target.cfg, l, bulkDirectMessage(src, byUser.get(l.userId)!));
 }

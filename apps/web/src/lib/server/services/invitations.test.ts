@@ -110,6 +110,21 @@ describe('invitations', () => {
 		expect(await getInvitationByToken(db, tokenOf(url))).toBeNull();
 	});
 
+	it('アドミンとして招待でき、受諾したユーザーの role が admin になる', async () => {
+		const { url } = await createInvitation(ctxOf(base, admin), {
+			email: 'boss@example.com',
+			role: 'admin',
+			projectIds: [projectId]
+		});
+		await acceptInvitation(base, {
+			token: tokenOf(url),
+			name: '管理者2',
+			password: 'password-1234'
+		});
+		const [u] = await db.select().from(user).where(eq(user.email, 'boss@example.com'));
+		expect(u.role).toBe('admin');
+	});
+
 	it('期限切れのリンクは使えない', async () => {
 		const { url } = await createInvitation(ctxOf(base, admin), {
 			email: 'm@example.com',

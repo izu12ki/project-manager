@@ -227,12 +227,3 @@ export async function listAssignableUsers(db: DB, projectId: string) {
 		)
 		.orderBy(asc(user.name));
 }
-
-export async function assertAssignable(db: DB, projectId: string, userId: string): Promise<void> {
-	const users = await listAssignableUsers(db, projectId);
-	if (!users.some((u) => u.id === userId)) {
-		throw new AppError('validation', 'このユーザーは担当者にできません', {
-			assigneeId: ['このユーザーは担当者にできません']
-		});
-	}
-}

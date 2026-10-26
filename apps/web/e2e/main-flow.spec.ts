@@ -65,7 +65,11 @@ async function dragBy(page: Page, target: Locator, dx: number) {
 	await page.mouse.up();
 }
 
-test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 → コメント', async ({ page }) => {
+test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 → コメント', async ({
+	page,
+	playwright,
+	baseURL
+}) => {
 	// 1. 初期セットアップ
 	await page.goto('/login');
 	await expect(page).toHaveURL(/\/setup/);
@@ -86,7 +90,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.goto('/admin/users');
 	await expect(page.getByRole('heading', { name: 'ユーザーを招待' })).toBeVisible();
 	await page.getByLabel('メールアドレス').fill('member@example.com');
-	await page.getByLabel('ロール').selectOption('member');
+	await page.getByLabel('ロール', { exact: true }).selectOption('member');
 	await page.locator('#invite-project').click();
 	await page.getByRole('checkbox', { name: 'ACME サイト改修' }).check();
 	await expect(page.locator('#invite-project')).toHaveText('ACME サイト改修');
@@ -698,4 +702,81 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 		.evaluate((el) => el.scrollWidth > el.clientWidth);
 	expect(codeScrolls).toBe(false);
 	expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+
+	// 15. 管理者の招待とロール変更（確認ダイアログ・自分の行は変更不可）
+	await page.context().clearCookies();
+	await login(page, 'admin@example.com');
+	await page.goto('/admin/users');
+	await page.getByLabel('メールアドレス').fill('admin2@example.com');
+	await page.getByLabel('ロール', { exact: true }).selectOption({ label: '管理者' });
+	await page.locator('#invite-project').click();
+	await page.getByRole('checkbox', { name: 'ACME サイト改修' }).check();
+	await page.getByRole('button', { name: '招待する' }).click();
+	const admin2Url = await page.getByLabel('招待リンク').inputValue();
+	await logout(page);
+	await acceptInvite(page, admin2Url, '副管理者');
+	await logout(page);
+	await login(page, 'admin@example.com');
+	await page.goto('/admin/users');
+	const roleSelect = page.getByLabel('副管理者 さんのロール');
+	await expect(roleSelect).toHaveValue('admin');
+	await expect(roleSelect.locator('option:checked')).toHaveText('管理者');
+	// 自分の行には select が無い
+	await expect(page.getByLabel('管理者 さんのロール', { exact: true })).toHaveCount(0);
+	// キャンセルすると変更されない
+	await roleSelect.selectOption('member');
+	const dialog = page.getByRole('alertdialog');
+	await expect(dialog).toContainText(
+		'副管理者さんのロールを「メンバー」に変更します。このユーザーはログアウトされ、再ログインが必要になります。'
+	);
+	await dialog.getByRole('button', { name: 'キャンセル' }).click();
+	await expect(roleSelect).toHaveValue('admin');
+	// 確定すると変更される
+	await roleSelect.selectOption('member');
+	await dialog.getByRole('button', { name: '変更する' }).click();
+	await expect(
+		page.getByText('ロールを変更しました。対象のユーザーはログアウトされました')
+	).toBeVisible();
+	await expect(roleSelect).toHaveValue('member');
+	await expect(roleSelect.locator('option:checked')).toHaveText('メンバー');
+
+	// 9. 管理者は /account で API キーを作成・無効化できる。メンバーには欄が出ない
+	await page.goto('/account');
+	const apiKeyCard = page.locator('.card', {
+		has: page.getByRole('heading', { name: 'API キー' })
+	});
+	await apiKeyCard.getByLabel('名前').fill('e2e');
+	await apiKeyCard.getByRole('button', { name: '作成' }).click();
+	const tokenBox = page.getByTestId('api-key-token');
+	await expect(tokenBox).toHaveValue(/^pm_/);
+	await expect(apiKeyCard).toContainText('この画面を離れると二度と表示されません');
+	// 作成したキーで /api/v1 を呼べる（Cookie は使わず Bearer のみ）
+	const request = await playwright.request.newContext({ baseURL });
+	const apiToken = await tokenBox.inputValue();
+	const bearer = { Authorization: `Bearer ${apiToken}` };
+	const meRes = await request.get('/api/v1/me', { headers: bearer });
+	expect(meRes.status()).toBe(200);
+	expect(await meRes.json()).toMatchObject({ role: 'admin' });
+	const projectRes = await request.get('/api/v1/projects/ACME', { headers: bearer });
+	expect(projectRes.status()).toBe(200);
+	expect((await projectRes.json()).key).toBe('ACME');
+	expect((await request.get('/api/v1/me')).status()).toBe(401);
+	// ログイン済みの Cookie セッションでは API を呼べない
+	expect((await page.request.get('/api/v1/me')).status()).toBe(401);
+	await request.dispose();
+	const keyList = apiKeyCard.getByRole('list', { name: 'API キー一覧' });
+	await expect(keyList).toContainText('e2e');
+	await expect(keyList).toContainText('未使用');
+	await page.reload();
+	await expect(page.getByTestId('api-key-token')).toHaveCount(0);
+	await expect(keyList).toContainText('e2e');
+	await page.getByRole('button', { name: 'e2e を無効化' }).click();
+	await page.getByRole('alertdialog').getByRole('button', { name: '無効化する' }).click();
+	await expect(page.getByText('API キーを無効化しました')).toBeVisible();
+	await expect(keyList).toHaveCount(0);
+	await logout(page);
+	await login(page, 'member@example.com');
+	await page.goto('/account');
+	await expect(page.getByRole('heading', { name: 'パスワード変更' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'API キー' })).toHaveCount(0);
 });

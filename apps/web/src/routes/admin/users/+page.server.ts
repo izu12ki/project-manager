@@ -7,7 +7,7 @@ import {
 	revokeInvitation
 } from '$lib/server/services/invitations';
 import { listProjects } from '$lib/server/services/projects';
-import { disableUser, enableUser, listUsers } from '$lib/server/services/users';
+import { changeUserRole, disableUser, enableUser, listUsers } from '$lib/server/services/users';
 import { formObject } from '$lib/server/validation';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -47,6 +47,14 @@ export const actions: Actions = {
 		const id = String((await request.formData()).get('id') ?? '');
 		return handleAction(async () => {
 			await disableUser(appContext(locals), id);
+		});
+	},
+	changeRole: async ({ request, locals }) => {
+		const fd = await request.formData();
+		const id = String(fd.get('id') ?? '');
+		const role = fd.get('role');
+		return handleAction(async () => {
+			await changeUserRole(appContext(locals), id, role);
 		});
 	},
 	enable: async ({ request, locals }) => {

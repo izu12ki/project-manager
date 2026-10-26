@@ -51,7 +51,8 @@
 								><span class="font-medium">{n.actorName}</span> さんが {n.summary}</span
 							>
 							<span class="truncate text-xs text-muted-foreground"
-								>{n.projectKey}-{n.issueNumber} {n.issueTitle} · {formatDateTime(n.createdAt)}</span
+								>{#if n.issueNumber === null}{n.projectKey}{:else}{n.projectKey}-{n.issueNumber}
+									{n.issueTitle}{/if} · {formatDateTime(n.createdAt)}</span
 							>
 						</span>
 						{#if !n.read}<span class="dot" aria-label="未読"></span>{/if}

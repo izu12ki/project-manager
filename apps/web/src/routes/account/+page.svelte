@@ -1,7 +1,10 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { Check, Copy } from '@lucide/svelte';
+	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
 	import FormAlert from '$lib/components/FormAlert.svelte';
 	import PasswordInput from '$lib/components/PasswordInput.svelte';
+	import { formatDate, formatDateTime } from '$lib/labels';
 	import { toast } from '$lib/toast.svelte';
 	import type { PageProps } from './$types';
 
@@ -21,6 +24,23 @@
 	$effect(() => {
 		if (form?.slackDisabled) toast.success('Slack 通知をオフにしました');
 	});
+	$effect(() => {
+		if (form?.apiKeyRevoked) toast.success('API キーを無効化しました');
+	});
+
+	// 作成直後のトークン。画面を離れる（再読み込み・遷移）と消える
+	let token = $derived(form && 'apiKeyToken' in form ? form.apiKeyToken : null);
+	let copied = $state(false);
+	async function copyToken() {
+		if (!token) return;
+		try {
+			await navigator.clipboard.writeText(token);
+			copied = true;
+			setTimeout(() => (copied = false), 2000);
+		} catch {
+			// クリップボードが使えない環境では手動コピーに任せる
+		}
+	}
 </script>
 
 <section class="grid w-full max-w-[640px] gap-6">
@@ -29,7 +49,9 @@
 		<p class="page-desc">{data.user?.email}</p>
 	</div>
 
-	{#if form?.message && !(form && 'slack' in form)}<FormAlert message={form.message} />{/if}
+	{#if form?.message && !(form && ('slack' in form || 'apiKey' in form))}<FormAlert
+			message={form.message}
+		/>{/if}
 
 	<form method="POST" action="?/updateName" use:enhance class="card">
 		<div class="card-head">
@@ -113,4 +135,77 @@
 			</span>
 		</form>
 	</div>
+
+	{#if data.apiKeys}
+		<div class="card">
+			<div class="card-head">
+				<h2 class="card-title">API キー</h2>
+				<p class="card-desc">
+					外部のツールから REST API を使うためのキーです。キーは作成した管理者本人として動作します。
+				</p>
+			</div>
+			{#if form && 'apiKey' in form && form.message}<FormAlert message={form.message} />{/if}
+			{#if token}
+				<div class="field" role="status">
+					<label class="label" for="api-key-token">新しい API キー</label>
+					<div class="flex gap-2">
+						<input
+							class="input mono"
+							id="api-key-token"
+							data-testid="api-key-token"
+							readonly
+							value={token}
+							onfocus={(e) => e.currentTarget.select()}
+						/>
+						<button type="button" class="btn btn-outline" onclick={copyToken}>
+							{#if copied}<Check size={16} />コピーしました{:else}<Copy size={16} />コピー{/if}
+						</button>
+					</div>
+					<p class="hint">この画面を離れると二度と表示されません。</p>
+				</div>
+			{/if}
+			<form method="POST" action="?/createApiKey" use:enhance class="flex items-end gap-3">
+				<div class="field flex-1">
+					<label class="label" for="api-key-name">名前</label>
+					<input
+						class="input"
+						id="api-key-name"
+						name="name"
+						required
+						maxlength={50}
+						placeholder="例: 集計スクリプト"
+					/>
+				</div>
+				<button type="submit" class="btn btn-primary">作成</button>
+			</form>
+			{#if data.apiKeys.length}
+				<ul class="grid gap-2" aria-label="API キー一覧">
+					{#each data.apiKeys as key (key.id)}
+						<li class="flex items-center justify-between gap-3 text-sm">
+							<div class="grid min-w-0 gap-0.5">
+								<span class="font-medium break-all">{key.name}</span>
+								<span class="text-xs text-muted-foreground">
+									<code>{key.prefix}…</code> ・ 作成 {formatDate(key.createdAt)} ・ 最終利用
+									{key.lastUsedAt ? formatDateTime(key.lastUsedAt) : '未使用'}
+								</span>
+							</div>
+							<ConfirmAction
+								action="?/revokeApiKey"
+								fields={{ id: key.id }}
+								title="API キーの無効化"
+								description={`「${key.name}」を無効化します。このキーを使っているツールは動かなくなります。`}
+								confirmLabel="無効化する"
+								triggerClass="btn btn-danger btn-sm"
+								triggerLabel={`${key.name} を無効化`}
+							>
+								{#snippet trigger()}無効化{/snippet}
+							</ConfirmAction>
+						</li>
+					{/each}
+				</ul>
+			{:else}
+				<p class="text-sm text-muted-foreground">API キーはまだありません。</p>
+			{/if}
+		</div>
+	{/if}
 </section>

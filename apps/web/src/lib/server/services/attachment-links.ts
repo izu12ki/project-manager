@@ -19,9 +19,19 @@ export async function linkAttachments(
 	target: { projectId: string; issueId: string; commentId?: string },
 	body: string
 ): Promise<void> {
+	const q = linkAttachmentsQuery(ctx, target, body);
+	if (q) await q;
+}
+
+/** linkAttachments の更新文。参照がなければ null。一括処理で db.batch に入れるために使う */
+export function linkAttachmentsQuery(
+	ctx: AppContext,
+	target: { projectId: string; issueId: string; commentId?: string },
+	body: string
+) {
 	const ids = referencedAttachmentIds(body);
-	if (ids.length === 0) return;
-	await ctx.db
+	if (ids.length === 0) return null;
+	return ctx.db
 		.update(attachment)
 		.set({ issueId: target.issueId, commentId: target.commentId ?? null })
 		.where(

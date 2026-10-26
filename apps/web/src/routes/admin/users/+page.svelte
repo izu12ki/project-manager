@@ -6,10 +6,35 @@
 	import InviteLinkBox from '$lib/components/InviteLinkBox.svelte';
 	import MultiSelect from '$lib/components/MultiSelect.svelte';
 	import RolePill from '$lib/components/RolePill.svelte';
-	import { formatDate } from '$lib/labels';
+	import { formatDate, ROLE_LABEL } from '$lib/labels';
+	import { toast } from '$lib/toast.svelte';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
+
+	const roles = ['admin', 'member', 'guest'] as const;
+
+	// 変更確認中の行（select で選んだ値を保持する）
+	let pendingChange = $state<{ id: string; name: string; role: (typeof roles)[number] } | null>(
+		null
+	);
+	let roleDialog = $state<HTMLDialogElement>();
+	let roleSelects: Record<string, HTMLSelectElement> = {};
+
+	function requestRoleChange(u: { id: string; name: string }, select: HTMLSelectElement) {
+		pendingChange = { id: u.id, name: u.name, role: select.value as (typeof roles)[number] };
+		roleDialog?.showModal();
+	}
+
+	// キャンセル・確定のどちらでも閉じたら select を DB の値に戻す（確定後は再読込で新しい値になる）
+	function resetRoleSelect() {
+		if (!pendingChange) return;
+		const { id } = pendingChange;
+		const u = data.users.find((x) => x.id === id);
+		const el = roleSelects[id];
+		if (u && el) el.value = u.role;
+		pendingChange = null;
+	}
 </script>
 
 <section class="grid w-full max-w-[960px] gap-6">
@@ -36,6 +61,7 @@
 					<select class="select" id="invite-role" name="role">
 						<option value="member">メンバー</option>
 						<option value="guest">ゲスト</option>
+						<option value="admin">{ROLE_LABEL.admin}</option>
 					</select>
 				</div>
 				<div class="field">
@@ -61,7 +87,7 @@
 				role="table"
 				aria-label="ユーザー一覧"
 				class="users"
-				style="--cols: minmax(220px, 1.4fr) minmax(200px, 1.2fr) 96px 80px 96px"
+				style="--cols: minmax(220px, 1.4fr) minmax(200px, 1.2fr) 118px 80px 96px"
 			>
 				<div role="row" class="grid-table-head">
 					<span role="columnheader">名前</span>
@@ -74,7 +100,23 @@
 					<div role="row" class:opacity-65={!!u.disabledAt}>
 						<span role="cell" class="truncate font-medium">{u.name}</span>
 						<span role="cell" class="truncate text-[13px] text-muted-foreground">{u.email}</span>
-						<span role="cell"><RolePill role={u.role} /></span>
+						<span role="cell">
+							{#if u.id === data.user?.id}
+								<RolePill role={u.role} />
+							{:else}
+								<select
+									class="select"
+									aria-label={`${u.name} さんのロール`}
+									value={u.role}
+									bind:this={roleSelects[u.id]}
+									onchange={(e) => requestRoleChange(u, e.currentTarget)}
+								>
+									{#each roles as value (value)}
+										<option {value}>{ROLE_LABEL[value]}</option>
+									{/each}
+								</select>
+							{/if}
+						</span>
 						<span role="cell">
 							{#if u.disabledAt}
 								<span class="pill pill-muted">無効</span>
@@ -106,6 +148,22 @@
 			</div>
 		</div>
 	</div>
+
+	<ConfirmAction
+		bind:dialog={roleDialog}
+		action="?/changeRole"
+		fields={{ id: pendingChange?.id ?? '', role: pendingChange?.role ?? '' }}
+		title="ロールの変更"
+		description={pendingChange
+			? `${pendingChange.name}さんのロールを「${ROLE_LABEL[pendingChange.role]}」に変更します。このユーザーはログアウトされ、再ログインが必要になります。`
+			: ''}
+		confirmLabel="変更する"
+		onclose={resetRoleSelect}
+		onresult={(r) => {
+			if (r.type === 'success')
+				toast.success('ロールを変更しました。対象のユーザーはログアウトされました');
+		}}
+	/>
 
 	<div class="card" style="gap: 12px; padding: 20px 24px">
 		<h2 class="card-title">招待中</h2>

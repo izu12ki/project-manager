@@ -4,7 +4,7 @@ import { slack } from './slack';
 import type { ChannelConfig, UserChannelProvider } from './types';
 
 export type { ChannelConfig, DirectMessage, UserChannelProvider } from './types';
-export { toDirectMessage, type DmSource } from './message';
+export { bulkDirectMessage, bulkPath, toDirectMessage, type DmSource } from './message';
 
 export const providers: Record<IntegrationProviderId, UserChannelProvider> = { slack };
 

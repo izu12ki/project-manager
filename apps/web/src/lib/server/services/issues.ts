@@ -19,10 +19,6 @@ import * as v from 'valibot';
 import {
 	DONE_STATUS,
 	INITIAL_STATUS,
-	PRIORITIES,
-	PRIORITY_LABEL,
-	RESOLUTIONS,
-	RESOLUTION_LABEL,
 	type IssueChangeItem,
 	type Priority,
 	type Status,
@@ -33,40 +29,26 @@ import type { AppContext } from '../context';
 import type { DB } from '../db';
 import { category, issue, issueChange, issueType, milestone, project, user } from '../db/schema';
 import { AppError } from '../errors';
-import { notify, type IssueEvent } from '../notifications';
+import { notify } from '../notifications';
 import { emptyToNull, parse } from '../validation';
 import { linkAttachments } from './attachment-links';
+import { listStatusesOf } from './issue-fields';
 import {
-	assertCategoryOf,
-	assertIssueTypeOf,
-	assertMilestoneOf,
-	assertStatusOf,
-	listStatusesOf
-} from './issue-fields';
-import {
-	assertAssignable,
-	assertWritable,
-	forgetProject,
-	requireProject,
-	type ProjectRow
-} from './projects';
+	StatusSchema,
+	assertStatusIn,
+	createEventsOf,
+	describeChanges,
+	loadFieldSets,
+	loadFormerAssigneeNames,
+	prepareCreate,
+	preparePatch,
+	type IssuePatch,
+	type IssueRow,
+	updateEventsOf
+} from './issue-input';
+import { assertWritable, forgetProject, requireProject, type ProjectRow } from './projects';
 
 const STALE = '並び順が古くなっています。画面を再読み込みしてください';
-
-const TitleSchema = v.pipe(
-	v.string(),
-	v.trim(),
-	v.minLength(1, 'タイトルを入力してください'),
-	v.maxLength(200, 'タイトルは200文字以内で入力してください')
-);
-const DescriptionSchema = v.pipe(
-	v.string(),
-	v.maxLength(50_000, '説明は50,000文字以内で入力してください')
-);
-const DateOrEmpty = v.union(
-	[v.literal(''), v.pipe(v.string(), v.isoDate())],
-	'日付の形式が正しくありません'
-);
 
 /** assigneeId / categoryId / milestoneId は 'none' で未設定のものに絞る。q はタイトルか番号の部分一致。 */
 export interface IssueFilters {
@@ -282,32 +264,6 @@ async function nextPosition(db: DB, projectId: string, status: Status): Promise<
 	return generateKeyBetween(row?.max ?? null, null);
 }
 
-const StatusSchema = v.pipe(v.string(), v.minLength(1, 'ステータスを選択してください'));
-const ResolutionOrEmpty = v.union(
-	[v.literal(''), v.picklist(RESOLUTIONS)],
-	'完了理由を選択してください'
-);
-
-const CreateInput = v.object({
-	title: TitleSchema,
-	typeId: v.optional(v.string()),
-	description: v.optional(DescriptionSchema, ''),
-	status: v.optional(StatusSchema, INITIAL_STATUS),
-	priority: v.optional(v.picklist(PRIORITIES), 'none'),
-	startDate: v.optional(DateOrEmpty),
-	dueDate: v.optional(DateOrEmpty),
-	assigneeId: v.optional(v.string()),
-	categoryId: v.optional(v.string()),
-	milestoneId: v.optional(v.string())
-});
-
-function assertDateRange(start: string | null, due: string | null): void {
-	if (start && due && start > due) {
-		const msg = '開始日は期限日以前の日付にしてください';
-		throw new AppError('validation', msg, { startDate: [msg] });
-	}
-}
-
 export async function createIssue(
 	ctx: AppContext,
 	key: string,
@@ -315,144 +271,40 @@ export async function createIssue(
 ): Promise<{ number: number }> {
 	const p = await requireProject(ctx, key);
 	assertWritable(p);
-	authorize(ctx.actor, 'issue:create');
-	const data = parse(CreateInput, input);
-	const assigneeId = emptyToNull(data.assigneeId) ?? null;
-	if (assigneeId) {
-		authorize(ctx.actor, 'issue:assign');
-		await assertAssignable(ctx.db, p.id, assigneeId);
-	}
-	if (data.status !== INITIAL_STATUS) {
-		authorize(ctx.actor, 'issue:changeStatus', { assigneeId });
-		await assertStatusOf(ctx.db, p.id, data.status);
-	}
-	const typeId = emptyToNull(data.typeId) ?? null;
-	if (typeId) await assertIssueTypeOf(ctx.db, p.id, typeId);
-	const startDate = emptyToNull(data.startDate) ?? null;
-	const dueDate = emptyToNull(data.dueDate) ?? null;
-	assertDateRange(startDate, dueDate);
-	const categoryId = emptyToNull(data.categoryId) ?? null;
-	if (categoryId) await assertCategoryOf(ctx.db, p.id, categoryId);
-	const milestoneId = emptyToNull(data.milestoneId) ?? null;
-	if (milestoneId) await assertMilestoneOf(ctx.db, p.id, milestoneId);
-	const id = uuidv7();
-	const position = await nextPosition(ctx.db, p.id, data.status);
+	const fields = await loadFieldSets(ctx.db, p.id);
+	const values = prepareCreate(ctx.actor, fields, input);
+	const position = await nextPosition(ctx.db, p.id, values.status);
 	await ctx.db.batch([
 		ctx.db
 			.update(project)
 			.set({ nextIssueNumber: sql`${project.nextIssueNumber} + 1` })
 			.where(eq(project.id, p.id)),
 		ctx.db.insert(issue).values({
-			id,
+			...values,
 			projectId: p.id,
 			number: sql`(select ${project.nextIssueNumber} - 1 from ${project} where ${project.id} = ${p.id})`,
-			title: data.title,
-			typeId,
-			description: data.description,
-			status: data.status,
-			priority: data.priority,
-			startDate,
-			dueDate,
-			assigneeId,
-			categoryId,
-			milestoneId,
-			reporterId: ctx.actor.id,
 			position
 		})
 	]);
-	await linkAttachments(ctx, { projectId: p.id, issueId: id }, data.description);
+	const { id } = values;
+	await linkAttachments(ctx, { projectId: p.id, issueId: id }, values.description);
 	forgetProject(ctx, key); // nextIssueNumber が変わった
 	const [row] = await ctx.db.select({ number: issue.number }).from(issue).where(eq(issue.id, id));
 	await notify(ctx, {
 		project: p,
-		issue: { id, number: row.number, title: data.title },
-		events: [
-			{ kind: 'issue_created', assigneeId, priority: data.priority, description: data.description }
-		]
+		issue: { id, number: row.number, title: values.title },
+		events: createEventsOf(values)
 	});
 	return { number: row.number };
-}
-
-type IssuePatch = Partial<typeof issue.$inferInsert>;
-type IssueRow = typeof issue.$inferSelect;
-
-/** 変わった項目を、変更時点の表示名で書き出す（履歴に残すため） */
-async function describeChanges(
-	db: DB,
-	projectId: string,
-	cur: IssueRow,
-	patch: IssuePatch
-): Promise<IssueChangeItem[]> {
-	const nameOf = async (
-		table: typeof issueType | typeof category | typeof milestone | typeof user,
-		ids: (string | null | undefined)[]
-	): Promise<Map<string, string>> => {
-		const wanted = ids.filter((id): id is string => !!id);
-		if (wanted.length === 0) return new Map();
-		const rows = await db
-			.select({ id: table.id, name: table.name })
-			.from(table)
-			.where(inArray(table.id, wanted));
-		return new Map(rows.map((r) => [r.id, r.name]));
-	};
-	const pair = (a: string | null | undefined, b: string | null | undefined) => [a, b];
-	// カンバンで同じ列の中を動かしたときは status が同じ値で来る
-	const statusChanged = patch.status !== undefined && patch.status !== cur.status;
-	const [types, categories, users, milestones, statuses] = await Promise.all([
-		patch.typeId !== undefined ? nameOf(issueType, pair(cur.typeId, patch.typeId)) : null,
-		patch.categoryId !== undefined
-			? nameOf(category, pair(cur.categoryId, patch.categoryId))
-			: null,
-		patch.assigneeId !== undefined ? nameOf(user, pair(cur.assigneeId, patch.assigneeId)) : null,
-		patch.milestoneId !== undefined
-			? nameOf(milestone, pair(cur.milestoneId, patch.milestoneId))
-			: null,
-		statusChanged ? listStatusesOf(db, projectId) : null
-	]);
-	const changes: IssueChangeItem[] = [];
-	const add = (
-		field: IssueChangeItem['field'],
-		from: string | null | undefined,
-		to: string | null | undefined
-	) => changes.push({ field, from: from ?? null, to: to ?? null });
-	const lookup = (m: Map<string, string> | null, id: string | null | undefined) =>
-		id ? (m?.get(id) ?? null) : null;
-
-	if (patch.title !== undefined) add('title', cur.title, patch.title);
-	if (patch.description !== undefined) add('description', cur.description, patch.description);
-	if (patch.typeId !== undefined)
-		add('type', lookup(types, cur.typeId), lookup(types, patch.typeId));
-	if (statusChanged) {
-		const name = (k: string) => statuses?.find((st) => st.key === k)?.name ?? k;
-		add('status', name(cur.status), name(patch.status!));
-	}
-	if (patch.resolution !== undefined)
-		add(
-			'resolution',
-			cur.resolution && RESOLUTION_LABEL[cur.resolution],
-			patch.resolution && RESOLUTION_LABEL[patch.resolution]
-		);
-	if (patch.priority !== undefined)
-		add('priority', PRIORITY_LABEL[cur.priority], PRIORITY_LABEL[patch.priority]);
-	if (patch.assigneeId !== undefined)
-		add('assignee', lookup(users, cur.assigneeId), lookup(users, patch.assigneeId));
-	if (patch.categoryId !== undefined)
-		add('category', lookup(categories, cur.categoryId), lookup(categories, patch.categoryId));
-	if (patch.milestoneId !== undefined)
-		add('milestone', lookup(milestones, cur.milestoneId), lookup(milestones, patch.milestoneId));
-	if (patch.startDate !== undefined) add('startDate', cur.startDate, patch.startDate);
-	if (patch.dueDate !== undefined) add('dueDate', cur.dueDate, patch.dueDate);
-	return changes;
 }
 
 /** 課題を更新し、同時に編集履歴を残す */
 async function applyPatch(
 	ctx: AppContext,
-	projectId: string,
 	cur: IssueRow,
-	patch: IssuePatch
+	patch: IssuePatch,
+	changes: IssueChangeItem[]
 ): Promise<void> {
-	const changes = await describeChanges(ctx.db, projectId, cur, patch);
 	const update = ctx.db.update(issue).set(patch).where(eq(issue.id, cur.id));
 	if (changes.length === 0) {
 		await update;
@@ -484,20 +336,6 @@ export async function listIssueChanges(ctx: AppContext, key: string, number: num
 		.orderBy(asc(issueChange.createdAt), asc(issueChange.id));
 }
 
-const UpdateInput = v.object({
-	title: v.optional(TitleSchema),
-	typeId: v.optional(v.string()),
-	resolution: v.optional(ResolutionOrEmpty),
-	description: v.optional(DescriptionSchema),
-	priority: v.optional(v.picklist(PRIORITIES)),
-	startDate: v.optional(DateOrEmpty),
-	dueDate: v.optional(DateOrEmpty),
-	status: v.optional(StatusSchema),
-	assigneeId: v.optional(v.string()),
-	categoryId: v.optional(v.string()),
-	milestoneId: v.optional(v.string())
-});
-
 /** 未送信（undefined）の項目は変更しない。値が変わった項目だけ権限を確認する。 */
 export async function updateIssue(
 	ctx: AppContext,
@@ -505,74 +343,24 @@ export async function updateIssue(
 	number: number,
 	input: unknown
 ): Promise<void> {
-	const { project: p, issue: cur } = await getIssue(ctx, key, number);
+	const p = await requireProject(ctx, key);
+	const [{ issue: cur }, fields] = await Promise.all([
+		getIssue(ctx, key, number),
+		loadFieldSets(ctx.db, p.id)
+	]);
 	assertWritable(p);
 	assertNotDeleted(cur);
-	const data = parse(UpdateInput, input);
-	const res = { reporterId: cur.reporterId, assigneeId: cur.assigneeId };
-	const patch: IssuePatch = {};
-
-	const startDate = emptyToNull(data.startDate);
-	const dueDate = emptyToNull(data.dueDate);
-	const categoryId = emptyToNull(data.categoryId);
-	const milestoneId = emptyToNull(data.milestoneId);
-	const typeId = emptyToNull(data.typeId);
-	const resolution = data.resolution === undefined ? undefined : data.resolution || null;
-	if (data.title !== undefined && data.title !== cur.title) patch.title = data.title;
-	if (typeId !== undefined && typeId !== cur.typeId) patch.typeId = typeId;
-	if (resolution !== undefined && resolution !== cur.resolution) patch.resolution = resolution;
-	if (data.description !== undefined && data.description !== cur.description)
-		patch.description = data.description;
-	if (data.priority !== undefined && data.priority !== cur.priority) patch.priority = data.priority;
-	if (startDate !== undefined && startDate !== cur.startDate) patch.startDate = startDate;
-	if (dueDate !== undefined && dueDate !== cur.dueDate) patch.dueDate = dueDate;
-	if (categoryId !== undefined && categoryId !== cur.categoryId) patch.categoryId = categoryId;
-	if (milestoneId !== undefined && milestoneId !== cur.milestoneId) patch.milestoneId = milestoneId;
-	if (Object.keys(patch).length > 0) authorize(ctx.actor, 'issue:edit', res);
-	if (patch.startDate !== undefined || patch.dueDate !== undefined) {
-		assertDateRange(
-			patch.startDate !== undefined ? patch.startDate : cur.startDate,
-			patch.dueDate !== undefined ? patch.dueDate : cur.dueDate
-		);
-	}
-	if (patch.typeId) await assertIssueTypeOf(ctx.db, p.id, patch.typeId);
-	if (patch.categoryId) await assertCategoryOf(ctx.db, p.id, patch.categoryId);
-	if (patch.milestoneId) await assertMilestoneOf(ctx.db, p.id, patch.milestoneId);
-
-	if (data.status !== undefined && data.status !== cur.status) {
-		authorize(ctx.actor, 'issue:changeStatus', res);
-		await assertStatusOf(ctx.db, p.id, data.status);
-		patch.status = data.status;
-		patch.position = await nextPosition(ctx.db, p.id, data.status);
-	}
-
-	const assigneeId = emptyToNull(data.assigneeId);
-	if (assigneeId !== undefined && assigneeId !== cur.assigneeId) {
-		authorize(ctx.actor, 'issue:assign', res);
-		if (assigneeId) await assertAssignable(ctx.db, p.id, assigneeId);
-		patch.assigneeId = assigneeId;
-	}
-
+	const patch = preparePatch(ctx.actor, fields, cur, input);
 	if (Object.keys(patch).length === 0) return;
-	await applyPatch(ctx, p.id, cur, patch);
+	if (patch.status !== undefined) {
+		patch.position = await nextPosition(ctx.db, p.id, patch.status);
+	}
+	const otherUsers = await loadFormerAssigneeNames(ctx.db, fields, [{ cur, patch }]);
+	await applyPatch(ctx, cur, patch, describeChanges(fields, cur, patch, otherUsers));
 	if (patch.description !== undefined) {
 		await linkAttachments(ctx, { projectId: p.id, issueId: cur.id }, patch.description);
 	}
-	const events: IssueEvent[] = [];
-	if (patch.assigneeId !== undefined) {
-		events.push({ kind: 'assignee_changed', assigneeId: patch.assigneeId });
-	}
-	if (patch.status !== undefined) {
-		events.push({ kind: 'status_changed', from: cur.status, to: patch.status });
-	}
-	if (patch.description !== undefined) {
-		events.push({
-			kind: 'mentions_added',
-			commentId: null,
-			before: cur.description,
-			after: patch.description
-		});
-	}
+	const events = updateEventsOf(cur, patch);
 	if (events.length > 0) {
 		await notify(ctx, {
 			project: p,
@@ -619,7 +407,9 @@ export async function moveIssue(ctx: AppContext, key: string, input: unknown): P
 		reporterId: cur.reporterId,
 		assigneeId: cur.assigneeId
 	});
-	if (data.status !== cur.status) await assertStatusOf(ctx.db, p.id, data.status);
+	const statusChanged = data.status !== cur.status;
+	const fields = statusChanged ? await loadFieldSets(ctx.db, p.id) : null;
+	if (fields) assertStatusIn(fields, data.status);
 
 	const neighbor = async (id: string | null | undefined): Promise<string | null> => {
 		if (!id) return null;
@@ -651,8 +441,9 @@ export async function moveIssue(ctx: AppContext, key: string, input: unknown): P
 	} catch {
 		throw new AppError('validation', STALE);
 	}
-	await applyPatch(ctx, p.id, cur, { status: data.status, position });
-	if (data.status !== cur.status) {
+	const patch = { status: data.status, position };
+	await applyPatch(ctx, cur, patch, fields ? describeChanges(fields, cur, patch) : []);
+	if (statusChanged) {
 		await notify(ctx, {
 			project: p,
 			issue: { id: cur.id, number: cur.number, title: cur.title },

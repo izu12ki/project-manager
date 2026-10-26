@@ -45,7 +45,50 @@
 		selected = null
 	}: Props = $props();
 
-	const LABEL_W = 240;
+	/** 課題名の列幅。ドラッグで変えられ、ブラウザに記憶する */
+	const LABEL_W_DEFAULT = 240;
+	const LABEL_W_MIN = 160;
+	const LABEL_W_MAX = 640;
+	const LABEL_W_KEY = 'timeline-label-width';
+	const clampLabel = (w: number) => Math.round(Math.min(LABEL_W_MAX, Math.max(LABEL_W_MIN, w)));
+	let labelW = $state(LABEL_W_DEFAULT);
+	$effect(() => {
+		try {
+			const saved = Number(localStorage.getItem(LABEL_W_KEY));
+			if (saved) labelW = clampLabel(saved);
+		} catch {
+			// ストレージが使えなければ既定幅のまま
+		}
+	});
+	function saveLabelW() {
+		try {
+			localStorage.setItem(LABEL_W_KEY, String(labelW));
+		} catch {
+			// 記憶できなくても今回の表示には影響しない
+		}
+	}
+	let resize = $state<{ startX: number; startW: number } | null>(null);
+	function beginResize(e: PointerEvent) {
+		if (e.button !== 0) return;
+		e.preventDefault();
+		e.stopPropagation();
+		resize = { startX: e.clientX, startW: labelW };
+	}
+	function resizeKey(e: KeyboardEvent) {
+		const step = e.shiftKey ? 40 : 10;
+		if (e.key === 'ArrowLeft') labelW = clampLabel(labelW - step);
+		else if (e.key === 'ArrowRight') labelW = clampLabel(labelW + step);
+		else return;
+		e.preventDefault();
+		saveLabelW();
+	}
+
+	/** カレンダーの横スクロールは画面下部に固定したバーで操作する（本体のスクロールと同期） */
+	let scroller = $state<HTMLDivElement>();
+	let hbar = $state<HTMLDivElement>();
+	function syncScroll(from: HTMLDivElement | undefined, to: HTMLDivElement | undefined) {
+		if (from && to && to.scrollLeft !== from.scrollLeft) to.scrollLeft = from.scrollLeft;
+	}
 	/** 伸縮ハンドル（左右 8px）の間に掴める中央が残る最小のバー幅 */
 	const MIN_GRIP_W = 24;
 	const WEEKDAYS = '日月火水木金土';
@@ -114,6 +157,10 @@
 	}
 
 	function move(e: PointerEvent) {
+		if (resize) {
+			labelW = clampLabel(resize.startW + e.clientX - resize.startX);
+			return;
+		}
 		if (!drag) return;
 		const dx = e.clientX - drag.startX;
 		const dy = e.clientY - drag.startY;
@@ -128,11 +175,16 @@
 		if (!canvas) return null;
 		const r = canvas.getBoundingClientRect();
 		if (y < r.top || y > r.bottom) return null;
-		const col = Math.floor((x - r.left - LABEL_W) / range.dayWidth);
+		const col = Math.floor((x - r.left - labelW) / range.dayWidth);
 		return col >= 0 && col < range.days ? addDays(range.from, col) : null;
 	}
 
 	function end() {
+		if (resize) {
+			resize = null;
+			saveLabelW();
+			return;
+		}
 		const d = drag;
 		drag = null;
 		if (!d) {
@@ -174,6 +226,7 @@
 	onpointermove={move}
 	onpointerup={end}
 	onpointercancel={() => {
+		resize = null;
 		drag = null;
 		suppressClick = false;
 	}}
@@ -185,164 +238,196 @@
 	}}
 />
 
-<div class="scroller">
-	<div
-		class="canvas"
-		bind:this={canvas}
-		style:width="{LABEL_W + width}px"
-		style:--label-w="{LABEL_W}px"
-		style:--day-w="{range.dayWidth}px"
-	>
-		<div class="head">
-			<div class="row months">
-				<div class="name"></div>
-				<div class="track">
-					{#each months as m (m.date)}
-						<div class="month" style:left={px(m.col)} style:width={px(m.span)}>
-							{monthLabel(m.date)}
-						</div>
-					{/each}
-				</div>
-			</div>
-			<div class="row days">
-				<div class="name"></div>
-				<div class="track gridlines" class:fine={!wide}>
-					{#each cells as c (c.date)}
-						<div
-							class="day"
-							class:off={c.off}
-							style:left={px(c.col)}
-							style:width={px(1)}
-							data-date={c.date}
-							title={c.holiday}
-						>
-							{#if wide}
-								<span>{Number(c.date.slice(8))}</span>
-								<small>{WEEKDAYS[weekday(c.date)]}</small>
-							{:else if weekday(c.date) === 1}
-								<span class="tick">{shortDate(c.date)}</span>
-							{/if}
-						</div>
-					{/each}
-				</div>
-			</div>
-		</div>
-
-		<div class="body">
-			<div class="overlay gridlines" class:fine={!wide} aria-hidden="true">
-				{#each cells as c (c.date)}
-					{#if c.off}<div class="offday" style:left={px(c.col)} style:width={px(1)}></div>{/if}
-				{/each}
-				{#if inRange(today)}
-					<div class="today" style:left="{(colOf(today) + 0.5) * range.dayWidth}px"></div>
-				{/if}
-			</div>
-
-			{#each groups as g (g.key)}
-				<div class="group">
-					{#if g.label !== null}
-						<div class="row group-head">
-							<div class="name">
-								<span class="truncate">{g.label}</span>
-								<span class="count" title="完了 / 全体">{g.done}/{g.total}</span>
+<div class="grid-wrap" class:resizing={!!resize} style:--label-w="{labelW}px">
+	<div class="scroller" bind:this={scroller} onscroll={() => syncScroll(scroller, hbar)}>
+		<div
+			class="canvas"
+			bind:this={canvas}
+			style:width="{labelW + width}px"
+			style:--day-w="{range.dayWidth}px"
+		>
+			<div class="head">
+				<div class="row months">
+					<div class="name"></div>
+					<div class="track">
+						{#each months as m (m.date)}
+							<div class="month" style:left={px(m.col)} style:width={px(m.span)}>
+								{monthLabel(m.date)}
 							</div>
-							<div class="track"></div>
-						</div>
-					{/if}
-					{#each g.items as item (item.id)}
-						{@const dates = shown(item)}
-						{@const span = barSpan(dates, range)}
-						{@const grip =
-							item.canEdit &&
-							!!onsave &&
-							span?.kind === 'in' &&
-							(span.endCol - span.startCol + 1) * range.dayWidth >= MIN_GRIP_W}
-						<div class="row" class:selected={selected === item.number}>
-							<div class="name">
-								<a
-									href={href(item)}
-									class="open"
-									data-testid={`open-${item.number}`}
-									onclick={(e) => openSheet(e, item)}
-								>
-									<span class="mono key">{projectKey}-{item.number}</span>
-									<span class="truncate">{item.title}</span>
-								</a>
-								{#if span?.kind === 'before' || span?.kind === 'after'}
-									<button
-										type="button"
-										class="icon-btn jump"
-										aria-label={`${projectKey}-${item.number} の期間を表示`}
-										onclick={() => onjump(defaultFrom(item.startDate ?? item.dueDate!))}
-									>
-										{#if span.kind === 'before'}<ChevronLeft size={14} />{:else}<ChevronRight
-												size={14}
-											/>{/if}
-									</button>
+						{/each}
+					</div>
+				</div>
+				<div class="row days">
+					<div class="name">
+						<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+						<div
+							class="resizer"
+							role="separator"
+							aria-orientation="vertical"
+							aria-label="課題名の列幅"
+							aria-valuemin={LABEL_W_MIN}
+							aria-valuemax={LABEL_W_MAX}
+							aria-valuenow={labelW}
+							tabindex="0"
+							title="ドラッグで列幅を変更（ダブルクリックで元に戻す）"
+							data-testid="label-resizer"
+							onpointerdown={beginResize}
+							ondblclick={() => {
+								labelW = LABEL_W_DEFAULT;
+								saveLabelW();
+							}}
+							onkeydown={resizeKey}
+						></div>
+					</div>
+					<div class="track gridlines" class:fine={!wide}>
+						{#each cells as c (c.date)}
+							<div
+								class="day"
+								class:off={c.off}
+								style:left={px(c.col)}
+								style:width={px(1)}
+								data-date={c.date}
+								title={c.holiday}
+							>
+								{#if wide}
+									<span>{Number(c.date.slice(8))}</span>
+									<small>{WEEKDAYS[weekday(c.date)]}</small>
+								{:else if weekday(c.date) === 1}
+									<span class="tick">{shortDate(c.date)}</span>
 								{/if}
 							</div>
-							<div class="track">
-								{#if span?.kind === 'in'}
-									<!-- svelte-ignore a11y_no_static_element_interactions -->
+						{/each}
+					</div>
+				</div>
+			</div>
+
+			<div class="body">
+				<div class="overlay gridlines" class:fine={!wide} aria-hidden="true">
+					{#each cells as c (c.date)}
+						{#if c.off}<div class="offday" style:left={px(c.col)} style:width={px(1)}></div>{/if}
+					{/each}
+					{#if inRange(today)}
+						<div class="today" style:left="{(colOf(today) + 0.5) * range.dayWidth}px"></div>
+					{/if}
+				</div>
+
+				{#each groups as g (g.key)}
+					<div class="group">
+						{#if g.label !== null}
+							<div class="row group-head">
+								<div class="name">
+									<span class="truncate">{g.label}</span>
+									<span class="count" title="完了 / 全体">{g.done}/{g.total}</span>
+								</div>
+								<div class="track"></div>
+							</div>
+						{/if}
+						{#each g.items as item (item.id)}
+							{@const dates = shown(item)}
+							{@const span = barSpan(dates, range)}
+							{@const grip =
+								item.canEdit &&
+								!!onsave &&
+								span?.kind === 'in' &&
+								(span.endCol - span.startCol + 1) * range.dayWidth >= MIN_GRIP_W}
+							<div class="row" class:selected={selected === item.number}>
+								<div class="name">
 									<a
 										href={href(item)}
-										class="bar"
-										class:editable={item.canEdit && !!onsave}
-										class:dragging={drag?.moved && drag.item.id === item.id}
-										class:done={item.status === DONE_STATUS}
-										class:clip-start={span.clippedStart}
-										class:clip-end={span.clippedEnd}
-										class:open-start={span.missingStart}
-										class:open-end={span.missingDue}
-										style:left={px(span.startCol)}
-										style:width={px(span.endCol - span.startCol + 1)}
-										style:--c={statusColor(page.data.statuses, item.status)}
-										data-testid={`bar-${item.number}`}
-										data-start={dates.startDate ?? ''}
-										data-due={dates.dueDate ?? ''}
-										title={tooltip(item)}
-										draggable="false"
-										onpointerdown={(e) => begin(e, item, 'move')}
+										class="open"
+										data-testid={`open-${item.number}`}
 										onclick={(e) => openSheet(e, item)}
 									>
-										{#if grip && !span.clippedStart}
-											<!-- svelte-ignore a11y_no_static_element_interactions -->
-											<span
-												class="handle start"
-												data-handle="start"
-												onpointerdown={(e) => begin(e, item, 'start')}
-											></span>
-										{/if}
-										<span class="bar-text">{projectKey}-{item.number}</span>
-										{#if grip && !span.clippedEnd}
-											<!-- svelte-ignore a11y_no_static_element_interactions -->
-											<span
-												class="handle end"
-												data-handle="end"
-												onpointerdown={(e) => begin(e, item, 'end')}
-											></span>
-										{/if}
+										<span class="mono key">{projectKey}-{item.number}</span>
+										<span class="truncate">{item.title}</span>
 									</a>
-									{#if drag?.moved && drag.item.id === item.id}
-										<span class="drag-label" style:left={px(span.startCol)} style:top="-2px"
-											>{period(dates)}</span
+									{#if span?.kind === 'before' || span?.kind === 'after'}
+										<button
+											type="button"
+											class="icon-btn jump"
+											aria-label={`${projectKey}-${item.number} の期間を表示`}
+											onclick={() => onjump(defaultFrom(item.startDate ?? item.dueDate!))}
 										>
+											{#if span.kind === 'before'}<ChevronLeft size={14} />{:else}<ChevronRight
+													size={14}
+												/>{/if}
+										</button>
 									{/if}
-								{/if}
+								</div>
+								<div class="track">
+									{#if span?.kind === 'in'}
+										<!-- svelte-ignore a11y_no_static_element_interactions -->
+										<a
+											href={href(item)}
+											class="bar"
+											class:editable={item.canEdit && !!onsave}
+											class:dragging={drag?.moved && drag.item.id === item.id}
+											class:done={item.status === DONE_STATUS}
+											class:clip-start={span.clippedStart}
+											class:clip-end={span.clippedEnd}
+											class:open-start={span.missingStart}
+											class:open-end={span.missingDue}
+											style:left={px(span.startCol)}
+											style:width={px(span.endCol - span.startCol + 1)}
+											style:--c={statusColor(page.data.statuses, item.status)}
+											data-testid={`bar-${item.number}`}
+											data-start={dates.startDate ?? ''}
+											data-due={dates.dueDate ?? ''}
+											title={tooltip(item)}
+											draggable="false"
+											onpointerdown={(e) => begin(e, item, 'move')}
+											onclick={(e) => openSheet(e, item)}
+										>
+											{#if grip && !span.clippedStart}
+												<!-- svelte-ignore a11y_no_static_element_interactions -->
+												<span
+													class="handle start"
+													data-handle="start"
+													onpointerdown={(e) => begin(e, item, 'start')}
+												></span>
+											{/if}
+											<span class="bar-text">{projectKey}-{item.number}</span>
+											{#if grip && !span.clippedEnd}
+												<!-- svelte-ignore a11y_no_static_element_interactions -->
+												<span
+													class="handle end"
+													data-handle="end"
+													onpointerdown={(e) => begin(e, item, 'end')}
+												></span>
+											{/if}
+										</a>
+										{#if drag?.moved && drag.item.id === item.id}
+											<span class="drag-label" style:left={px(span.startCol)} style:top="-2px"
+												>{period(dates)}</span
+											>
+										{/if}
+									{/if}
+								</div>
 							</div>
-						</div>
-					{/each}
-					{#if inRange(g.releaseDate)}
-						<div
-							class="release"
-							style:left="calc(var(--label-w) + {(colOf(g.releaseDate) + 0.5) * range.dayWidth}px)"
-							title={`${g.label} リリース ${shortDate(g.releaseDate)}`}
-						>
-							<span>{g.label}</span>
-						</div>
-					{/if}
-				</div>
-			{/each}
+						{/each}
+						{#if inRange(g.releaseDate)}
+							<div
+								class="release"
+								style:left="calc(var(--label-w) + {(colOf(g.releaseDate) + 0.5) *
+									range.dayWidth}px)"
+								title={`${g.label} リリース ${shortDate(g.releaseDate)}`}
+							>
+								<span>{g.label}</span>
+							</div>
+						{/if}
+					</div>
+				{/each}
+			</div>
+		</div>
+	</div>
+	<div class="hbar">
+		<div
+			class="hbar-scroll"
+			bind:this={hbar}
+			data-testid="timeline-hscroll"
+			onscroll={() => syncScroll(hbar, scroller)}
+		>
+			<div style:width="{width}px"></div>
 		</div>
 	</div>
 </div>
@@ -385,9 +470,66 @@
 <style>
 	.scroller {
 		overflow-x: auto;
+		/* 横スクロールバーは下の .hbar に任せる */
+		scrollbar-width: none;
 		border: 1px solid var(--border);
-		border-radius: var(--radius-md);
+		border-radius: var(--radius-md) var(--radius-md) 0 0;
 		background: var(--card);
+	}
+	.scroller::-webkit-scrollbar {
+		display: none;
+	}
+	/* カレンダー部分の下に、画面下端へ張り付く横スクロールバー */
+	.hbar {
+		position: sticky;
+		bottom: 0;
+		z-index: 5;
+		border: 1px solid var(--border);
+		border-top: 0;
+		border-radius: 0 0 var(--radius-md) var(--radius-md);
+		background: var(--card);
+	}
+	/* カレンダー部分の幅だけに出す */
+	.hbar-scroll {
+		margin-left: var(--label-w);
+		overflow-x: auto;
+		overflow-y: hidden;
+	}
+	.hbar-scroll > div {
+		height: 1px;
+	}
+	/* macOS のオーバーレイ表示でも常に見えるようにする */
+	.hbar-scroll::-webkit-scrollbar {
+		height: 12px;
+	}
+	.hbar-scroll::-webkit-scrollbar-thumb {
+		border: 3px solid var(--card);
+		border-radius: 6px;
+		background: color-mix(in oklch, var(--muted-foreground) 45%, transparent);
+	}
+	.hbar-scroll::-webkit-scrollbar-thumb:hover {
+		background: color-mix(in oklch, var(--muted-foreground) 70%, transparent);
+	}
+	.resizing,
+	.resizing * {
+		cursor: col-resize !important;
+		user-select: none;
+	}
+	.resizer {
+		position: absolute;
+		top: -24px;
+		right: -4px;
+		bottom: 0;
+		z-index: 4;
+		width: 8px;
+		cursor: col-resize;
+		touch-action: none;
+	}
+	.resizer:hover,
+	.resizer:focus-visible,
+	.resizing .resizer {
+		outline: none;
+		background: linear-gradient(to right, transparent 3px, var(--primary) 3px 5px, transparent 5px);
 	}
 	.canvas {
 		position: relative;

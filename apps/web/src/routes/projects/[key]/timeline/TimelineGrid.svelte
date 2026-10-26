@@ -252,7 +252,7 @@
 					<div class="track">
 						{#each months as m (m.date)}
 							<div class="month" style:left={px(m.col)} style:width={px(m.span)}>
-								{monthLabel(m.date)}
+								<span>{monthLabel(m.date)}</span>
 							</div>
 						{/each}
 					</div>
@@ -468,6 +468,10 @@
 {/if}
 
 <style>
+	/* 親の grid の中でカレンダーの幅に引き伸ばされず、ページ幅に収まるようにする */
+	.grid-wrap {
+		min-width: 0;
+	}
 	.scroller {
 		overflow-x: auto;
 		/* 横スクロールバーは下の .hbar に任せる */
@@ -570,6 +574,11 @@
 		font-weight: 600;
 		line-height: 24px;
 		white-space: nowrap;
+	}
+	/* 横スクロールで月の始まりが隠れても、月名はタイトル列の右に残す */
+	.month span {
+		position: sticky;
+		left: calc(var(--label-w) + 6px);
 	}
 	.day {
 		position: absolute;

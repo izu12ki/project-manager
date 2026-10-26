@@ -87,7 +87,7 @@
 				role="table"
 				aria-label="ユーザー一覧"
 				class="users"
-				style="--cols: minmax(220px, 1.4fr) minmax(200px, 1.2fr) 96px 80px 96px"
+				style="--cols: minmax(220px, 1.4fr) minmax(200px, 1.2fr) 128px 80px 96px"
 			>
 				<div role="row" class="grid-table-head">
 					<span role="columnheader">名前</span>

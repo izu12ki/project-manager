@@ -504,15 +504,19 @@
 	}
 	/* macOS のオーバーレイ表示でも常に見えるようにする */
 	.hbar-scroll::-webkit-scrollbar {
-		height: 12px;
+		height: 18px;
+	}
+	.hbar-scroll::-webkit-scrollbar-track {
+		background: color-mix(in oklch, var(--c-gray) 10%, var(--card));
 	}
 	.hbar-scroll::-webkit-scrollbar-thumb {
-		border: 3px solid var(--card);
-		border-radius: 6px;
-		background: color-mix(in oklch, var(--muted-foreground) 45%, transparent);
+		border: 4px solid transparent;
+		border-radius: 9px;
+		background-clip: padding-box;
+		background-color: color-mix(in oklch, var(--muted-foreground) 50%, transparent);
 	}
 	.hbar-scroll::-webkit-scrollbar-thumb:hover {
-		background: color-mix(in oklch, var(--muted-foreground) 70%, transparent);
+		background-color: color-mix(in oklch, var(--muted-foreground) 75%, transparent);
 	}
 	.resizing,
 	.resizing * {

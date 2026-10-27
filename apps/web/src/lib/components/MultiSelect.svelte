@@ -7,6 +7,7 @@
 		options: { value: string; label: string }[];
 		selected?: string[];
 		placeholder?: string;
+		disabled?: boolean;
 		'aria-describedby'?: string;
 	}
 	let {
@@ -15,6 +16,7 @@
 		options,
 		selected = $bindable([]),
 		placeholder = '選択してください',
+		disabled = false,
 		'aria-describedby': describedBy
 	}: Props = $props();
 
@@ -39,10 +41,14 @@
 
 <svelte:window onpointerdown={closeOnOutside} onkeydown={closeOnEscape} />
 
-<details class="multi" bind:this={root}>
+<details class="multi" class:disabled bind:this={root}>
 	<summary
 		class="select"
 		{id}
+		aria-disabled={disabled || undefined}
+		onclick={(e) => {
+			if (disabled) e.preventDefault();
+		}}
 		aria-labelledby={`${id}-label ${id}-value`}
 		aria-describedby={describedBy}
 	>
@@ -53,7 +59,7 @@
 	<div class="menu" role="group" aria-labelledby={`${id}-label`}>
 		{#each options as o (o.value)}
 			<label class="option">
-				<input type="checkbox" {name} value={o.value} bind:group={selected} />
+				<input type="checkbox" {name} value={o.value} bind:group={selected} {disabled} />
 				<span class="truncate">{o.label}</span>
 			</label>
 		{:else}
@@ -74,6 +80,11 @@
 	}
 	summary::-webkit-details-marker {
 		display: none;
+	}
+	.multi.disabled summary {
+		background-color: var(--muted);
+		color: var(--muted-foreground);
+		cursor: not-allowed;
 	}
 	.multi[open] summary {
 		border-color: var(--ring);

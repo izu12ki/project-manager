@@ -53,7 +53,8 @@ export type ApiIssue = {
 	status: string;
 	resolution: string | null;
 	priority: string;
-	assignee: { id: string; name: string } | null;
+	assignees: { id: string; name: string }[];
+	parentNumber: number | null;
 	startDate: string | null;
 	dueDate: string | null;
 	categoryId: string | null;
@@ -69,8 +70,8 @@ type IssueSource = {
 	status: string;
 	resolution: string | null;
 	priority: string;
-	assigneeId: string | null;
-	assigneeName: string | null;
+	assignees: { id: string; name: string }[];
+	parentNumber: number | null;
 	startDate: string | null;
 	dueDate: string | null;
 	categoryId: string | null;
@@ -87,7 +88,8 @@ function apiIssue(ctx: AppContext, projectKey: string, i: IssueSource): ApiIssue
 		status: i.status,
 		resolution: i.resolution,
 		priority: i.priority,
-		assignee: i.assigneeId ? apiUser({ id: i.assigneeId, name: i.assigneeName ?? '' }) : null,
+		assignees: i.assignees.map(apiUser),
+		parentNumber: i.parentNumber,
 		startDate: i.startDate,
 		dueDate: i.dueDate,
 		categoryId: i.categoryId,
@@ -142,7 +144,10 @@ export async function getApiIssue(
 ): Promise<ApiIssue & { description: string }> {
 	const { project: p, issue: i } = await getIssue(ctx, key, number);
 	if (i.deletedAt) throw new AppError('not_found', '課題が見つかりません');
-	return { ...apiIssue(ctx, p.key, i), description: i.description };
+	return {
+		...apiIssue(ctx, p.key, { ...i, parentNumber: i.parent?.number ?? null }),
+		description: i.description
+	};
 }
 
 const CREATE_KEYS = [
@@ -151,7 +156,8 @@ const CREATE_KEYS = [
 	'typeId',
 	'status',
 	'priority',
-	'assigneeId',
+	'assigneeIds',
+	'parentNumber',
 	'startDate',
 	'dueDate',
 	'categoryId',

@@ -12,6 +12,7 @@ import { notifyBulk } from '../notifications';
 import { parse } from '../validation';
 import { linkAttachmentsQuery } from './attachment-links';
 import {
+	assertOneLevel,
 	createEventsOf,
 	describeChanges,
 	loadFieldSets,
@@ -194,6 +195,7 @@ export async function bulkUpdateIssues(
 		void _;
 		return { cur, patch: preparePatch(ctx.actor, fields, cur, rest) };
 	});
+	assertOneLevel(fields, targets);
 	const numbers = targets.map((t) => t.cur.number);
 	if (opts.dryRun) return { numbers: [] };
 

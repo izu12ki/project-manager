@@ -2,7 +2,7 @@ import type { Status } from '$lib/labels';
 import type { NotificationType } from '../db/schema';
 
 export type Change =
-	| { kind: 'assigned'; assigneeId: string }
+	| { kind: 'assigned'; assigneeIds: string[] }
 	| { kind: 'status_changed'; from: Status; to: Status }
 	| { kind: 'commented'; commentId: string }
 	| { kind: 'mentioned'; userIds: string[]; commentId: string | null };
@@ -10,7 +10,7 @@ export type Change =
 /** 更新後の課題の関係者 */
 export interface Participants {
 	reporterId: string;
-	assigneeId: string | null;
+	assigneeIds: string[];
 	commenterIds: string[];
 }
 
@@ -42,7 +42,9 @@ export function planNotifications(input: {
 }): PlannedNotification[] {
 	const { actorId, participants: p, changes, canReceive } = input;
 	const involved = [
-		...new Set([p.reporterId, p.assigneeId, ...p.commenterIds].filter((id): id is string => !!id))
+		...new Set(
+			[p.reporterId, ...p.assigneeIds, ...p.commenterIds].filter((id): id is string => !!id)
+		)
 	];
 	const best = new Map<string, PlannedNotification>();
 	const offer = (userId: string, n: Omit<PlannedNotification, 'userId'>) => {
@@ -54,7 +56,7 @@ export function planNotifications(input: {
 	for (const c of changes) {
 		switch (c.kind) {
 			case 'assigned':
-				offer(c.assigneeId, { ...none, type: 'assigned' });
+				for (const u of c.assigneeIds) offer(u, { ...none, type: 'assigned' });
 				break;
 			case 'status_changed':
 				for (const u of involved)

@@ -1,14 +1,16 @@
 <script lang="ts">
-	import { Copy, Paperclip, Pencil, Trash2, X } from '@lucide/svelte';
+	import { Copy, CornerLeftUp, ListTree, Paperclip, Pencil, Plus, Trash2, X } from '@lucide/svelte';
 	import { untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { formatBytes } from '$lib/attachment-rules';
 	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
+	import MultiSelect from '$lib/components/MultiSelect.svelte';
 	import FormAlert from '$lib/components/FormAlert.svelte';
 	import PriorityPill from '$lib/components/PriorityPill.svelte';
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import {
+		DONE_STATUS,
 		ISSUE_CHANGE_FIELD_LABEL,
 		PRIORITIES,
 		PRIORITY_LABEL,
@@ -88,6 +90,9 @@
 	const openDiffs = new SvelteSet<string>();
 	let editingComment = $state<string | null>(null);
 	const attrFormId = $derived(`issue-attributes-${variant}`);
+	// チェックボックスを送る name（リモートフォームの配列フィールド）
+	const assigneeName = $derived(save.fields.assigneeIds.as('checkbox', 'x').name);
+	const issueHref = (n: number) => `/projects/${projectKey}/issues/${n}`;
 
 	async function deleteComment(commentId: string) {
 		try {
@@ -199,18 +204,43 @@
 				</select>
 			</div>
 			<div class="prop-row">
-				<label for="issue-assignee">担当者</label>
-				<select
-					class="select"
-					id="issue-assignee"
-					{...save.fields.assigneeId.as('select', issue.assigneeId ?? '')}
-					disabled={!perms.assign}
-				>
-					<option value="">未割当</option>
-					{#each detail.assignees as u (u.id)}
-						<option value={u.id}>{u.disabled ? `${u.name}（無効）` : u.name}</option>
-					{/each}
-				</select>
+				<span class="prop-label" id={`issue-assignee-${variant}-label`}>担当者</span>
+				<div class="min-w-0">
+					<!-- 全員外したときも送るための空の値（サービス側で除く） -->
+					{#if perms.assign}<input type="hidden" name={assigneeName} value="" />{/if}
+					<MultiSelect
+						id={`issue-assignee-${variant}`}
+						name={assigneeName}
+						options={detail.assignees
+							.filter((u) => !u.disabled || issue.assigneeIds.includes(u.id))
+							.map((u) => ({ value: u.id, label: u.disabled ? `${u.name}（無効）` : u.name }))}
+						selected={[...issue.assigneeIds]}
+						placeholder="未割当"
+						disabled={!perms.assign}
+					/>
+				</div>
+			</div>
+			<div class="prop-row">
+				<label for={`issue-parent-${variant}`}>親課題</label>
+				<div class="min-w-0">
+					<input
+						class="input"
+						id={`issue-parent-${variant}`}
+						list={`issue-parent-${variant}-options`}
+						inputmode="numeric"
+						placeholder={detail.children.length > 0 ? '子課題があるため設定不可' : '課題番号'}
+						{...save.fields.parentNumber.as(
+							'text',
+							issue.parent ? String(issue.parent.number) : ''
+						)}
+						disabled={!perms.edit || detail.children.length > 0}
+					/>
+					<datalist id={`issue-parent-${variant}-options`}>
+						{#each detail.parentCandidates as c (c.number)}
+							<option value={String(c.number)}>{projectKey}-{c.number} {c.title}</option>
+						{/each}
+					</datalist>
+				</div>
 			</div>
 			<div class="prop-row">
 				<label for="issue-category">カテゴリー</label>
@@ -291,6 +321,13 @@
 			</div>
 		{/if}
 		<header class="grid gap-2">
+			{#if issue.parent}
+				<a href={issueHref(issue.parent.number)} class="parent-link">
+					<CornerLeftUp size={14} class="shrink-0" />
+					<span class="mono shrink-0">{projectKey}-{issue.parent.number}</span>
+					<span class="truncate">{issue.parent.title}</span>
+				</a>
+			{/if}
 			{#if detail.issueTypes.length > 0 || issue.typeId}
 				<div class="flex items-center gap-2">
 					<label for={`issue-type-${variant}`} class="text-[13px] text-muted-foreground">種別</label
@@ -375,6 +412,50 @@
 					<p class="m-0 text-muted-foreground">本文はありません</p>
 				{/if}
 			</div>
+		{/if}
+
+		{#if !issue.parent && (detail.children.length > 0 || perms.writable)}
+			<section class="card children" aria-label="子課題">
+				<div class="flex items-center gap-2">
+					<h2 class="card-title">
+						<ListTree class="size-4" /> 子課題
+						{#if detail.children.length > 0}
+							<span class="text-[13px] font-normal text-muted-foreground"
+								>{detail.children.filter((c) => c.status === DONE_STATUS).length} / {detail.children
+									.length} 完了</span
+							>
+						{/if}
+					</h2>
+					{#if perms.writable}
+						<a
+							href={`/projects/${projectKey}/issues/new?parent=${issue.number}`}
+							class="btn btn-outline btn-sm ml-auto"><Plus />子課題を追加</a
+						>
+					{/if}
+				</div>
+				{#if detail.children.length > 0}
+					<ul>
+						{#each detail.children as c (c.id)}
+							<li>
+								<span class="mono shrink-0 text-[13px] text-muted-foreground"
+									>{projectKey}-{c.number}</span
+								>
+								<a href={issueHref(c.number)} class="min-w-0 truncate">{c.title}</a>
+								<span class="ml-auto flex shrink-0 items-center gap-2">
+									{#if c.assignees.length > 0}
+										<span class="max-w-40 truncate text-xs text-muted-foreground"
+											>{c.assignees.map((u) => u.name).join('、')}</span
+										>
+									{/if}
+									<StatusPill status={c.status} statuses={detail.statuses} />
+								</span>
+							</li>
+						{/each}
+					</ul>
+				{:else}
+					<p class="m-0 text-[13px] text-muted-foreground">子課題はありません</p>
+				{/if}
+			</section>
 		{/if}
 
 		{#if attachments.length > 0}
@@ -691,6 +772,33 @@
 		display: grid;
 		gap: 8px;
 		padding-top: 20px;
+		border-top: 1px solid var(--border);
+	}
+	.parent-link {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		min-width: 0;
+		width: fit-content;
+		max-width: 100%;
+		font-size: 13px;
+		color: var(--muted-foreground);
+	}
+	.parent-link:hover {
+		color: var(--foreground);
+	}
+	.children ul {
+		display: grid;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.children li {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		min-width: 0;
+		min-height: 40px;
 		border-top: 1px solid var(--border);
 	}
 	.attachments ul {

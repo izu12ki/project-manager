@@ -45,11 +45,13 @@ function toChanges(e: IssueEvent): Change[] {
 	switch (e.kind) {
 		case 'issue_created':
 			return [
-				...(e.assigneeId ? [{ kind: 'assigned', assigneeId: e.assigneeId } as const] : []),
+				...(e.assigneeIds.length
+					? [{ kind: 'assigned', assigneeIds: e.assigneeIds } as const]
+					: []),
 				...mentioned(null)
 			];
-		case 'assignee_changed':
-			return e.assigneeId ? [{ kind: 'assigned', assigneeId: e.assigneeId }] : [];
+		case 'assignees_added':
+			return [{ kind: 'assigned', assigneeIds: e.assigneeIds }];
 		case 'status_changed':
 			return [{ kind: 'status_changed', from: e.from, to: e.to }];
 		case 'commented':
@@ -65,7 +67,7 @@ async function loadFacts(db: DB, input: NotifyInput) {
 		db
 			.select({
 				reporterId: issue.reporterId,
-				assigneeId: issue.assigneeId,
+				assigneeIds: issue.assigneeIds,
 				priority: issue.priority
 			})
 			.from(issue)
@@ -79,7 +81,7 @@ async function loadFacts(db: DB, input: NotifyInput) {
 	return {
 		participants: {
 			reporterId: cur.reporterId,
-			assigneeId: cur.assigneeId,
+			assigneeIds: cur.assigneeIds,
 			commenterIds: commenters.map((c) => c.id)
 		},
 		/** 通知を受け取れる人（無効化を除く admin + 参加者）。名前の解決にも使う */
@@ -193,7 +195,7 @@ export async function notifyBulk(ctx: AppContext, input: BulkNotifyInput): Promi
 		const ids = items.map((it) => it.issue.id);
 		const [issues, commenters, receivers] = await Promise.all([
 			ctx.db
-				.select({ id: issue.id, reporterId: issue.reporterId, assigneeId: issue.assigneeId })
+				.select({ id: issue.id, reporterId: issue.reporterId, assigneeIds: issue.assigneeIds })
 				.from(issue)
 				.where(inArray(issue.id, ids)),
 			ctx.db
@@ -212,7 +214,7 @@ export async function notifyBulk(ctx: AppContext, input: BulkNotifyInput): Promi
 				actorId: ctx.actor.id,
 				participants: {
 					reporterId: cur.reporterId,
-					assigneeId: cur.assigneeId,
+					assigneeIds: cur.assigneeIds,
 					commenterIds: commenters.filter((c) => c.issueId === cur.id).map((c) => c.id)
 				},
 				changes: it.events.flatMap(toChanges),

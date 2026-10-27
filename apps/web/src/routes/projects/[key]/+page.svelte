@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Flag, Inbox, Search, SearchX, Trash2 } from '@lucide/svelte';
+	import { CornerDownRight, Flag, Inbox, Search, SearchX, Trash2 } from '@lucide/svelte';
 	import IssueTypeTag from '$lib/components/IssueTypeTag.svelte';
 	import PriorityPill from '$lib/components/PriorityPill.svelte';
 	import StatusPill from '$lib/components/StatusPill.svelte';
@@ -146,14 +146,25 @@
 							>{data.project.key}-{i.number}</span
 						>
 						<span role="cell" class="flex min-w-0 items-center gap-2">
+							{#if i.parentNumber !== null}
+								<span
+									class="flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground"
+									title={`${data.project.key}-${i.parentNumber} の子課題`}
+									><CornerDownRight size={14} />{i.parentNumber}</span
+								>
+							{/if}
 							{#if i.typeName}<IssueTypeTag name={i.typeName} color={i.typeColor} />{/if}
 							<a href={`${base}/issues/${i.number}`} class="title truncate">{i.title}</a>
 							{#if i.categoryName}<span class="tag">{i.categoryName}</span>{/if}
 						</span>
 						<span role="cell"><StatusPill status={i.status} /></span>
 						<span role="cell"><PriorityPill priority={i.priority} /></span>
-						<span role="cell" class:text-muted-foreground={!i.assigneeName} class="truncate"
-							>{i.assigneeName ?? '未割当'}</span
+						<span
+							role="cell"
+							class:text-muted-foreground={i.assignees.length === 0}
+							class="truncate"
+							title={i.assignees.map((u) => u.name).join('、') || undefined}
+							>{i.assignees.map((u) => u.name).join('、') || '未割当'}</span
 						>
 						<span role="cell" class="flex min-w-0 items-center gap-1.5 text-muted-foreground">
 							{#if i.milestoneName}<Flag size={14} class="shrink-0" /><span class="truncate"

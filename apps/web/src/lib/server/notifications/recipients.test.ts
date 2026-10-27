@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { planNotifications, type Change, type Participants } from './recipients';
 
-const P: Participants = { reporterId: 'r', assigneeId: 'a', commenterIds: ['c1', 'c2'] };
+const P: Participants = { reporterId: 'r', assigneeIds: ['a'], commenterIds: ['c1', 'c2'] };
 const all = () => true;
 const plan = (
 	changes: Change[],
@@ -16,8 +16,14 @@ const plan = (
 		.sort();
 
 describe('planNotifications', () => {
-	it('担当者の設定は新しい担当者だけに assigned', () => {
-		expect(plan([{ kind: 'assigned', assigneeId: 'a' }])).toEqual(['a:assigned']);
+	it('担当者の設定は新しく担当になった人だけに assigned', () => {
+		expect(plan([{ kind: 'assigned', assigneeIds: ['a'] }])).toEqual(['a:assigned']);
+	});
+	it('複数の担当者が増えたら、それぞれに assigned', () => {
+		expect(plan([{ kind: 'assigned', assigneeIds: ['a', 'b'] }])).toEqual([
+			'a:assigned',
+			'b:assigned'
+		]);
 	});
 	it('コメントは関係者全員（起票者・担当者・コメントした人）に commented', () => {
 		expect(plan([{ kind: 'commented', commentId: 'k' }])).toEqual([
@@ -46,7 +52,7 @@ describe('planNotifications', () => {
 		expect(plan([{ kind: 'commented', commentId: 'k' }], { actorId: 'c1' })).not.toContain(
 			'c1:commented'
 		);
-		expect(plan([{ kind: 'assigned', assigneeId: 'x' }])).toEqual([]);
+		expect(plan([{ kind: 'assigned', assigneeIds: ['x'] }])).toEqual([]);
 	});
 	it('受信できない人（無効化・非参加）には送らない', () => {
 		expect(
@@ -56,7 +62,7 @@ describe('planNotifications', () => {
 	it('1 人 1 件。assigned > mentioned > commented / status_changed', () => {
 		expect(
 			plan([
-				{ kind: 'assigned', assigneeId: 'a' },
+				{ kind: 'assigned', assigneeIds: ['a'] },
 				{ kind: 'status_changed', from: 'todo', to: 'in_progress' }
 			])
 		).toEqual(['a:assigned', 'c1:status_changed', 'c2:status_changed', 'r:status_changed']);
@@ -79,7 +85,7 @@ describe('planNotifications', () => {
 	it('担当者なし・コメントなしでも動く', () => {
 		expect(
 			plan([{ kind: 'commented', commentId: 'k' }], {
-				participants: { reporterId: 'r', assigneeId: null, commenterIds: [] }
+				participants: { reporterId: 'r', assigneeIds: [], commenterIds: [] }
 			})
 		).toEqual(['r:commented']);
 	});

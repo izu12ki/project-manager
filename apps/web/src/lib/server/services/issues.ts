@@ -61,7 +61,7 @@ export interface IssueFilters {
 	q?: string;
 }
 
-const assignee = alias(user, 'assignee');
+const parent = alias(issue, 'parent');
 const reporter = alias(user, 'reporter');
 const deleter = alias(user, 'deleter');
 
@@ -78,8 +78,9 @@ const listColumns = {
 	startDate: issue.startDate,
 	dueDate: issue.dueDate,
 	position: issue.position,
-	assigneeId: issue.assigneeId,
-	assigneeName: assignee.name,
+	assigneeIds: issue.assigneeIds,
+	parentId: issue.parentId,
+	parentNumber: parent.number,
 	categoryId: issue.categoryId,
 	categoryName: category.name,
 	milestoneId: issue.milestoneId,
@@ -89,25 +90,50 @@ const listColumns = {
 };
 
 export type IssueListItem = Awaited<ReturnType<typeof selectIssues>>[number];
+export type AssigneeRef = { id: string; name: string };
 
-function selectIssues(db: DB, where: SQL | undefined, order: SQL[]) {
-	return db
+/** assigneeIds の順に名前を付ける。名前が引けない人（存在しない ID）は除く */
+export async function withAssignees<T extends { assigneeIds: string[] }>(
+	db: DB,
+	rows: T[]
+): Promise<(T & { assignees: AssigneeRef[] })[]> {
+	const ids = [...new Set(rows.flatMap((r) => r.assigneeIds))];
+	const users =
+		ids.length === 0
+			? []
+			: await db.select({ id: user.id, name: user.name }).from(user).where(inArray(user.id, ids));
+	const names = new Map(users.map((u) => [u.id, u.name]));
+	return rows.map((r) => ({
+		...r,
+		assignees: r.assigneeIds.flatMap((id) => {
+			const name = names.get(id);
+			return name === undefined ? [] : [{ id, name }];
+		})
+	}));
+}
+
+async function selectIssues(db: DB, where: SQL | undefined, order: SQL[]) {
+	const rows = await db
 		.select(listColumns)
 		.from(issue)
-		.leftJoin(assignee, eq(issue.assigneeId, assignee.id))
+		.leftJoin(parent, eq(issue.parentId, parent.id))
 		.leftJoin(issueType, eq(issue.typeId, issueType.id))
 		.leftJoin(category, eq(issue.categoryId, category.id))
 		.leftJoin(milestone, eq(issue.milestoneId, milestone.id))
 		.where(where)
 		.orderBy(...order);
+	return withAssignees(db, rows);
+}
+
+/** 'none' は担当者なし、それ以外はその人が担当者に含まれる課題 */
+function assigneeCond(value: string | undefined): SQL | undefined {
+	if (!value) return undefined;
+	if (value === 'none') return sql`json_array_length(${issue.assigneeIds}) = 0`;
+	return sql`exists (select 1 from json_each(${issue.assigneeIds}) where value = ${value})`;
 }
 
 function optionCond(
-	col:
-		| typeof issue.assigneeId
-		| typeof issue.typeId
-		| typeof issue.categoryId
-		| typeof issue.milestoneId,
+	col: typeof issue.typeId | typeof issue.categoryId | typeof issue.milestoneId,
 	value: string | undefined
 ): SQL | undefined {
 	if (!value) return undefined;
@@ -130,7 +156,7 @@ function filterConds(p: ProjectRow, filters: IssueFilters): SQL | undefined {
 		isNull(issue.deletedAt),
 		filters.status ? eq(issue.status, filters.status) : undefined,
 		filters.priority ? eq(issue.priority, filters.priority) : undefined,
-		optionCond(issue.assigneeId, filters.assigneeId),
+		assigneeCond(filters.assigneeId),
 		optionCond(issue.typeId, filters.typeId),
 		optionCond(issue.categoryId, filters.categoryId),
 		optionCond(issue.milestoneId, filters.milestoneId),
@@ -199,9 +225,7 @@ export async function listTimeline(
 	const rows = await selectIssues(ctx.db, filterConds(p, {}), [asc(issue.number)]);
 	const items = rows.map((r) => ({
 		...r,
-		canEdit:
-			!p.archivedAt &&
-			can(ctx.actor, 'issue:edit', { reporterId: r.reporterId, assigneeId: r.assigneeId })
+		canEdit: !p.archivedAt && can(ctx.actor, 'issue:edit', { reporterId: r.reporterId })
 	}));
 	return {
 		scheduled: items.filter((i) => i.startDate || i.dueDate),
@@ -214,25 +238,38 @@ export async function getIssue(ctx: AppContext, key: string, number: number) {
 	const [row] = await ctx.db
 		.select({
 			issue,
-			assigneeName: assignee.name,
+			parentNumber: parent.number,
+			parentTitle: parent.title,
 			reporterName: reporter.name,
 			deletedByName: deleter.name
 		})
 		.from(issue)
-		.leftJoin(assignee, eq(issue.assigneeId, assignee.id))
+		.leftJoin(parent, eq(issue.parentId, parent.id))
 		.innerJoin(reporter, eq(issue.reporterId, reporter.id))
 		.leftJoin(deleter, eq(issue.deletedBy, deleter.id))
 		.where(and(eq(issue.projectId, p.id), eq(issue.number, number)));
 	if (!row) throw new AppError('not_found', '課題が見つかりません');
+	const [withNames] = await withAssignees(ctx.db, [row.issue]);
 	return {
 		project: p as ProjectRow,
 		issue: {
-			...row.issue,
-			assigneeName: row.assigneeName,
+			...withNames,
+			parent:
+				row.parentNumber === null ? null : { number: row.parentNumber, title: row.parentTitle! },
 			reporterName: row.reporterName,
 			deletedByName: row.deletedByName
 		}
 	};
+}
+
+/** 子課題（番号順）。削除したものは除く */
+export async function listChildIssues(ctx: AppContext, key: string, parentId: string) {
+	const p = await requireProject(ctx, key);
+	return selectIssues(
+		ctx.db,
+		and(eq(issue.projectId, p.id), eq(issue.parentId, parentId), isNull(issue.deletedAt)),
+		[asc(issue.number)]
+	);
 }
 
 /** 削除した課題は閲覧だけできる */
@@ -403,10 +440,7 @@ export async function moveIssue(ctx: AppContext, key: string, input: unknown): P
 		.where(and(eq(issue.id, data.issueId), eq(issue.projectId, p.id)));
 	if (!cur) throw new AppError('not_found', '課題が見つかりません');
 	assertNotDeleted(cur);
-	authorize(ctx.actor, 'issue:changeStatus', {
-		reporterId: cur.reporterId,
-		assigneeId: cur.assigneeId
-	});
+	authorize(ctx.actor, 'issue:changeStatus', { reporterId: cur.reporterId });
 	const statusChanged = data.status !== cur.status;
 	const fields = statusChanged ? await loadFieldSets(ctx.db, p.id) : null;
 	if (fields) assertStatusIn(fields, data.status);
@@ -452,14 +486,20 @@ export async function moveIssue(ctx: AppContext, key: string, input: unknown): P
 	}
 }
 
-/** 削除は論理削除。一覧からは消え、削除履歴から内容を閲覧できる（添付も残す） */
+/**
+ * 削除は論理削除。一覧からは消え、削除履歴から内容を閲覧できる（添付も残す）。
+ * 子課題は残し、親子関係だけ外す
+ */
 export async function deleteIssue(ctx: AppContext, key: string, number: number): Promise<void> {
 	const { project: p, issue: cur } = await getIssue(ctx, key, number);
 	assertWritable(p);
 	assertNotDeleted(cur);
 	authorize(ctx.actor, 'issue:delete');
-	await ctx.db
-		.update(issue)
-		.set({ deletedAt: new Date(), deletedBy: ctx.actor.id })
-		.where(eq(issue.id, cur.id));
+	await ctx.db.batch([
+		ctx.db
+			.update(issue)
+			.set({ deletedAt: new Date(), deletedBy: ctx.actor.id })
+			.where(eq(issue.id, cur.id)),
+		ctx.db.update(issue).set({ parentId: null }).where(eq(issue.parentId, cur.id))
+	]);
 }

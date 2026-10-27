@@ -25,7 +25,6 @@ export type Action =
 
 export interface Resource {
 	reporterId?: string;
-	assigneeId?: string | null;
 	authorId?: string;
 	uploaderId?: string;
 }

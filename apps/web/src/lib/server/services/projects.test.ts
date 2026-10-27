@@ -149,13 +149,13 @@ describe('projects', () => {
 			number: 1,
 			title: 't',
 			reporterId: member.id,
-			assigneeId: guest.id,
+			assigneeIds: [guest.id, member.id],
 			position: 'a0'
 		});
 		await removeMember(ctxOf(base, admin), 'ACME', guest.id);
 		expect((await listMembers(ctxOf(base, admin), 'ACME')).map((m) => m.id)).toEqual([member.id]);
 		const [i] = await db.select().from(issue).where(eq(issue.id, 'i1'));
-		expect(i.assigneeId).toBeNull();
+		expect(i.assigneeIds).toEqual([member.id]);
 	});
 
 	it('担当者候補は参加者（ゲスト含む）と admin。無効化ユーザーは除く', async () => {

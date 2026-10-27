@@ -35,16 +35,16 @@ describe('notify (in-app)', () => {
 	afterEach(() => vi.restoreAllMocks());
 
 	it('担当者の変更で新しい担当者に assigned', async () => {
-		await db.update(issue).set({ assigneeId: member.id });
+		await db.update(issue).set({ assigneeIds: [member.id] });
 		await notify(as(admin), {
 			...input,
-			events: [{ kind: 'assignee_changed', assigneeId: member.id }]
+			events: [{ kind: 'assignees_added', assigneeIds: [member.id] }]
 		});
 		expect(await rows()).toEqual([{ userId: member.id, type: 'assigned' }]);
 	});
 
 	it('担当を外したときは作らない', async () => {
-		await notify(as(admin), { ...input, events: [{ kind: 'assignee_changed', assigneeId: null }] });
+		await notify(as(admin), { ...input, events: [{ kind: 'assignees_added', assigneeIds: [] }] });
 		expect(await rows()).toEqual([]);
 	});
 
@@ -89,7 +89,7 @@ describe('notify (in-app)', () => {
 			events: [
 				{
 					kind: 'issue_created',
-					assigneeId: guest.id,
+					assigneeIds: [guest.id],
 					priority: 'none',
 					description: mentionToken(admin)
 				}
@@ -111,7 +111,7 @@ describe('notify (in-app)', () => {
 			} as unknown as DB
 		};
 		await expect(
-			notify(broken, { ...input, events: [{ kind: 'assignee_changed', assigneeId: member.id }] })
+			notify(broken, { ...input, events: [{ kind: 'assignees_added', assigneeIds: [member.id] }] })
 		).resolves.toBeUndefined();
 		expect(err).toHaveBeenCalled();
 	});
@@ -157,7 +157,7 @@ describe('notify (slack dm)', () => {
 	});
 
 	it('アプリ内通知の受信者のうち、オンにしている人にだけ送る（本人には送らない）', async () => {
-		await db.update(issue).set({ assigneeId: member.id });
+		await db.update(issue).set({ assigneeIds: [member.id] });
 		await notify(as(member), {
 			...input,
 			events: [{ kind: 'status_changed', from: 'todo', to: 'done' }]
@@ -190,10 +190,10 @@ describe('notify (slack dm)', () => {
 	});
 
 	it('担当になった通知の 2 行目は優先度', async () => {
-		await db.update(issue).set({ assigneeId: member.id, priority: 'high' });
+		await db.update(issue).set({ assigneeIds: [member.id], priority: 'high' });
 		await notify(as(admin), {
 			...input,
-			events: [{ kind: 'assignee_changed', assigneeId: member.id }]
+			events: [{ kind: 'assignees_added', assigneeIds: [member.id] }]
 		});
 		const dm = base.fetched.find((f) => f.url.endsWith('chat.postMessage'))!.body as {
 			channel: string;
@@ -288,7 +288,7 @@ describe('notifyBulk', () => {
 				{
 					issue: issues[0],
 					events: [
-						{ kind: 'assignee_changed', assigneeId: member.id },
+						{ kind: 'assignees_added', assigneeIds: [member.id] },
 						{ kind: 'mentions_added', commentId: null, before: '', after }
 					]
 				},
@@ -308,7 +308,7 @@ describe('notifyBulk', () => {
 			project,
 			items: issues.map((i) => ({
 				issue: i,
-				events: [{ kind: 'assignee_changed', assigneeId: null }]
+				events: [{ kind: 'assignees_added', assigneeIds: [] }]
 			}))
 		});
 		expect(await rows()).toEqual([]);
@@ -320,13 +320,13 @@ describe('notifyBulk', () => {
 			{ userId: member.id, provider: 'slack', externalId: 'U_MEMBER' },
 			{ userId: guest.id, provider: 'slack', externalId: 'U_GUEST' }
 		]);
-		await db.update(issue).set({ assigneeId: member.id });
+		await db.update(issue).set({ assigneeIds: [member.id] });
 		await notifyBulk(as(admin), {
 			project,
 			items: issues.map((i) => ({
 				issue: i,
 				events: [
-					{ kind: 'assignee_changed', assigneeId: member.id },
+					{ kind: 'assignees_added', assigneeIds: [member.id] },
 					{ kind: 'status_changed', from: 'todo', to: 'done' }
 				]
 			}))
@@ -361,7 +361,9 @@ describe('notifyBulk', () => {
 		await expect(
 			notifyBulk(broken, {
 				project,
-				items: [{ issue: issues[0], events: [{ kind: 'assignee_changed', assigneeId: member.id }] }]
+				items: [
+					{ issue: issues[0], events: [{ kind: 'assignees_added', assigneeIds: [member.id] }] }
+				]
 			})
 		).resolves.toBeUndefined();
 		expect(err).toHaveBeenCalled();

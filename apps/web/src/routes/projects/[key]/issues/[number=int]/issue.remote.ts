@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { inArray } from 'drizzle-orm';
 import * as v from 'valibot';
 import { command, form, query } from '$app/server';
 import { attachmentUrl, isSafeImage } from '$lib/attachment-rules';
@@ -20,7 +20,13 @@ import {
 	listMilestones,
 	listStatusesOf
 } from '$lib/server/services/issue-fields';
-import { getIssue, listIssueChanges, updateIssue } from '$lib/server/services/issues';
+import {
+	getIssue,
+	listChildIssues,
+	listIssueChanges,
+	listIssues,
+	updateIssue
+} from '$lib/server/services/issues';
 import { markIssueRead } from '$lib/server/services/notifications';
 import { listAssignableUsers, requireProject } from '$lib/server/services/projects';
 
@@ -36,24 +42,28 @@ export const getIssueDetail = query(IssueRef, ({ key, number }) => {
 	const ctx = remoteContext();
 	return runQuery(async () => {
 		const p = await requireProject(ctx, key);
-		const [{ project, issue }, assignees, statuses, issueTypes, categories, milestones] =
+		const { project, issue } = await getIssue(ctx, key, number);
+		const [assignees, statuses, issueTypes, categories, milestones, children, issues] =
 			await Promise.all([
-				getIssue(ctx, key, number),
 				listAssignableUsers(ctx.db, p.id),
 				listStatusesOf(ctx.db, p.id),
 				listIssueTypesOf(ctx.db, p.id),
 				listCategories(ctx, key),
-				listMilestones(ctx, key)
+				listMilestones(ctx, key),
+				listChildIssues(ctx, key, issue.id),
+				listIssues(ctx, key)
 			]);
 		const assignable = assignees.map((u) => ({ ...u, disabled: false }));
-		if (issue.assigneeId && !assignable.some((u) => u.id === issue.assigneeId)) {
-			const [cur] = await ctx.db
+		// 無効化・脱退した人が担当のままなら、選択肢に残して外せるようにする
+		const former = issue.assigneeIds.filter((id) => !assignable.some((u) => u.id === id));
+		if (former.length > 0) {
+			const rows = await ctx.db
 				.select({ id: user.id, name: user.name, role: user.role })
 				.from(user)
-				.where(eq(user.id, issue.assigneeId));
-			if (cur) assignable.push({ ...cur, disabled: true });
+				.where(inArray(user.id, former));
+			assignable.push(...rows.map((u) => ({ ...u, disabled: true })));
 		}
-		const res = { reporterId: issue.reporterId, assigneeId: issue.assigneeId };
+		const res = { reporterId: issue.reporterId };
 		// 削除した課題は閲覧だけできる
 		const writable = !project.archivedAt && !issue.deletedAt;
 		return {
@@ -64,6 +74,14 @@ export const getIssueDetail = query(IssueRef, ({ key, number }) => {
 			categories,
 			// 完了済みは選択肢から外す。ただし現在設定されているものは残す
 			milestones: milestones.filter((m) => !m.completedAt || m.id === issue.milestoneId),
+			children,
+			// 子課題は 1 階層までなので、親にできるのは子課題でない課題だけ。子課題を持つ課題は親を設定できない
+			parentCandidates:
+				children.length > 0
+					? []
+					: issues
+							.filter((i) => !i.parentId && i.id !== issue.id)
+							.map((i) => ({ number: i.number, title: i.title })),
 			perms: {
 				writable,
 				edit: writable && can(ctx.actor, 'issue:edit', res),
@@ -126,7 +144,8 @@ export const saveIssue = form(
 		description: opt,
 		status: opt,
 		priority: opt,
-		assigneeId: opt,
+		assigneeIds: v.optional(v.array(v.string())),
+		parentNumber: opt,
 		categoryId: opt,
 		milestoneId: opt,
 		startDate: opt,

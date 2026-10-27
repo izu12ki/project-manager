@@ -11,6 +11,7 @@ import {
 	listBoard,
 	listDeletedIssues,
 	listIssueChanges,
+	listChildIssues,
 	listIssues,
 	listTimeline,
 	moveIssue,
@@ -86,9 +87,9 @@ describe('issues', () => {
 	});
 
 	it('ゲストも起票時に担当者とステータスを指定できる', async () => {
-		await createIssue(as(guest), 'ACME', { title: 'A', assigneeId: member.id, status: 'done' });
+		await createIssue(as(guest), 'ACME', { title: 'A', assigneeIds: [member.id], status: 'done' });
 		expect((await getIssue(as(guest), 'ACME', 1)).issue).toMatchObject({
-			assigneeId: member.id,
+			assigneeIds: [member.id],
 			status: 'done'
 		});
 	});
@@ -96,7 +97,7 @@ describe('issues', () => {
 	it('参加者でない人は担当者にできない', async () => {
 		const outsider = await seedUser(db, 'member', 'outsider');
 		await expect(
-			createIssue(as(member), 'ACME', { title: 'A', assigneeId: outsider.id })
+			createIssue(as(member), 'ACME', { title: 'A', assigneeIds: [outsider.id] })
 		).rejects.toMatchObject({ code: 'validation' });
 	});
 
@@ -122,36 +123,36 @@ describe('issues', () => {
 	});
 
 	it('値が変わっていない項目は権限チェックしない（フォームが全項目を送るため）', async () => {
-		await createIssue(as(member), 'ACME', { title: 'theirs', assigneeId: guest.id });
+		await createIssue(as(member), 'ACME', { title: 'theirs', assigneeIds: [guest.id] });
 		await updateIssue(as(guest), 'ACME', 1, {
 			title: 'theirs',
 			status: 'in_progress',
-			assigneeId: guest.id
+			assigneeIds: [guest.id]
 		});
 		expect((await getIssue(as(guest), 'ACME', 1)).issue.status).toBe('in_progress');
 	});
 
 	it('担当者が後から無効化されても、同じ担当者のままステータスを変更できる', async () => {
-		await createIssue(as(member), 'ACME', { title: 'A', assigneeId: guest.id });
+		await createIssue(as(member), 'ACME', { title: 'A', assigneeIds: [guest.id] });
 		await db.update(userTable).set({ disabledAt: new Date() }).where(eq(userTable.id, guest.id));
-		await updateIssue(as(member), 'ACME', 1, { status: 'done', assigneeId: guest.id });
+		await updateIssue(as(member), 'ACME', 1, { status: 'done', assigneeIds: [guest.id] });
 		const { issue } = await getIssue(as(member), 'ACME', 1);
-		expect(issue).toMatchObject({ status: 'done', assigneeId: guest.id });
+		expect(issue).toMatchObject({ status: 'done', assigneeIds: [guest.id] });
 		await expect(
-			updateIssue(as(member), 'ACME', 1, { assigneeId: guest2.id })
+			updateIssue(as(member), 'ACME', 1, { assigneeIds: [guest2.id] })
 		).resolves.not.toThrow();
 		await db.update(userTable).set({ disabledAt: new Date() }).where(eq(userTable.id, guest.id));
 		await expect(
-			updateIssue(as(member), 'ACME', 1, { assigneeId: guest.id })
+			updateIssue(as(member), 'ACME', 1, { assigneeIds: [guest.id] })
 		).rejects.toMatchObject({ code: 'validation' });
 	});
 
 	it('ゲストも担当外の課題のステータスと担当者を変えられる', async () => {
 		await createIssue(as(member), 'ACME', { title: 'B' });
-		await updateIssue(as(guest), 'ACME', 1, { status: 'done', assigneeId: guest2.id });
+		await updateIssue(as(guest), 'ACME', 1, { status: 'done', assigneeIds: [guest2.id] });
 		expect((await getIssue(as(member), 'ACME', 1)).issue).toMatchObject({
 			status: 'done',
-			assigneeName: 'guest2'
+			assignees: [{ id: guest2.id, name: 'guest2' }]
 		});
 	});
 
@@ -216,7 +217,11 @@ describe('issues', () => {
 	});
 
 	it('一覧の絞り込み', async () => {
-		await createIssue(as(member), 'ACME', { title: 'A', assigneeId: guest.id, priority: 'high' });
+		await createIssue(as(member), 'ACME', {
+			title: 'A',
+			assigneeIds: [guest.id],
+			priority: 'high'
+		});
 		await createIssue(as(member), 'ACME', { title: 'B' });
 		expect((await listIssues(as(member), 'ACME')).map((i) => i.number)).toEqual([2, 1]);
 		expect(
@@ -289,7 +294,7 @@ describe('issues', () => {
 			typeId: types[1].id,
 			status: 'in_progress',
 			priority: 'high',
-			assigneeId: member.id,
+			assigneeIds: [member.id],
 			dueDate: '2026-12-31'
 		});
 		// 何も変わらない保存は残さない
@@ -306,6 +311,113 @@ describe('issues', () => {
 			{ field: 'assignee', from: null, to: 'member' },
 			{ field: 'dueDate', from: null, to: '2026-12-31' }
 		]);
+	});
+
+	describe('複数担当者', () => {
+		it('指定した順で保存し、重複と空文字は除く。一覧の絞り込みはその人を含む課題', async () => {
+			await createIssue(as(member), 'ACME', {
+				title: 'A',
+				assigneeIds: [guest.id, member.id, guest.id, '']
+			});
+			await createIssue(as(member), 'ACME', { title: 'B', assigneeIds: [member.id] });
+			await createIssue(as(member), 'ACME', { title: 'C' });
+			expect((await getIssue(as(member), 'ACME', 1)).issue.assignees).toEqual([
+				{ id: guest.id, name: 'guest' },
+				{ id: member.id, name: 'member' }
+			]);
+			const numbers = async (assigneeId: string) =>
+				(await listIssues(as(member), 'ACME', { assigneeId })).map((i) => i.number);
+			expect(await numbers(member.id)).toEqual([2, 1]);
+			expect(await numbers(guest.id)).toEqual([1]);
+			expect(await numbers('none')).toEqual([3]);
+		});
+
+		it('履歴は「、」区切りの名前。並び順だけ変えても変更とみなす', async () => {
+			await createIssue(as(member), 'ACME', { title: 'A', assigneeIds: [member.id] });
+			await updateIssue(as(member), 'ACME', 1, { assigneeIds: [member.id, guest.id] });
+			await updateIssue(as(member), 'ACME', 1, { assigneeIds: [] });
+			const changes = await listIssueChanges(as(member), 'ACME', 1);
+			expect(changes.map((c) => c.changes)).toEqual([
+				[{ field: 'assignee', from: 'member', to: 'member、guest' }],
+				[{ field: 'assignee', from: 'member、guest', to: null }]
+			]);
+		});
+
+		it('担当者は 10 人まで', async () => {
+			await expect(
+				createIssue(as(member), 'ACME', {
+					title: 'A',
+					assigneeIds: Array.from({ length: 11 }, (_, i) => `u${i}`)
+				})
+			).rejects.toMatchObject({ code: 'validation' });
+		});
+
+		it('無効化された元の担当者は残したまま、ほかの人を足せる', async () => {
+			await createIssue(as(member), 'ACME', { title: 'A', assigneeIds: [guest.id] });
+			await db.update(userTable).set({ disabledAt: new Date() }).where(eq(userTable.id, guest.id));
+			await updateIssue(as(member), 'ACME', 1, { assigneeIds: [guest.id, guest2.id] });
+			expect((await getIssue(as(member), 'ACME', 1)).issue.assigneeIds).toEqual([
+				guest.id,
+				guest2.id
+			]);
+		});
+	});
+
+	describe('子課題', () => {
+		it('起票時に親課題を番号か課題キーで指定でき、親から子課題を番号順に引ける', async () => {
+			await createIssue(as(member), 'ACME', { title: '親' });
+			await createIssue(as(member), 'ACME', { title: '子1', parentNumber: '1' });
+			await createIssue(as(guest), 'ACME', { title: '子2', parentNumber: 'ACME-1' });
+			const { issue: parent } = await getIssue(as(member), 'ACME', 1);
+			expect((await listChildIssues(as(member), 'ACME', parent.id)).map((i) => i.number)).toEqual([
+				2, 3
+			]);
+			const { issue: child } = await getIssue(as(member), 'ACME', 2);
+			expect(child.parent).toEqual({ number: 1, title: '親' });
+			expect((await listIssues(as(member), 'ACME')).find((i) => i.number === 3)).toMatchObject({
+				parentNumber: 1
+			});
+		});
+
+		it('子課題は 1 階層まで。自分自身・存在しない課題・削除した課題は親にできない', async () => {
+			await createIssue(as(member), 'ACME', { title: '親' });
+			await createIssue(as(member), 'ACME', { title: '子', parentNumber: 1 });
+			await createIssue(as(member), 'ACME', { title: '単独' });
+			await createIssue(as(member), 'ACME', { title: '削除' });
+			await deleteIssue(as(member), 'ACME', 4);
+			const fails = (p: Promise<unknown>) =>
+				expect(p).rejects.toMatchObject({ code: 'validation' });
+			await fails(createIssue(as(member), 'ACME', { title: '孫', parentNumber: 2 }));
+			await fails(updateIssue(as(member), 'ACME', 3, { parentNumber: 2 }));
+			await fails(updateIssue(as(member), 'ACME', 1, { parentNumber: 3 }));
+			await fails(updateIssue(as(member), 'ACME', 3, { parentNumber: 3 }));
+			await fails(updateIssue(as(member), 'ACME', 3, { parentNumber: 99 }));
+			await fails(updateIssue(as(member), 'ACME', 3, { parentNumber: 4 }));
+			await fails(updateIssue(as(member), 'ACME', 3, { parentNumber: 'abc' }));
+		});
+
+		it('親の付け替え・解除は履歴に残る', async () => {
+			await createIssue(as(member), 'ACME', { title: '親A' });
+			await createIssue(as(member), 'ACME', { title: '親B' });
+			await createIssue(as(member), 'ACME', { title: '子', parentNumber: 1 });
+			await updateIssue(as(member), 'ACME', 3, { parentNumber: '2' });
+			// 同じ親のままなら変更しない
+			await updateIssue(as(member), 'ACME', 3, { parentNumber: '2' });
+			await updateIssue(as(member), 'ACME', 3, { parentNumber: '' });
+			const changes = await listIssueChanges(as(member), 'ACME', 3);
+			expect(changes.map((c) => c.changes)).toEqual([
+				[{ field: 'parent', from: '#1 親A', to: '#2 親B' }],
+				[{ field: 'parent', from: '#2 親B', to: null }]
+			]);
+		});
+
+		it('親課題を削除すると、子課題は残り親子関係だけ外れる', async () => {
+			await createIssue(as(member), 'ACME', { title: '親' });
+			await createIssue(as(member), 'ACME', { title: '子', parentNumber: 1 });
+			await deleteIssue(as(member), 'ACME', 1);
+			const { issue: child } = await getIssue(as(member), 'ACME', 2);
+			expect(child).toMatchObject({ parentId: null, parent: null, deletedAt: null });
+		});
 	});
 
 	it('カンバン移動: 列が変わったときだけ履歴に残る', async () => {

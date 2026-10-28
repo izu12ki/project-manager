@@ -20,6 +20,9 @@ export default defineConfig({
 	test: {
 		expect: { requireAssertions: true },
 		environment: 'node',
+		// 実行時間の大半がファイルごとのモジュール再 import だったので、ファイル間でモジュールを共有する。
+		// テストはモジュールレベルの状態に依存しないこと
+		isolate: false,
 		include: ['src/**/*.test.ts']
 	}
 });

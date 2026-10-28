@@ -181,7 +181,7 @@
 		<h2 class="card-title">属性</h2>
 		<div class="prop-list">
 			<div class="prop-row">
-				<label for="issue-status"><CircleDot />ステータス</label>
+				<label for="issue-status"><CircleDot style="--c: var(--c-blue)" />ステータス</label>
 				<select
 					class="select"
 					id="issue-status"
@@ -194,7 +194,7 @@
 				</select>
 			</div>
 			<div class="prop-row">
-				<label for="issue-resolution"><CircleCheck />完了理由</label>
+				<label for="issue-resolution"><CircleCheck style="--c: var(--c-green)" />完了理由</label>
 				<select
 					class="select"
 					id="issue-resolution"
@@ -208,7 +208,7 @@
 				</select>
 			</div>
 			<div class="prop-row">
-				<label for="issue-priority"><Flag />優先度</label>
+				<label for="issue-priority"><Flag style="--c: var(--c-orange)" />優先度</label>
 				<select
 					class="select"
 					id="issue-priority"
@@ -221,7 +221,9 @@
 				</select>
 			</div>
 			<div class="prop-row">
-				<span class="prop-label" id={`issue-assignee-${variant}-label`}><UsersRound />担当者</span>
+				<span class="prop-label" id={`issue-assignee-${variant}-label`}
+					><UsersRound style="--c: var(--c-pink)" />担当者</span
+				>
 				<div class="min-w-0">
 					<!-- 全員外したときも送るための空の値（サービス側で除く） -->
 					{#if perms.assign}<input type="hidden" name={assigneeName} value="" />{/if}
@@ -238,7 +240,9 @@
 				</div>
 			</div>
 			<div class="prop-row">
-				<label for={`issue-parent-${variant}`}><CornerLeftUp />親課題</label>
+				<label for={`issue-parent-${variant}`}
+					><CornerLeftUp style="--c: var(--c-violet)" />親課題</label
+				>
 				<div class="min-w-0">
 					<input
 						class="input"
@@ -260,7 +264,7 @@
 				</div>
 			</div>
 			<div class="prop-row">
-				<label for="issue-category"><Tag />カテゴリー</label>
+				<label for="issue-category"><Tag style="--c: var(--c-amber)" />カテゴリー</label>
 				<select
 					class="select"
 					id="issue-category"
@@ -274,7 +278,7 @@
 				</select>
 			</div>
 			<div class="prop-row">
-				<label for="issue-milestone"><Milestone />マイルストーン</label>
+				<label for="issue-milestone"><Milestone style="--c: var(--c-teal)" />マイルストーン</label>
 				<select
 					class="select"
 					id="issue-milestone"
@@ -288,7 +292,7 @@
 				</select>
 			</div>
 			<div class="prop-row">
-				<label for="issue-start"><Calendar />開始日</label>
+				<label for="issue-start"><Calendar style="--c: var(--c-lime)" />開始日</label>
 				<input
 					class="input"
 					id="issue-start"
@@ -297,7 +301,7 @@
 				/>
 			</div>
 			<div class="prop-row">
-				<label for="issue-due"><CalendarClock />期限日</label>
+				<label for="issue-due"><CalendarClock style="--c: var(--c-red)" />期限日</label>
 				<input
 					class="input"
 					id="issue-due"

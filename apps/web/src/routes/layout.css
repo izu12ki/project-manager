@@ -34,6 +34,9 @@
 	--c-pink: oklch(0.63 0.19 350);
 	--c-teal: oklch(0.62 0.11 195);
 	--c-orange: oklch(0.67 0.17 48);
+	--c-violet: oklch(0.6 0.17 300);
+	--c-red: oklch(0.6 0.19 25);
+	--c-lime: oklch(0.66 0.16 130);
 	--overlay: oklch(0.2 0.02 255 / 0.45);
 	--shadow-pop: 0 8px 24px rgb(0 0 0 / 0.12);
 	/* 角丸。sm はボタン・入力欄、md はカード・メニュー、pill はピル・タグ、card はボードのカード */
@@ -77,6 +80,9 @@
 	--c-pink: oklch(0.75 0.15 350);
 	--c-teal: oklch(0.76 0.1 195);
 	--c-orange: oklch(0.78 0.14 50);
+	--c-violet: oklch(0.75 0.13 300);
+	--c-red: oklch(0.72 0.15 25);
+	--c-lime: oklch(0.8 0.15 130);
 	--overlay: oklch(0 0 0 / 0.6);
 	--card-shadow: 0 1px 3px oklch(0 0 0 / 0.3);
 	--card-shadow-hover: 0 6px 16px oklch(0 0 0 / 0.4);
@@ -503,7 +509,8 @@
 		width: 1em;
 		height: 1em;
 		flex-shrink: 0;
-		opacity: 0.8;
+		/* 色は各ラベルの style で --c に指定する */
+		color: color-mix(in oklch, var(--c, currentColor) 80%, transparent);
 	}
 	/* 起票フォーム用の広い版 */
 	.prop-list-wide .prop-row {

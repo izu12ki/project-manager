@@ -101,7 +101,7 @@
 			<div class="prop-list prop-list-wide">
 				{#if data.canSetStatus}
 					<div class="prop-row">
-						<label for="issue-status"><CircleDot />ステータス</label>
+						<label for="issue-status"><CircleDot style="--c: var(--c-blue)" />ステータス</label>
 						<select class="select" id="issue-status" name="status">
 							{#each data.statuses as s (s.key)}
 								<option value={s.key}>{s.name}</option>
@@ -110,7 +110,7 @@
 					</div>
 				{/if}
 				<div class="prop-row">
-					<label for="issue-priority"><Flag />優先度</label>
+					<label for="issue-priority"><Flag style="--c: var(--c-orange)" />優先度</label>
 					<select class="select" id="issue-priority" name="priority">
 						{#each PRIORITIES as p (p)}
 							<option value={p} selected={p === 'medium'}>{PRIORITY_LABEL[p]}</option>
@@ -118,7 +118,7 @@
 					</select>
 				</div>
 				<div class="prop-row">
-					<label for="issue-category"><Tag />カテゴリー</label>
+					<label for="issue-category"><Tag style="--c: var(--c-amber)" />カテゴリー</label>
 					<select class="select" id="issue-category" name="categoryId">
 						<option value="">未設定</option>
 						{#each data.categories as c (c.id)}
@@ -127,14 +127,16 @@
 					</select>
 				</div>
 				<div class="prop-row">
-					<label for="issue-start-date"><Calendar />開始日</label>
+					<label for="issue-start-date"><Calendar style="--c: var(--c-lime)" />開始日</label>
 					<div><input class="input" id="issue-start-date" type="date" name="startDate" /></div>
 				</div>
 			</div>
 			<div class="prop-list prop-list-wide">
 				{#if data.canAssign}
 					<div class="prop-row">
-						<span class="prop-label" id="issue-assignee-label"><UsersRound />担当者</span>
+						<span class="prop-label" id="issue-assignee-label"
+							><UsersRound style="--c: var(--c-pink)" />担当者</span
+						>
 						<div class="flex flex-wrap items-center gap-2">
 							<div class="assignees">
 								<MultiSelect
@@ -158,7 +160,7 @@
 					</div>
 				{/if}
 				<div class="prop-row">
-					<label for="issue-parent"><CornerLeftUp />親課題</label>
+					<label for="issue-parent"><CornerLeftUp style="--c: var(--c-violet)" />親課題</label>
 					<div>
 						<input
 							class="input parent"
@@ -177,7 +179,8 @@
 					</div>
 				</div>
 				<div class="prop-row">
-					<label for="issue-milestone"><Milestone />マイルストーン</label>
+					<label for="issue-milestone"><Milestone style="--c: var(--c-teal)" />マイルストーン</label
+					>
 					<select class="select" id="issue-milestone" name="milestoneId">
 						<option value="">未設定</option>
 						{#each data.milestones as m (m.id)}
@@ -186,7 +189,7 @@
 					</select>
 				</div>
 				<div class="prop-row">
-					<label for="issue-due-date"><CalendarClock />期限日</label>
+					<label for="issue-due-date"><CalendarClock style="--c: var(--c-red)" />期限日</label>
 					<div><input class="input" id="issue-due-date" type="date" name="dueDate" /></div>
 				</div>
 			</div>

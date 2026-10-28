@@ -325,6 +325,22 @@ export const comment = sqliteTable(
 	(t) => [index('comment_issue_idx').on(t.issueId)]
 );
 
+/** コメントへの絵文字リアクション。1 人が同じ絵文字を付けられるのは 1 回 */
+export const commentReaction = sqliteTable(
+	'comment_reaction',
+	{
+		commentId: text('comment_id')
+			.notNull()
+			.references(() => comment.id, { onDelete: 'cascade' }),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		emoji: text().notNull(),
+		createdAt: createdAt()
+	},
+	(t) => [primaryKey({ columns: [t.commentId, t.userId, t.emoji] })]
+);
+
 /** 課題の編集履歴。1 回の保存で 1 行 */
 export const issueChange = sqliteTable(
 	'issue_change',

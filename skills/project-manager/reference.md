@@ -104,7 +104,7 @@ curl -sS "$PM_API_URL/api/v1/me" -H "Authorization: Bearer $PM_API_KEY"
 | クエリ        | 意味                                                                |
 | ------------- | ------------------------------------------------------------------- |
 | `status`      | ステータスのキー（`todo` など）                                     |
-| `assigneeId`  | 担当者の ID。`none` で未担当                                        |
+| `assigneeId`  | 担当者の ID（その人が担当者に含まれる課題）。`none` で未担当        |
 | `typeId`      | 課題種別の ID。`none` で未設定                                      |
 | `categoryId`  | カテゴリーの ID。`none` で未設定                                    |
 | `milestoneId` | マイルストーンの ID。`none` で未設定                                |
@@ -125,7 +125,8 @@ curl -sS "$PM_API_URL/api/v1/me" -H "Authorization: Bearer $PM_API_KEY"
       "status": "todo",
       "resolution": null,
       "priority": "none",
-      "assignee": { "id": "u1", "name": "平野" },
+      "assignees": [{ "id": "u1", "name": "平野" }],
+      "parentNumber": null,
       "startDate": "2026-11-01",
       "dueDate": "2026-11-10",
       "categoryId": null,
@@ -153,7 +154,7 @@ curl -sS "$PM_API_URL/api/v1/me" -H "Authorization: Bearer $PM_API_KEY"
 ```bash
 curl -sS -X POST "$PM_API_URL/api/v1/projects/PROJ/issues" \
   -H "Authorization: Bearer $PM_API_KEY" -H "Content-Type: application/json" \
-  -d '{"title":"ログイン画面","startDate":"2026-11-01","dueDate":"2026-11-10","assigneeId":"u1"}'
+  -d '{"title":"ログイン画面","startDate":"2026-11-01","dueDate":"2026-11-10","assigneeIds":["u1"]}'
 ```
 
 ## PATCH /projects/{key}/issues/{number}
@@ -163,7 +164,7 @@ curl -sS -X POST "$PM_API_URL/api/v1/projects/PROJ/issues" \
 ```bash
 curl -sS -X PATCH "$PM_API_URL/api/v1/projects/PROJ/issues/12" \
   -H "Authorization: Bearer $PM_API_KEY" -H "Content-Type: application/json" \
-  -d '{"dueDate":"2026-11-20","assigneeId":null}'
+  -d '{"dueDate":"2026-11-20","assigneeIds":null}'
 ```
 
 ## POST /projects/{key}/issues/bulk
@@ -178,7 +179,7 @@ curl -sS -X PATCH "$PM_API_URL/api/v1/projects/PROJ/issues/12" \
       "title": "実装",
       "startDate": "2026-11-06",
       "dueDate": "2026-11-20",
-      "assigneeId": "u1"
+      "assigneeIds": ["u1"]
     }
   ]
 }
@@ -222,23 +223,26 @@ curl -sS -X PATCH "$PM_API_URL/api/v1/projects/PROJ/issues/12" \
 
 `resolution` は起票では指定できない（不明な項目として 400）。完了理由は、起票後の更新で付ける。
 
-| 項目          | 型     | 起票                | 更新 | `null` の意味と補足                                                                              |
-| ------------- | ------ | ------------------- | ---- | ------------------------------------------------------------------------------------------------ |
-| `title`       | string | 必須                | 任意 | 空にできない。前後の空白は除く。200 文字以内                                                     |
-| `description` | string | 任意（既定 空）     | 任意 | Markdown。50,000 文字以内。`null` は空文字にする                                                 |
-| `typeId`      | string | 任意                | 任意 | 課題種別の ID。`null` で未設定                                                                   |
-| `status`      | string | 任意（既定 `todo`） | 任意 | ステータスのキー。プロジェクト詳細の `statuses[].key`                                            |
-| `resolution`  | string | 不可                | 任意 | 完了理由。`fixed` / `wont_fix` / `invalid` / `duplicate` / `cannot_reproduce`。`null` で空にする |
-| `priority`    | string | 任意（既定 `none`） | 任意 | `none` / `low` / `medium` / `high` / `urgent`。`null` は不可                                     |
-| `assigneeId`  | string | 任意                | 任意 | 担当者のユーザー ID。`members` に含まれる人だけ。`null` で未担当                                 |
-| `startDate`   | string | 任意                | 任意 | `YYYY-MM-DD`。`null` で空にする                                                                  |
-| `dueDate`     | string | 任意                | 任意 | `YYYY-MM-DD`。`null` で空にする                                                                  |
-| `categoryId`  | string | 任意                | 任意 | カテゴリーの ID。`null` で未設定                                                                 |
-| `milestoneId` | string | 任意                | 任意 | マイルストーンの ID。完了済みは指定できない。`null` で未設定                                     |
+| 項目           | 型     | 起票                | 更新 | `null` の意味と補足                                                                                                                      |
+| -------------- | ------ | ------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`        | string | 必須                | 任意 | 空にできない。前後の空白は除く。200 文字以内                                                                                             |
+| `description`  | string | 任意（既定 空）     | 任意 | Markdown。50,000 文字以内。`null` は空文字にする                                                                                         |
+| `typeId`       | string | 任意                | 任意 | 課題種別の ID。`null` で未設定                                                                                                           |
+| `status`       | string | 任意（既定 `todo`） | 任意 | ステータスのキー。プロジェクト詳細の `statuses[].key`                                                                                    |
+| `resolution`   | string | 不可                | 任意 | 完了理由。`fixed` / `wont_fix` / `invalid` / `duplicate` / `cannot_reproduce`。`null` で空にする                                         |
+| `priority`     | string | 任意（既定 `none`） | 任意 | `none` / `low` / `medium` / `high` / `urgent`。`null` は不可                                                                             |
+| `assigneeIds`  | array  | 任意                | 任意 | 担当者のユーザー ID の配列（10 人まで、指定順に保存）。`members` に含まれる人だけ。`null` か `[]` で未担当。更新では配列全体を置き換える |
+| `parentNumber` | number | 任意                | 任意 | 親課題の番号。子課題は 1 階層まで（子課題や、子課題を持つ課題の親子付けは 400）。`null` で親子関係を外す                                 |
+| `startDate`    | string | 任意                | 任意 | `YYYY-MM-DD`。`null` で空にする                                                                                                          |
+| `dueDate`      | string | 任意                | 任意 | `YYYY-MM-DD`。`null` で空にする                                                                                                          |
+| `categoryId`   | string | 任意                | 任意 | カテゴリーの ID。`null` で未設定                                                                                                         |
+| `milestoneId`  | string | 任意                | 任意 | マイルストーンの ID。完了済みは指定できない。`null` で未設定                                                                             |
 
 - `startDate` が `dueDate` より後なら 400（`開始日は期限日以前の日付にしてください`）。更新では、片方だけ送っても現在の値と合わせて検証する。
 - 存在しない ID やキーは 400（例: `課題種別が見つかりません`、`ステータスが見つかりません`）。
 - 一括更新の要素では、`number` 以外が変更する項目になる。
+- 一括起票では、同じリクエストで起票する課題を `parentNumber` に指定できない（番号が未確定のため）。親を先に起票してから子を起票する。
+- 応答の `assignees` は担当者の配列（未担当は `[]`）、`parentNumber` は親課題の番号（子課題でなければ `null`）。
 
 ## 画面の URL
 

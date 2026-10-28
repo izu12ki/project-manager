@@ -13,8 +13,7 @@ title: Slack 連携
 5. トークンを Worker のシークレットに設定します。
 
    ```sh
-   pnpm exec wrangler secret put SLACK_BOT_TOKEN                # 本番
-   pnpm exec wrangler secret put SLACK_BOT_TOKEN --env preview  # プレビュー
+   pnpm exec wrangler secret put SLACK_BOT_TOKEN
    ```
 
 ワークスペースの設定によっては、アプリのインストールに Slack 管理者の承認が必要です。

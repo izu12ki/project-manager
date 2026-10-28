@@ -119,7 +119,7 @@
 		[
 			`${projectKey}-${item.number} ${item.title}`,
 			period(item),
-			`${statusName(page.data.statuses, item.status)} / ${item.assigneeName ?? '未割当'}`
+			`${statusName(page.data.statuses, item.status)} / ${item.assignees.map((u) => u.name).join('、') || '未割当'}`
 		].join('\n');
 	const href = (item: T) => `/projects/${projectKey}/issues/${item.number}`;
 

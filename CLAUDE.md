@@ -28,13 +28,7 @@
 
   - 適用後は `turso db shell project-manager "SELECT name FROM pragma_table_info('<table>');"` などで反映を確認してからデプロイする。
 
-## プレビュー環境（動作確認用）
+## 動作確認
 
-- ユーザーの動作確認はローカルではなくプレビュー環境で行う。機能ブランチで `pnpm check` と `pnpm test:unit` が通ったら、確認不要で `apps/web` の `pnpm deploy:preview` を実行し、URL と確認ポイントを伝える（`CLOUDFLARE_ACCOUNT_ID` が必要）。
-- URL: https://project-manager-preview.hirano-i.workers.dev（Worker `project-manager-preview`、`wrangler.jsonc` の `env.preview`）。
-- DB は本番と別の Turso DB `project-manager-preview`、R2 は `project-manager-attachments-preview`。
-- マイグレーションを含むブランチは、プレビュー DB に先に適用してからデプロイする。auto mode では拒否されるので、次の `!` コマンドを提示する。
-
-  ```
-  ! cd /Users/izukihirano/orca/projects/project-manager/apps/web && TURSO_DATABASE_URL=libsql://project-manager-preview-izu12ki.aws-ap-northeast-1.turso.io TURSO_AUTH_TOKEN="$(turso db tokens create project-manager-preview --expiration 1d)" pnpm db:migrate
-  ```
+- プレビュー環境は持たない（OSS として配布するアプリのデモなので、本番環境だけで運用する）。
+- ユーザーの動作確認はローカルではなく本番環境で行う。機能ブランチで上記のチェックがすべて通ったら、本番マイグレーション（ある場合）→ `pnpm deploy` の順で出し、URL と確認ポイントを伝える。

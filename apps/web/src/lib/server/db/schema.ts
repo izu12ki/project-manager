@@ -1,5 +1,6 @@
 import { defineRelations, sql } from 'drizzle-orm';
 import {
+	type AnySQLiteColumn,
 	index,
 	integer,
 	primaryKey,
@@ -275,7 +276,17 @@ export const issue = sqliteTable(
 		/** 完了理由 */
 		resolution: text({ enum: RESOLUTIONS }),
 		priority: text({ enum: PRIORITIES }).notNull().default('none'),
-		assigneeId: text('assignee_id').references(() => user.id),
+		/** 担当者の user.id（設定した順）。担当者なしは [] */
+		assigneeIds: text('assignee_ids', { mode: 'json' }).$type<string[]>().notNull().default([]),
+		/**
+		 * 旧・単一の担当者。assignee_ids へ移した後は読み書きしない。
+		 * 列を消すにはテーブルの作り直しが要り、子テーブルの ON DELETE CASCADE を巻き込む恐れがあるため残している
+		 */
+		legacyAssigneeId: text('assignee_id').references(() => user.id),
+		/** 親課題。子課題は 1 階層まで（子課題の子課題は作れない） */
+		parentId: text('parent_id').references((): AnySQLiteColumn => issue.id, {
+			onDelete: 'set null'
+		}),
 		reporterId: text('reporter_id')
 			.notNull()
 			.references(() => user.id),
@@ -293,7 +304,7 @@ export const issue = sqliteTable(
 	(t) => [
 		uniqueIndex('issue_project_number_uq').on(t.projectId, t.number),
 		index('issue_board_idx').on(t.projectId, t.status, t.position),
-		index('issue_assignee_idx').on(t.assigneeId)
+		index('issue_parent_idx').on(t.parentId)
 	]
 );
 

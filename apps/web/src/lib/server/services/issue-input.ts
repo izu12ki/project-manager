@@ -30,7 +30,16 @@ export type CreateValues = Omit<typeof issue.$inferInsert, 'projectId' | 'number
 	description: string;
 };
 
-/** プロジェクトの分類項目と担当可能な人（id → 名前） */
+/** 親課題の候補を確かめるための、プロジェクトの課題の最小限の情報 */
+export type IssueRef = {
+	id: string;
+	number: number;
+	title: string;
+	parentId: string | null;
+	deleted: boolean;
+};
+
+/** プロジェクトの分類項目・担当可能な人（id → 名前）・課題（親子関係の検証用） */
 export type FieldSets = {
 	statuses: StatusDef[];
 	typeIds: Map<string, string>;
@@ -39,10 +48,16 @@ export type FieldSets = {
 	/** 完了済みのマイルストーン（新しく割り当てられない） */
 	completedMilestoneIds: Set<string>;
 	assignable: Map<string, string>;
+	issuesByNumber: Map<number, IssueRef>;
+	issuesById: Map<string, IssueRef>;
+	/** 削除されていない子課題を持つ課題の id */
+	parentIds: Set<string>;
 };
 
+export const MAX_ASSIGNEES = 10;
+
 export async function loadFieldSets(db: DB, projectId: string): Promise<FieldSets> {
-	const [statuses, types, categories, milestones, assignable] = await Promise.all([
+	const [statuses, types, categories, milestones, assignable, issues] = await Promise.all([
 		listStatusesOf(db, projectId),
 		db
 			.select({ id: issueType.id, name: issueType.name })
@@ -56,8 +71,19 @@ export async function loadFieldSets(db: DB, projectId: string): Promise<FieldSet
 			.select({ id: milestone.id, name: milestone.name, completedAt: milestone.completedAt })
 			.from(milestone)
 			.where(eq(milestone.projectId, projectId)),
-		listAssignableUsers(db, projectId)
+		listAssignableUsers(db, projectId),
+		db
+			.select({
+				id: issue.id,
+				number: issue.number,
+				title: issue.title,
+				parentId: issue.parentId,
+				deletedAt: issue.deletedAt
+			})
+			.from(issue)
+			.where(eq(issue.projectId, projectId))
 	]);
+	const refs: IssueRef[] = issues.map(({ deletedAt, ...r }) => ({ ...r, deleted: !!deletedAt }));
 	const toMap = (rows: { id: string; name: string }[]) => new Map(rows.map((r) => [r.id, r.name]));
 	return {
 		statuses,
@@ -65,7 +91,10 @@ export async function loadFieldSets(db: DB, projectId: string): Promise<FieldSet
 		categoryIds: toMap(categories),
 		milestoneIds: toMap(milestones),
 		completedMilestoneIds: new Set(milestones.filter((m) => m.completedAt).map((m) => m.id)),
-		assignable: toMap(assignable)
+		assignable: toMap(assignable),
+		issuesByNumber: new Map(refs.map((r) => [r.number, r])),
+		issuesById: new Map(refs.map((r) => [r.id, r])),
+		parentIds: new Set(refs.filter((r) => !r.deleted && r.parentId).map((r) => r.parentId!))
 	};
 }
 
@@ -89,6 +118,27 @@ const ResolutionOrEmpty = v.union(
 	'完了理由を選択してください'
 );
 
+/** '' は担当者なし。重複と空文字は除き、指定した順を保つ */
+const AssigneeIdsSchema = v.pipe(
+	v.union([v.literal(''), v.array(v.string())], '担当者は ID の配列で指定してください'),
+	v.transform((ids) => [...new Set(ids === '' ? [] : ids.filter(Boolean))]),
+	v.maxLength(MAX_ASSIGNEES, `担当者は${MAX_ASSIGNEES}人までです`)
+);
+/** '' は親課題なし。番号（12）か課題キー（ACME-12）で指定する */
+const ParentSchema = v.union(
+	[
+		v.literal(''),
+		v.pipe(v.number(), v.integer(), v.minValue(1)),
+		v.pipe(
+			v.string(),
+			v.trim(),
+			v.regex(/^(?:[A-Za-z][A-Za-z0-9_]*-|#)?\d{1,9}$/),
+			v.transform((s) => Number(s.match(/\d+$/)![0]))
+		)
+	],
+	'親課題は課題番号か課題キーで指定してください'
+);
+
 const CreateInput = v.object({
 	title: TitleSchema,
 	typeId: v.optional(v.string()),
@@ -97,7 +147,8 @@ const CreateInput = v.object({
 	priority: v.optional(v.picklist(PRIORITIES), 'none'),
 	startDate: v.optional(DateOrEmpty),
 	dueDate: v.optional(DateOrEmpty),
-	assigneeId: v.optional(v.string()),
+	assigneeIds: v.optional(AssigneeIdsSchema, []),
+	parentNumber: v.optional(ParentSchema),
 	categoryId: v.optional(v.string()),
 	milestoneId: v.optional(v.string())
 });
@@ -111,7 +162,8 @@ const UpdateInput = v.object({
 	startDate: v.optional(DateOrEmpty),
 	dueDate: v.optional(DateOrEmpty),
 	status: v.optional(StatusSchema),
-	assigneeId: v.optional(v.string()),
+	assigneeIds: v.optional(AssigneeIdsSchema),
+	parentNumber: v.optional(ParentSchema),
 	categoryId: v.optional(v.string()),
 	milestoneId: v.optional(v.string())
 });
@@ -148,23 +200,51 @@ function assertMilestoneIn(fields: FieldSets, id: string): void {
 	}
 }
 
-function assertAssignableIn(fields: FieldSets, id: string): void {
-	if (!fields.assignable.has(id)) throw invalid('assigneeId', 'このユーザーは担当者にできません');
+function assertAssignableIn(fields: FieldSets, ids: string[]): void {
+	if (ids.some((id) => !fields.assignable.has(id))) {
+		throw invalid('assigneeIds', 'このユーザーは担当者にできません');
+	}
 }
+
+/**
+ * 親課題の番号を id に変える。'' は null。子課題は 1 階層までなので、子課題を親にはできない。
+ * self は更新する課題（起票では undefined）
+ */
+function resolveParent(
+	fields: FieldSets,
+	number: number | '' | undefined,
+	self?: IssueRow
+): string | null | undefined {
+	if (number === undefined) return undefined;
+	if (number === '') return null;
+	const p = fields.issuesByNumber.get(number);
+	if (!p || p.deleted) throw invalid('parentNumber', '親課題が見つかりません');
+	if (self && p.id === self.id) throw invalid('parentNumber', '自分自身は親課題にできません');
+	if (self && p.id === self.parentId) return p.id;
+	if (p.parentId) throw invalid('parentNumber', '子課題を親課題にはできません');
+	if (self && fields.parentIds.has(self.id)) {
+		throw invalid('parentNumber', '子課題がある課題は、ほかの課題の子課題にできません');
+	}
+	return p.id;
+}
+
+const sameIds = (a: readonly string[], b: readonly string[]) =>
+	a.length === b.length && a.every((id, i) => id === b[i]);
 
 /** 起票の検証と権限チェック。プロジェクトが書き込み可能かは呼び出し側で確かめること。 */
 export function prepareCreate(actor: Actor, fields: FieldSets, input: unknown): CreateValues {
 	authorize(actor, 'issue:create');
 	const data = parse(CreateInput, input);
-	const assigneeId = emptyToNull(data.assigneeId) ?? null;
-	if (assigneeId) {
+	const { assigneeIds } = data;
+	if (assigneeIds.length > 0) {
 		authorize(actor, 'issue:assign');
-		assertAssignableIn(fields, assigneeId);
+		assertAssignableIn(fields, assigneeIds);
 	}
 	if (data.status !== INITIAL_STATUS) {
-		authorize(actor, 'issue:changeStatus', { assigneeId });
+		authorize(actor, 'issue:changeStatus');
 		assertStatusIn(fields, data.status);
 	}
+	const parentId = resolveParent(fields, data.parentNumber) ?? null;
 	const typeId = emptyToNull(data.typeId) ?? null;
 	if (typeId) assertTypeIn(fields, typeId);
 	const startDate = emptyToNull(data.startDate) ?? null;
@@ -183,7 +263,8 @@ export function prepareCreate(actor: Actor, fields: FieldSets, input: unknown): 
 		priority: data.priority,
 		startDate,
 		dueDate,
-		assigneeId,
+		assigneeIds,
+		parentId,
 		categoryId,
 		milestoneId,
 		reporterId: actor.id
@@ -202,7 +283,7 @@ export function preparePatch(
 	input: unknown
 ): IssuePatch {
 	const data = parse(UpdateInput, input);
-	const res = { reporterId: cur.reporterId, assigneeId: cur.assigneeId };
+	const res = { reporterId: cur.reporterId };
 	const patch: IssuePatch = {};
 
 	const startDate = emptyToNull(data.startDate);
@@ -221,6 +302,8 @@ export function preparePatch(
 	if (dueDate !== undefined && dueDate !== cur.dueDate) patch.dueDate = dueDate;
 	if (categoryId !== undefined && categoryId !== cur.categoryId) patch.categoryId = categoryId;
 	if (milestoneId !== undefined && milestoneId !== cur.milestoneId) patch.milestoneId = milestoneId;
+	const parentId = resolveParent(fields, data.parentNumber, cur);
+	if (parentId !== undefined && parentId !== cur.parentId) patch.parentId = parentId;
 	if (Object.keys(patch).length > 0) authorize(actor, 'issue:edit', res);
 	if (patch.startDate !== undefined || patch.dueDate !== undefined) {
 		assertDateRange(
@@ -238,17 +321,45 @@ export function preparePatch(
 		patch.status = data.status;
 	}
 
-	const assigneeId = emptyToNull(data.assigneeId);
-	if (assigneeId !== undefined && assigneeId !== cur.assigneeId) {
+	const ids = data.assigneeIds;
+	if (ids !== undefined && !sameIds(ids, cur.assigneeIds)) {
 		authorize(actor, 'issue:assign', res);
-		if (assigneeId) assertAssignableIn(fields, assigneeId);
-		patch.assigneeId = assigneeId;
+		// 無効化された人など、もう担当にできない人が元から担当なら外さずに残せる
+		assertAssignableIn(
+			fields,
+			ids.filter((id) => !cur.assigneeIds.includes(id))
+		);
+		patch.assigneeIds = ids;
 	}
 	return patch;
 }
 
 /**
- * 担当者を外す・変える課題のうち、元の担当者が担当可能な人に含まれない（無効化・脱退した）ものの名前を引く。
+ * 一括更新で、要素どうしの組み合わせによって子課題の子課題ができないか確かめる
+ * （1 件ずつの検証は更新前の親子関係で行うため）
+ */
+export function assertOneLevel(
+	fields: FieldSets,
+	changes: { cur: IssueRow; patch: IssuePatch }[]
+): void {
+	const parentOf = new Map<string, string | null>();
+	for (const [id, r] of fields.issuesById) if (!r.deleted) parentOf.set(id, r.parentId);
+	for (const { cur, patch } of changes) {
+		if (patch.parentId !== undefined) parentOf.set(cur.id, patch.parentId);
+	}
+	const parents = new Set([...parentOf.values()].filter(Boolean));
+	for (const { cur, patch } of changes) {
+		if (patch.parentId && (parentOf.get(patch.parentId) || parents.has(cur.id))) {
+			throw invalid(
+				'parentNumber',
+				`子課題の子課題になる組み合わせがあります（#${cur.number}）。子課題は 1 階層までです`
+			);
+		}
+	}
+}
+
+/**
+ * 担当者を変える課題のうち、元の担当者で担当可能な人に含まれない（無効化・脱退した）人の名前を引く。
  * describeChanges の otherUsers に渡す。該当がなければ問い合わせない。
  */
 export async function loadFormerAssigneeNames(
@@ -258,8 +369,8 @@ export async function loadFormerAssigneeNames(
 ): Promise<Map<string, string>> {
 	const ids = new Set<string>();
 	for (const { cur, patch } of changes) {
-		if (patch.assigneeId !== undefined && cur.assigneeId && !fields.assignable.has(cur.assigneeId))
-			ids.add(cur.assigneeId);
+		if (patch.assigneeIds === undefined) continue;
+		for (const id of cur.assigneeIds) if (!fields.assignable.has(id)) ids.add(id);
 	}
 	if (ids.size === 0) return new Map();
 	const rows = await db
@@ -286,8 +397,14 @@ export function describeChanges(
 	) => changes.push({ field, from: from ?? null, to: to ?? null });
 	const lookup = (m: Map<string, string>, id: string | null | undefined) =>
 		id ? (m.get(id) ?? null) : null;
-	const userName = (id: string | null | undefined) =>
-		lookup(fields.assignable, id) ?? lookup(otherUsers, id);
+	const userNames = (ids: readonly string[]) =>
+		ids.length === 0
+			? null
+			: ids.map((id) => lookup(fields.assignable, id) ?? lookup(otherUsers, id) ?? '—').join('、');
+	const issueLabel = (id: string | null | undefined) => {
+		const r = id ? fields.issuesById.get(id) : undefined;
+		return r ? `#${r.number} ${r.title}` : null;
+	};
 
 	if (patch.title !== undefined) add('title', cur.title, patch.title);
 	if (patch.description !== undefined) add('description', cur.description, patch.description);
@@ -305,8 +422,10 @@ export function describeChanges(
 		);
 	if (patch.priority !== undefined)
 		add('priority', PRIORITY_LABEL[cur.priority], PRIORITY_LABEL[patch.priority]);
-	if (patch.assigneeId !== undefined)
-		add('assignee', userName(cur.assigneeId), userName(patch.assigneeId));
+	if (patch.assigneeIds !== undefined)
+		add('assignee', userNames(cur.assigneeIds), userNames(patch.assigneeIds));
+	if (patch.parentId !== undefined)
+		add('parent', issueLabel(cur.parentId), issueLabel(patch.parentId));
 	if (patch.categoryId !== undefined)
 		add(
 			'category',
@@ -329,7 +448,7 @@ export function createEventsOf(values: CreateValues): IssueEvent[] {
 	return [
 		{
 			kind: 'issue_created',
-			assigneeId: values.assigneeId ?? null,
+			assigneeIds: values.assigneeIds ?? [],
 			priority: values.priority ?? 'none',
 			description: values.description
 		}
@@ -339,9 +458,8 @@ export function createEventsOf(values: CreateValues): IssueEvent[] {
 /** 更新の通知に渡す出来事（1 件・一括で共通）。通知に関わる変更がなければ空 */
 export function updateEventsOf(cur: IssueRow, patch: IssuePatch): IssueEvent[] {
 	const events: IssueEvent[] = [];
-	if (patch.assigneeId !== undefined) {
-		events.push({ kind: 'assignee_changed', assigneeId: patch.assigneeId });
-	}
+	const added = patch.assigneeIds?.filter((id) => !cur.assigneeIds.includes(id)) ?? [];
+	if (added.length > 0) events.push({ kind: 'assignees_added', assigneeIds: added });
 	if (patch.status !== undefined) {
 		events.push({ kind: 'status_changed', from: cur.status, to: patch.status });
 	}

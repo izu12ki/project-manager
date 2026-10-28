@@ -31,7 +31,7 @@ describe('notifications service', () => {
 		guest = await seedUser(db, 'guest', '太郎');
 		await seedProject(db, { key: 'ACME', members: [member, guest] });
 		await createIssue(as(guest), 'ACME', { title: 'ログイン' });
-		await updateIssue(as(member), 'ACME', 1, { assigneeId: guest.id, status: 'in_progress' });
+		await updateIssue(as(member), 'ACME', 1, { assigneeIds: [guest.id], status: 'in_progress' });
 		await addComment(as(member), 'ACME', 1, { body: `${mentionToken(guest)} 確認お願いします` });
 	});
 
@@ -102,8 +102,8 @@ describe('notifications service', () => {
 				'ACME',
 				{
 					items: [
-						{ title: 'X', assigneeId: member.id },
-						{ title: 'Y', assigneeId: member.id }
+						{ title: 'X', assigneeIds: [member.id] },
+						{ title: 'Y', assigneeIds: [member.id] }
 					]
 				},
 				{ dryRun: false }

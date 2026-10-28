@@ -44,7 +44,7 @@ describe('issue-bulk', () => {
 		await createIssue(as(admin), 'ACME', { title: '既存' });
 		const before = await nextNumber();
 		const res = await create([
-			{ title: 'A', status: 'in_progress', assigneeId: member.id },
+			{ title: 'A', status: 'in_progress', assigneeIds: [member.id] },
 			{ title: 'B', dueDate: '2026-12-31' },
 			{ title: 'C' }
 		]);
@@ -58,7 +58,7 @@ describe('issue-bulk', () => {
 			[4, 'C', 'todo']
 		]);
 		const { issue } = await getIssue(as(admin), 'ACME', 2);
-		expect(issue).toMatchObject({ assigneeId: member.id, reporterId: admin.id });
+		expect(issue).toMatchObject({ assigneeIds: [member.id], reporterId: admin.id });
 		// 同じ列の position は既存の末尾から起票順に並ぶ
 		const todo = rows.filter((r) => r.status === 'todo').sort((a, b) => a.number - b.number);
 		const positions = todo.map((r) => r.position);
@@ -90,13 +90,13 @@ describe('issue-bulk', () => {
 		]);
 	});
 
-	it('担当可能でない assigneeId は items.N.assigneeId のエラー', async () => {
+	it('担当可能でない assigneeIds は items.N.assigneeIds のエラー', async () => {
 		const outsider = await seedUser(db, 'member', 'outsider');
-		const err = await create([{ title: 'A' }, { title: 'B', assigneeId: outsider.id }]).catch(
+		const err = await create([{ title: 'A' }, { title: 'B', assigneeIds: [outsider.id] }]).catch(
 			(e) => e
 		);
 		expect(err).toMatchObject({ code: 'validation' });
-		expect(err.fields).toEqual({ 'items.1.assigneeId': ['このユーザーは担当者にできません'] });
+		expect(err.fields).toEqual({ 'items.1.assigneeIds': ['このユーザーは担当者にできません'] });
 	});
 
 	it('101 件は validation（1 回に 100 件までです）', async () => {
@@ -171,9 +171,9 @@ describe('issue-bulk', () => {
 	});
 
 	it('一括更新: ステータスと担当者の変更は表示名で履歴に残り、列の末尾に入る。変化のない要素は履歴を残さない', async () => {
-		await create([{ title: 'A', assigneeId: member.id }, { title: 'B' }, { title: 'C' }]);
+		await create([{ title: 'A', assigneeIds: [member.id] }, { title: 'B' }, { title: 'C' }]);
 		await update([
-			{ number: 1, status: 'done', assigneeId: '' },
+			{ number: 1, status: 'done', assigneeIds: [] },
 			{ number: 2, status: 'done' },
 			{ number: 3, title: 'C' }
 		]);
@@ -190,12 +190,28 @@ describe('issue-bulk', () => {
 	});
 
 	it('一括更新: 無効化された元の担当者も履歴には名前で残る', async () => {
-		await create([{ title: 'A', assigneeId: member.id }]);
+		await create([{ title: 'A', assigneeIds: [member.id] }]);
 		await db.update(userTable).set({ disabledAt: new Date() }).where(eq(userTable.id, member.id));
-		await update([{ number: 1, assigneeId: '' }]);
+		await update([{ number: 1, assigneeIds: [] }]);
 		expect((await listIssueChanges(as(admin), 'ACME', 1))[0].changes).toEqual([
 			{ field: 'assignee', from: 'member', to: null }
 		]);
+	});
+
+	it('一括更新: 要素どうしの組み合わせで子課題の子課題になるなら validation で、何も書かない', async () => {
+		await create([{ title: 'A' }, { title: 'B' }, { title: 'C' }]);
+		await expect(
+			update([
+				{ number: 2, parentNumber: 1 },
+				{ number: 3, parentNumber: 2 }
+			])
+		).rejects.toMatchObject({ code: 'validation' });
+		expect((await listIssues(as(admin), 'ACME')).every((i) => i.parentNumber === null)).toBe(true);
+		await update([
+			{ number: 2, parentNumber: 1 },
+			{ number: 3, parentNumber: 1 }
+		]);
+		expect((await listIssues(as(admin), 'ACME')).map((i) => i.parentNumber)).toEqual([1, 1, null]);
 	});
 
 	it('一括更新: 開始日と期限日の前後は現在値と合わせて要素ごとに確かめる', async () => {
@@ -263,7 +279,7 @@ describe('issue-bulk', () => {
 
 		it('30 件を同じ担当者に一括起票すると、その人の通知は bulk_assigned 1 件で count = 30。自分自身には届かない', async () => {
 			await create(
-				Array.from({ length: 30 }, (_, i) => ({ title: `T${i}`, assigneeId: member.id }))
+				Array.from({ length: 30 }, (_, i) => ({ title: `T${i}`, assigneeIds: [member.id] }))
 			);
 			expect(await notes()).toEqual([
 				{ userId: member.id, type: 'bulk_assigned', count: 30, issueId: null }
@@ -275,7 +291,7 @@ describe('issue-bulk', () => {
 			await create([
 				{ title: 'A', description: desc },
 				{ title: 'B', description: desc },
-				{ title: 'C', description: desc, assigneeId: member.id }
+				{ title: 'C', description: desc, assigneeIds: [member.id] }
 			]);
 			expect(await notes()).toEqual([
 				{ userId: member.id, type: 'bulk_assigned', count: 1, issueId: null }
@@ -310,7 +326,7 @@ describe('issue-bulk', () => {
 			await createIssue(as(member), 'ACME', { title: 'B' });
 			await update([
 				{ number: 1, status: 'done' },
-				{ number: 2, assigneeId: member.id }
+				{ number: 2, assigneeIds: [member.id] }
 			]);
 			expect(await notes()).toEqual([
 				{ userId: member.id, type: 'bulk_assigned', count: 1, issueId: null }
@@ -318,7 +334,7 @@ describe('issue-bulk', () => {
 		});
 
 		it('dryRun では通知しない', async () => {
-			await create([{ title: 'A', assigneeId: member.id }], true);
+			await create([{ title: 'A', assigneeIds: [member.id] }], true);
 			expect(await notes()).toEqual([]);
 		});
 
@@ -328,7 +344,7 @@ describe('issue-bulk', () => {
 				.insert(userIntegration)
 				.values({ userId: member.id, provider: 'slack', externalId: 'U_MEMBER' });
 			await create(
-				Array.from({ length: 30 }, (_, i) => ({ title: `T${i}`, assigneeId: member.id }))
+				Array.from({ length: 30 }, (_, i) => ({ title: `T${i}`, assigneeIds: [member.id] }))
 			);
 			await Promise.all(base.pending);
 			const posts = base.fetched.filter((f) => f.url.endsWith('chat.postMessage'));
@@ -341,7 +357,7 @@ describe('issue-bulk', () => {
 		});
 
 		it('1 件 API（createIssue）の通知は従来どおり assigned', async () => {
-			await createIssue(as(admin), 'ACME', { title: 'A', assigneeId: member.id });
+			await createIssue(as(admin), 'ACME', { title: 'A', assigneeIds: [member.id] });
 			const rows = await notes();
 			expect(rows).toHaveLength(1);
 			expect(rows[0]).toMatchObject({ userId: member.id, type: 'assigned', count: null });

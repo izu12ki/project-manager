@@ -27,14 +27,21 @@ describe('services → notify', () => {
 	});
 
 	it('起票時に担当者を指定すると assigned', async () => {
-		await createIssue(as(member), 'ACME', { title: 'A', assigneeId: guest.id });
+		await createIssue(as(member), 'ACME', { title: 'A', assigneeIds: [guest.id] });
 		expect(await got()).toEqual(['guest:assigned']);
 	});
 
 	it('担当とステータスを同時に変えると、新担当は assigned、他の関係者は status_changed', async () => {
 		await createIssue(as(guest), 'ACME', { title: 'A' });
-		await updateIssue(as(member), 'ACME', 1, { assigneeId: other.id, status: 'in_progress' });
+		await updateIssue(as(member), 'ACME', 1, { assigneeIds: [other.id], status: 'in_progress' });
 		expect(await got()).toEqual(['guest:status_changed', 'other:assigned']);
+	});
+
+	it('担当者を足したときは、新しく担当になった人だけ assigned', async () => {
+		await createIssue(as(member), 'ACME', { title: 'A', assigneeIds: [guest.id] });
+		await db.delete(notification);
+		await updateIssue(as(member), 'ACME', 1, { assigneeIds: [guest.id, other.id] });
+		expect(await got()).toEqual(['other:assigned']);
 	});
 
 	it('タイトルだけの変更では通知しない', async () => {

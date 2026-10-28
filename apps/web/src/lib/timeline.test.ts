@@ -241,8 +241,7 @@ describe('groupItems', () => {
 		status: 'todo',
 		startDate,
 		dueDate: null,
-		assigneeId: null,
-		assigneeName: null,
+		assignees: [],
 		categoryId: null,
 		milestoneId: null,
 		milestoneName: null,
@@ -251,16 +250,14 @@ describe('groupItems', () => {
 	const items = [
 		issue(1, '2026-10-05', { milestoneId: 'm2', milestoneName: 'B' }),
 		issue(2, '2026-10-03', {
-			assigneeId: 'u2',
-			assigneeName: 'Yamada',
+			assignees: [{ id: 'u2', name: 'Yamada' }],
 			milestoneId: 'm1',
 			milestoneName: 'A',
 			status: 'done'
 		}),
-		issue(3, '2026-10-01', { assigneeId: 'u1', assigneeName: 'Abe' }),
+		issue(3, '2026-10-01', { assignees: [{ id: 'u1', name: 'Abe' }] }),
 		issue(4, '2026-10-02', {
-			assigneeId: 'u2',
-			assigneeName: 'Yamada',
+			assignees: [{ id: 'u2', name: 'Yamada' }],
 			milestoneId: 'm1',
 			milestoneName: 'A'
 		})
@@ -276,6 +273,20 @@ describe('groupItems', () => {
 		expect(summary(groupItems(items, 'assignee', milestones))).toEqual([
 			['Abe', 0, 1, [3]],
 			['Yamada', 1, 2, [4, 2]],
+			['未割当', 0, 1, [1]]
+		]);
+	});
+
+	it('担当者別: 担当者が複数いる課題はそれぞれのグループに出る', () => {
+		const shared = issue(5, '2026-10-04', {
+			assignees: [
+				{ id: 'u2', name: 'Yamada' },
+				{ id: 'u1', name: 'Abe' }
+			]
+		});
+		expect(summary(groupItems([...items, shared], 'assignee', milestones))).toEqual([
+			['Abe', 0, 2, [3, 5]],
+			['Yamada', 1, 3, [4, 2, 5]],
 			['未割当', 0, 1, [1]]
 		]);
 	});
@@ -303,16 +314,20 @@ describe('filterItems', () => {
 		status: 'todo',
 		startDate: '2026-10-05',
 		dueDate: null,
-		assigneeId: null,
-		assigneeName: null,
+		assignees: [],
 		categoryId: null,
 		milestoneId: null,
 		milestoneName: null,
 		...opts
 	});
 	const items = [
-		issue(1, { status: 'done', assigneeId: 'u1', categoryId: 'c1', milestoneId: 'm1' }),
-		issue(2, { status: 'in_progress', assigneeId: 'u1' }),
+		issue(1, {
+			status: 'done',
+			assignees: [{ id: 'u1', name: 'u1' }],
+			categoryId: 'c1',
+			milestoneId: 'm1'
+		}),
+		issue(2, { status: 'in_progress', assignees: [{ id: 'u1', name: 'u1' }] }),
 		issue(3, { status: 'todo', categoryId: 'c2', milestoneId: 'm1' })
 	];
 	const all: TimelineFilters = { status: '', assignee: '', category: '', milestone: '' };

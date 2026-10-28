@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
 import { authorize } from '../authz';
@@ -201,8 +201,15 @@ export async function removeMember(ctx: AppContext, key: string, userId: string)
 			.where(and(eq(projectMember.projectId, p.id), eq(projectMember.userId, userId))),
 		ctx.db
 			.update(issue)
-			.set({ assigneeId: null })
-			.where(and(eq(issue.projectId, p.id), eq(issue.assigneeId, userId)))
+			.set({
+				assigneeIds: sql`(select json_group_array(value) from json_each(${issue.assigneeIds}) where value != ${userId})`
+			})
+			.where(
+				and(
+					eq(issue.projectId, p.id),
+					sql`exists (select 1 from json_each(${issue.assigneeIds}) where value = ${userId})`
+				)
+			)
 	]);
 }
 

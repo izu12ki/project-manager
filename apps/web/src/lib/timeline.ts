@@ -126,7 +126,10 @@ export function filterItems<T extends TimelineIssue>(items: T[], f: TimelineFilt
 	return items.filter(
 		(i) =>
 			(!f.status || (f.status === 'open' ? i.status !== DONE_STATUS : i.status === f.status)) &&
-			matches(i.assigneeId, f.assignee) &&
+			(!f.assignee ||
+				(f.assignee === 'none'
+					? i.assignees.length === 0
+					: i.assignees.some((u) => u.id === f.assignee))) &&
 			matches(i.categoryId, f.category) &&
 			matches(i.milestoneId, f.milestone)
 	);
@@ -211,8 +214,7 @@ export interface TimelineIssue extends Dated {
 	id: string;
 	number: number;
 	status: Status;
-	assigneeId: string | null;
-	assigneeName: string | null;
+	assignees: { id: string; name: string }[];
 	categoryId: string | null;
 	milestoneId: string | null;
 	milestoneName: string | null;
@@ -240,7 +242,10 @@ const byStart = (a: TimelineIssue, b: TimelineIssue) => {
 	return x < y ? -1 : x > y ? 1 : a.number - b.number;
 };
 
-/** 担当者別・マイルストーン別・なし。「未割当」「マイルストーンなし」は最後。課題のないグループは出さない */
+/**
+ * 担当者別・マイルストーン別・なし。「未割当」「マイルストーンなし」は最後。課題のないグループは出さない。
+ * 担当者が複数いる課題は、それぞれの担当者のグループに出す
+ */
 export function groupItems<T extends TimelineIssue>(
 	items: T[],
 	by: GroupBy,
@@ -263,16 +268,22 @@ export function groupItems<T extends TimelineIssue>(
 	if (by === 'none') return sorted.length ? [make('all', null, null, sorted)] : [];
 
 	const buckets = new Map<string, T[]>();
+	const names = new Map<string, string>();
 	for (const i of sorted) {
-		const k = (by === 'assignee' ? i.assigneeId : i.milestoneId) ?? 'none';
-		buckets.set(k, [...(buckets.get(k) ?? []), i]);
+		const keys =
+			by === 'assignee'
+				? i.assignees.length > 0
+					? i.assignees.map((u) => (names.set(u.id, u.name), u.id))
+					: ['none']
+				: [i.milestoneId ?? 'none'];
+		for (const k of keys) buckets.set(k, [...(buckets.get(k) ?? []), i]);
 	}
 	const release = new Map(milestones.map((m) => [m.id, m.releaseDate]));
 	const groups = [...buckets].map(([k, list]) => {
 		if (k === 'none') {
 			return make(k, by === 'assignee' ? '未割当' : 'マイルストーンなし', null, list);
 		}
-		const label = (by === 'assignee' ? list[0].assigneeName : list[0].milestoneName) ?? '';
+		const label = (by === 'assignee' ? names.get(k) : list[0].milestoneName) ?? '';
 		return make(k, label, by === 'milestone' ? (release.get(k) ?? null) : null, list);
 	});
 	return groups.sort((a, b) => {

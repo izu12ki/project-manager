@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Calendar, CircleAlert, Flag, X } from '@lucide/svelte';
+	import { Calendar, CircleAlert, CornerDownRight, Flag, X } from '@lucide/svelte';
 	import { page } from '$app/state';
 	import { dndzone, type DndEvent } from 'svelte-dnd-action';
 	import IssueTypeTag from '$lib/components/IssueTypeTag.svelte';
@@ -176,6 +176,13 @@
 									<span class="mono text-xs text-muted-foreground"
 										>{data.project.key}-{card.number}</span
 									>
+									{#if card.parentNumber !== null}
+										<span
+											class="flex items-center gap-0.5 text-xs text-muted-foreground"
+											title={`${data.project.key}-${card.parentNumber} の子課題`}
+											><CornerDownRight size={12} />{card.parentNumber}</span
+										>
+									{/if}
 								</span>
 								{#if card.priority !== 'none'}<PriorityPill priority={card.priority} small />{/if}
 							</div>
@@ -194,10 +201,24 @@
 							{/if}
 							<div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
 								<span class="flex min-w-0 items-center gap-1.5">
-									<span class="avatar" style="--size: 20px" style:--c={colorFor(card.assigneeName)}
-										>{card.assigneeName?.[0] ?? '–'}</span
+									{#if card.assignees.length === 0}
+										<span class="avatar" style="--size: 20px">–</span>
+									{:else}
+										<span class="avatars">
+											{#each card.assignees.slice(0, 3) as u (u.id)}
+												<span class="avatar" style="--size: 20px" style:--c={colorFor(u.name)}
+													>{u.name[0]}</span
+												>
+											{/each}
+										</span>
+									{/if}
+									<span class="truncate"
+										>{card.assignees.length === 0
+											? '未割当'
+											: card.assignees.length === 1
+												? card.assignees[0].name
+												: `${card.assignees[0].name} 他${card.assignees.length - 1}名`}</span
 									>
-									<span class="truncate">{card.assigneeName ?? '未割当'}</span>
 								</span>
 								<span
 									class="flex shrink-0 items-center gap-1"
@@ -321,5 +342,13 @@
 		padding: 0 6px;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-pill);
+	}
+	.avatars {
+		display: flex;
+		flex-shrink: 0;
+	}
+	.avatars .avatar + .avatar {
+		margin-left: -6px;
+		box-shadow: 0 0 0 2px var(--card);
 	}
 </style>

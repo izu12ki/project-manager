@@ -3,13 +3,16 @@
 	import { enhance } from '$app/forms';
 	import { UserRoundCheck } from '@lucide/svelte';
 	import FormAlert from '$lib/components/FormAlert.svelte';
+	import MultiSelect from '$lib/components/MultiSelect.svelte';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
 	import { PRIORITIES, PRIORITY_LABEL, milestoneLabel } from '$lib/labels';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
-	const cancelHref = $derived(`/projects/${data.project.key}`);
-	let assigneeId = $state('');
+	const cancelHref = $derived(
+		`/projects/${data.project.key}${data.parent ? `/issues/${data.parent.number}` : ''}`
+	);
+	let assigneeIds = $state<string[]>([]);
 	const meAssignable = $derived(data.assignees.some((u) => u.id === data.user?.id));
 	const templateOf = (id: string | undefined) =>
 		data.issueTypes.find((t) => t.id === id)?.template ?? '';
@@ -36,7 +39,14 @@
 
 <form method="POST" use:enhance class="grid gap-3">
 	<div class="flex flex-wrap items-center justify-between gap-3">
-		<h1 class="m-0 text-lg leading-snug font-bold">新規課題</h1>
+		<h1 class="m-0 text-lg leading-snug font-bold">
+			{data.parent ? '子課題を追加' : '新規課題'}
+			{#if data.parent}
+				<span class="block text-[13px] font-normal text-muted-foreground"
+					>親課題: {data.project.key}-{data.parent.number} {data.parent.title}</span
+				>
+			{/if}
+		</h1>
 		{@render actions()}
 	</div>
 	{#if form?.message}<FormAlert message={form.message} />{/if}
@@ -114,19 +124,22 @@
 			<div class="prop-list prop-list-wide">
 				{#if data.canAssign}
 					<div class="prop-row">
-						<label for="issue-assignee">担当者</label>
+						<span class="prop-label" id="issue-assignee-label">担当者</span>
 						<div class="flex flex-wrap items-center gap-2">
-							<select class="select" id="issue-assignee" name="assigneeId" bind:value={assigneeId}>
-								<option value="">未割当</option>
-								{#each data.assignees as u (u.id)}
-									<option value={u.id}>{u.name}</option>
-								{/each}
-							</select>
-							{#if meAssignable}
+							<div class="assignees">
+								<MultiSelect
+									id="issue-assignee"
+									name="assigneeIds"
+									options={data.assignees.map((u) => ({ value: u.id, label: u.name }))}
+									bind:selected={assigneeIds}
+									placeholder="未割当"
+								/>
+							</div>
+							{#if meAssignable && data.user && !assigneeIds.includes(data.user.id)}
 								<button
 									type="button"
 									class="assign-me"
-									onclick={() => (assigneeId = data.user?.id ?? '')}
+									onclick={() => data.user && (assigneeIds = [...assigneeIds, data.user.id])}
 								>
 									<UserRoundCheck size={14} />私が担当
 								</button>
@@ -134,6 +147,25 @@
 						</div>
 					</div>
 				{/if}
+				<div class="prop-row">
+					<label for="issue-parent">親課題</label>
+					<div>
+						<input
+							class="input parent"
+							id="issue-parent"
+							name="parentNumber"
+							list="issue-parent-options"
+							inputmode="numeric"
+							placeholder="課題番号"
+							value={data.parent ? String(data.parent.number) : ''}
+						/>
+						<datalist id="issue-parent-options">
+							{#each data.parentCandidates as c (c.number)}
+								<option value={String(c.number)}>{data.project.key}-{c.number} {c.title}</option>
+							{/each}
+						</datalist>
+					</div>
+				</div>
 				<div class="prop-row">
 					<label for="issue-milestone">マイルストーン</label>
 					<select class="select" id="issue-milestone" name="milestoneId">
@@ -175,6 +207,13 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
 		column-gap: 40px;
+	}
+	.assignees {
+		width: 240px;
+		max-width: 100%;
+	}
+	.parent {
+		max-width: 160px;
 	}
 	.assign-me {
 		display: inline-flex;

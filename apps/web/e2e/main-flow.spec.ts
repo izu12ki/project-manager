@@ -234,13 +234,15 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 		'フロントエンド'
 	);
 	await expect(page.getByLabel('種別').locator('option:checked')).toHaveText('バグ');
-	await page.getByLabel('担当者').selectOption({ label: '顧客 太郎' });
+	const assignee = page.locator('summary', { has: page.locator('#issue-assignee-page-value') });
+	await assignee.click();
+	await page.getByRole('checkbox', { name: '顧客 太郎' }).check();
 	await page.getByLabel('マイルストーン').selectOption({ label: 'v1.0（11/30 リリース）' });
 	await page.getByLabel('完了理由').selectOption({ label: '対応済み' });
 	await page.getByRole('button', { name: '保存' }).click();
 	await expect(page.getByText('保存しました')).toBeVisible();
 	await page.reload();
-	await expect(page.getByLabel('担当者').locator('option:checked')).toHaveText('顧客 太郎');
+	await expect(assignee).toContainText('顧客 太郎');
 	await expect(page.getByLabel('完了理由').locator('option:checked')).toHaveText('対応済み');
 	await expect(page.getByLabel('マイルストーン').locator('option:checked')).toHaveText(
 		'v1.0（11/30 リリース）'
@@ -629,6 +631,19 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(
 		page.getByLabel('マイルストーン').locator('option', { hasText: 'v1.0' })
 	).toHaveCount(0);
+
+	// 11b. 管理者が課題から子課題を起票し、親子が相互に表示される
+	await page.goto('/projects/ACME/issues/1');
+	await page.getByRole('link', { name: '子課題を追加' }).click();
+	await expect(page.getByLabel('親課題')).toHaveValue('1');
+	await page.getByLabel('タイトル').fill('ログイン画面の文言修正');
+	await page.getByRole('button', { name: '起票する' }).first().click();
+	await expect(page).toHaveURL(/\/projects\/ACME\/issues\/\d+$/);
+	await expect(page.getByRole('link', { name: /ACME-1/ })).toBeVisible();
+	await page.goto('/projects/ACME/issues/1');
+	const children = page.getByRole('region', { name: '子課題' });
+	await expect(children.getByRole('link', { name: 'ログイン画面の文言修正' })).toBeVisible();
+	await expect(children.getByText('0 / 1 完了')).toBeVisible();
 
 	// 12. 個人設定の Slack 通知（E2E 環境はトークン未設定）
 	await page.goto('/account');

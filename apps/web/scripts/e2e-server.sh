@@ -34,7 +34,8 @@ for i in $(seq 1 40); do
 	sleep 0.5
 done
 
-pnpm build
+# pnpm build の wrangler types は型の生成だけでビルド結果は変わらないので省く（CI で 1 分以上止まることがあった）
+pnpm exec vite build
 pnpm exec wrangler dev .svelte-kit/cloudflare/_worker.js --port 4173 --env-file "$ENV_FILE" &
 WRANGLER_PID=$!
 trap 'kill $WRANGLER_PID $TURSO_PID 2>/dev/null || true; rm -f "$ENV_FILE"' EXIT

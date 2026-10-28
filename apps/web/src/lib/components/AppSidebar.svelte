@@ -8,6 +8,7 @@
 		FolderKanban,
 		LayoutGrid,
 		LogOut,
+		Smile,
 		Users
 	} from '@lucide/svelte';
 	import { ROLE_LABEL, colorFor, projectColor, projectIcon } from '$lib/labels';
@@ -91,6 +92,9 @@
 						>{unreadLabel}</span
 					>
 				{/if}
+			</a>
+			<a href="/emoji" class="item row" aria-current={path === '/emoji' ? 'page' : undefined}>
+				<Smile size={16} class="muted-icon" />カスタム絵文字
 			</a>
 		</div>
 		<div class="group">

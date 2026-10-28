@@ -341,6 +341,22 @@ export const commentReaction = sqliteTable(
 	(t) => [primaryKey({ columns: [t.commentId, t.userId, t.emoji] })]
 );
 
+/** ワークスペース共通のカスタム絵文字。リアクションには「:name:」で保存する */
+export const customEmoji = sqliteTable(
+	'custom_emoji',
+	{
+		id: text().primaryKey(),
+		name: text().notNull(),
+		creatorId: text('creator_id')
+			.notNull()
+			.references(() => user.id),
+		contentType: text('content_type').notNull(),
+		r2Key: text('r2_key').notNull(),
+		createdAt: createdAt()
+	},
+	(t) => [uniqueIndex('custom_emoji_name_uq').on(t.name)]
+);
+
 /** 課題の編集履歴。1 回の保存で 1 行 */
 export const issueChange = sqliteTable(
 	'issue_change',

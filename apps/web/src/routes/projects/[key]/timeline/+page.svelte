@@ -104,7 +104,7 @@
 	<div class="grid gap-3">
 		<div class="flex flex-wrap items-end gap-3">
 			<div class="field w-40 gap-1.5">
-				<label class="label text-[13px]" for="tl-status">状態</label>
+				<label class="label text-[0.8125rem]" for="tl-status">状態</label>
 				<select
 					class="select"
 					id="tl-status"
@@ -120,7 +120,7 @@
 			</div>
 			{#if timeline.categories.length > 0}
 				<div class="field w-40 gap-1.5">
-					<label class="label text-[13px]" for="tl-category">カテゴリー</label>
+					<label class="label text-[0.8125rem]" for="tl-category">カテゴリー</label>
 					<select
 						class="select"
 						id="tl-category"
@@ -137,7 +137,7 @@
 			{/if}
 			{#if timeline.milestones.length > 0}
 				<div class="field w-48 gap-1.5">
-					<label class="label text-[13px]" for="tl-milestone">マイルストーン</label>
+					<label class="label text-[0.8125rem]" for="tl-milestone">マイルストーン</label>
 					<select
 						class="select"
 						id="tl-milestone"
@@ -153,7 +153,7 @@
 				</div>
 			{/if}
 			<div class="field w-40 gap-1.5">
-				<label class="label text-[13px]" for="tl-assignee">担当者</label>
+				<label class="label text-[0.8125rem]" for="tl-assignee">担当者</label>
 				<select
 					class="select"
 					id="tl-assignee"
@@ -171,7 +171,7 @@
 
 		<div class="flex flex-wrap items-end gap-3">
 			<div class="field gap-1.5">
-				<label class="label text-[13px]" for="tl-from">開始日</label>
+				<label class="label text-[0.8125rem]" for="tl-from">開始日</label>
 				<div class="flex items-center gap-1">
 					<input
 						class="input w-40"
@@ -200,7 +200,7 @@
 				</div>
 			</div>
 			<div class="field w-24 gap-1.5">
-				<label class="label text-[13px]" for="tl-scale">スケール</label>
+				<label class="label text-[0.8125rem]" for="tl-scale">スケール</label>
 				<select
 					class="select"
 					id="tl-scale"
@@ -214,7 +214,7 @@
 				</select>
 			</div>
 			<div class="field w-40 gap-1.5">
-				<label class="label text-[13px]" for="tl-group">グルーピング</label>
+				<label class="label text-[0.8125rem]" for="tl-group">グルーピング</label>
 				<select
 					class="select"
 					id="tl-group"

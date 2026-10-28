@@ -1,14 +1,21 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { enhance } from '$app/forms';
 	import { Check, Copy } from '@lucide/svelte';
 	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
 	import FormAlert from '$lib/components/FormAlert.svelte';
 	import PasswordInput from '$lib/components/PasswordInput.svelte';
+	import { FONT_SIZES, fontSize } from '$lib/font-size.svelte';
 	import { formatDate, formatDateTime } from '$lib/labels';
 	import { toast } from '$lib/toast.svelte';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
+
+	onMount(() => fontSize.init());
+
+	// 選択肢の見本「あ」は、今の設定に関係なく大きさの違いがわかるように見せる
+	const SAMPLE_PX = { normal: 15, large: 18, xlarge: 21 } as const;
 
 	$effect(() => {
 		if (form?.nameSaved) toast.success('保存しました');
@@ -71,6 +78,28 @@
 		</div>
 		<div><button type="submit" class="btn btn-primary">保存</button></div>
 	</form>
+
+	<div class="card">
+		<div class="card-head">
+			<h2 class="card-title" id="font-size-title">文字の大きさ</h2>
+			<p class="card-desc">画面全体の文字を大きくします。この端末のブラウザに保存されます</p>
+		</div>
+		<div class="sizes" role="radiogroup" aria-labelledby="font-size-title">
+			{#each FONT_SIZES as s (s.value)}
+				<label class="size">
+					<input
+						type="radio"
+						name="font-size"
+						value={s.value}
+						checked={fontSize.current === s.value}
+						onchange={() => fontSize.set(s.value)}
+					/>
+					<span class="sample" style:font-size="{SAMPLE_PX[s.value]}px">あ</span>
+					{s.label}
+				</label>
+			{/each}
+		</div>
+	</div>
 
 	<form method="POST" action="?/changePassword" use:enhance class="card">
 		<div class="card-head">
@@ -209,3 +238,48 @@
 		</div>
 	{/if}
 </section>
+
+<style>
+	.sizes {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+	.size {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		position: relative;
+		min-width: 6rem;
+		height: 2.5rem;
+		padding: 0 14px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--card);
+		cursor: pointer;
+	}
+	.size:hover {
+		background: var(--accent);
+	}
+	.size:has(:checked) {
+		border-color: var(--primary);
+		background: var(--primary-soft);
+		color: var(--primary-ink);
+		font-weight: 700;
+	}
+	.size:has(:focus-visible) {
+		outline: 2px solid var(--ring);
+		outline-offset: 2px;
+	}
+	.size input {
+		position: absolute;
+		opacity: 0;
+		pointer-events: none;
+	}
+	.sample {
+		width: 1.5em;
+		text-align: center;
+		font-weight: 700;
+		line-height: 1;
+	}
+</style>

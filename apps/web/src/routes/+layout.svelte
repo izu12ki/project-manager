@@ -220,7 +220,7 @@
 		justify-content: center;
 		gap: 8px;
 		font-weight: 600;
-		font-size: 15px;
+		font-size: 0.9375rem;
 	}
 	.auth-logo {
 		width: 28px;
@@ -242,7 +242,7 @@
 	}
 	.auth-inner :global(.auth-head h1) {
 		margin: 0;
-		font-size: 20px;
+		font-size: 1.25rem;
 		font-weight: 600;
 	}
 	.auth-inner :global(.auth-head p) {

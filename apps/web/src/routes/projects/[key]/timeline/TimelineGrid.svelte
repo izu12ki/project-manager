@@ -560,7 +560,7 @@
 		padding: 0 8px;
 		background: var(--card);
 		border-right: 1px solid var(--border);
-		font-size: 13px;
+		font-size: 0.8125rem;
 	}
 	.track {
 		position: relative;
@@ -651,13 +651,13 @@
 	.count {
 		margin-left: auto;
 		flex-shrink: 0;
-		font-size: 12px;
+		font-size: 0.75rem;
 		font-weight: 400;
 		color: var(--muted-foreground);
 	}
 	.key {
 		flex-shrink: 0;
-		font-size: 12px;
+		font-size: 0.75rem;
 		color: var(--muted-foreground);
 	}
 	.open {
@@ -698,7 +698,7 @@
 		position: absolute;
 		top: 2px;
 		left: 4px;
-		font-size: 11px;
+		font-size: 0.6875rem;
 		white-space: nowrap;
 		color: var(--c-amber);
 	}
@@ -715,7 +715,7 @@
 		border-radius: var(--radius-sm);
 		background: color-mix(in oklch, var(--c) 28%, var(--card));
 		color: var(--foreground);
-		font-size: 11px;
+		font-size: 0.6875rem;
 		white-space: nowrap;
 		user-select: none;
 	}
@@ -753,7 +753,7 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		font-size: 14px;
+		font-size: 0.875rem;
 		font-weight: 700;
 	}
 	.unscheduled ul {
@@ -774,12 +774,12 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm);
 		background: var(--card);
-		font-size: 13px;
+		font-size: 0.8125rem;
 		user-select: none;
 	}
 	.chip .mono {
 		flex-shrink: 0;
-		font-size: 12px;
+		font-size: 0.75rem;
 		color: var(--muted-foreground);
 	}
 	.bar.editable {
@@ -812,7 +812,7 @@
 		border-radius: 3px;
 		background: var(--foreground);
 		color: var(--card);
-		font-size: 11px;
+		font-size: 0.6875rem;
 		white-space: nowrap;
 		pointer-events: none;
 	}
@@ -827,7 +827,7 @@
 		border: 1px solid var(--primary);
 		border-radius: var(--radius-sm);
 		background: var(--card);
-		font-size: 12px;
+		font-size: 0.75rem;
 		pointer-events: none;
 	}
 	.unscheduled h2 .count {

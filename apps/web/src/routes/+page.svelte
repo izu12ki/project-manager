@@ -53,7 +53,7 @@
 								<p class="desc">{plain(p.description)}</p>
 							{/if}
 						</div>
-						<div class="mt-auto flex justify-between gap-2 text-[13px] text-muted-foreground">
+						<div class="mt-auto flex justify-between gap-2 text-[0.8125rem] text-muted-foreground">
 							<span>未完了の課題 {p.openCount} 件</span>
 							<span>更新 {formatDate(p.updatedAt)}</span>
 						</div>
@@ -84,7 +84,9 @@
 									<span class="tag">アーカイブ</span>
 								</div>
 								<div class="font-semibold text-foreground">{p.name}</div>
-								{#if p.description}<div class="desc text-[13px]">{plain(p.description)}</div>{/if}
+								{#if p.description}<div class="desc text-[0.8125rem]">
+										{plain(p.description)}
+									</div>{/if}
 							</a>
 						</li>
 					{/each}
@@ -140,7 +142,7 @@
 		padding: 0 6px;
 		border-radius: var(--radius-pill);
 		background: var(--background);
-		font-size: 11px;
+		font-size: 0.6875rem;
 		font-weight: 500;
 	}
 </style>

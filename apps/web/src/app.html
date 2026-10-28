@@ -5,7 +5,7 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
 		<script>
-			// 描画前にテーマを確定させてちらつきを防ぐ（保存値がなければ OS 設定に従う）
+			// 描画前にテーマと文字の大きさを確定させてちらつきを防ぐ（テーマの保存値がなければ OS 設定に従う）
 			(function () {
 				var t = null;
 				try {
@@ -14,6 +14,11 @@
 				if (t !== 'light' && t !== 'dark')
 					t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 				document.documentElement.dataset.theme = t;
+				var f = null;
+				try {
+					f = localStorage.getItem('font-size');
+				} catch (e) {}
+				if (f === 'large' || f === 'xlarge') document.documentElement.dataset.fontSize = f;
 			})();
 		</script>
 		<link rel="preconnect" href="https://fonts.googleapis.com" />

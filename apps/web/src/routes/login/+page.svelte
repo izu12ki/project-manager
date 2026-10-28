@@ -30,7 +30,7 @@
 		<div class="field">
 			<div class="flex items-center justify-between gap-2">
 				<label class="label" for="password">パスワード</label>
-				<a href="/forgot-password" class="link text-[13px]">パスワードをお忘れですか？</a>
+				<a href="/forgot-password" class="link text-[0.8125rem]">パスワードをお忘れですか？</a>
 			</div>
 			<PasswordInput id="password" name="password" autocomplete="current-password" required />
 		</div>

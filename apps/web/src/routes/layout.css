@@ -133,12 +133,19 @@
 	html {
 		background: var(--background);
 	}
+	/* 文字の大きさ（アカウント設定）。サイズは rem で書いてあるので、ルートを変えれば全体が拡大される */
+	html[data-font-size='large'] {
+		font-size: 112.5%;
+	}
+	html[data-font-size='xlarge'] {
+		font-size: 125%;
+	}
 	body {
 		margin: 0;
 		background: var(--background);
 		color: var(--foreground);
 		font-family: var(--font-sans);
-		font-size: 14px;
+		font-size: 0.875rem;
 		line-height: 1.5;
 		-webkit-font-smoothing: antialiased;
 	}
@@ -167,7 +174,7 @@
 @layer components {
 	.page-title {
 		margin: 0;
-		font-size: 20px;
+		font-size: 1.25rem;
 		font-weight: 700;
 		line-height: 1.4;
 		text-wrap: pretty;
@@ -186,7 +193,7 @@
 		align-items: center;
 		justify-content: center;
 		gap: 8px;
-		height: 32px;
+		height: 2rem;
 		padding: 0 16px;
 		border-radius: var(--radius-sm);
 		border: 1px solid transparent;
@@ -270,15 +277,15 @@
 		filter: brightness(1.12);
 	}
 	.btn-sm {
-		height: 32px;
+		height: 2rem;
 		padding: 0 12px;
-		font-size: 13px;
+		font-size: 0.8125rem;
 	}
 	.btn-xs {
-		height: 28px;
+		height: 1.75rem;
 		padding: 0 10px;
 		border-radius: var(--radius-sm);
-		font-size: 13px;
+		font-size: 0.8125rem;
 	}
 	.icon-btn {
 		width: 28px;
@@ -328,12 +335,12 @@
 	}
 	.hint {
 		margin: 0;
-		font-size: 13px;
+		font-size: 0.8125rem;
 		color: var(--muted-foreground);
 	}
 	.field-error {
 		margin: 0;
-		font-size: 13px;
+		font-size: 0.8125rem;
 		color: var(--destructive);
 	}
 	.input,
@@ -341,7 +348,7 @@
 	.textarea {
 		width: 100%;
 		min-width: 0;
-		height: 32px;
+		height: 2rem;
 		padding: 0 12px;
 		border-radius: var(--radius-sm);
 		border: 1px solid var(--input);
@@ -415,7 +422,7 @@
 	}
 	.card-title {
 		margin: 0;
-		font-size: 16px;
+		font-size: 1rem;
 		font-weight: 700;
 	}
 	.card-desc {
@@ -445,7 +452,7 @@
 		height: 20px;
 	}
 	.empty-title {
-		font-size: 16px;
+		font-size: 1rem;
 		font-weight: 700;
 	}
 	.alert {
@@ -477,7 +484,7 @@
 	}
 	.prop-row {
 		display: grid;
-		grid-template-columns: 84px minmax(0, 1fr);
+		grid-template-columns: 7.5rem minmax(0, 1fr);
 		align-items: center;
 		gap: 12px;
 		padding: 10px 0;
@@ -485,13 +492,23 @@
 	}
 	.prop-row > label,
 	.prop-label {
+		display: flex;
+		align-items: center;
+		gap: 6px;
 		font-weight: 500;
 		color: var(--muted-foreground);
 	}
+	.prop-row > label > svg,
+	.prop-label > svg {
+		width: 1em;
+		height: 1em;
+		flex-shrink: 0;
+		opacity: 0.8;
+	}
 	/* 起票フォーム用の広い版 */
 	.prop-list-wide .prop-row {
-		grid-template-columns: clamp(88px, 30%, 180px) minmax(0, 1fr);
-		min-height: 52px;
+		grid-template-columns: clamp(5.5rem, 30%, 11.25rem) minmax(0, 1fr);
+		min-height: 3.25rem;
 		padding: 10px;
 	}
 	.prop-list-wide .prop-row > label {
@@ -510,11 +527,11 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
-		height: 22px;
+		height: 1.375rem;
 		padding: 0 9px;
 		border-radius: var(--radius-pill);
 		border: 1px solid transparent;
-		font-size: 12px;
+		font-size: 0.75rem;
 		font-weight: 500;
 		white-space: nowrap;
 	}
@@ -523,7 +540,7 @@
 		color: color-mix(in oklch, var(--c) 75%, var(--foreground));
 	}
 	.pill-status {
-		height: 24px;
+		height: 1.5rem;
 		padding: 0 10px;
 		font-weight: 600;
 	}
@@ -595,9 +612,9 @@
 		min-width: 0;
 	}
 	.grid-table-head {
-		height: 40px;
+		height: 2.5rem;
 		font-weight: 600;
-		font-size: 12px;
+		font-size: 0.75rem;
 		letter-spacing: 0.05em;
 		color: var(--muted-foreground);
 		background: color-mix(in oklch, var(--muted) 70%, transparent);
@@ -670,7 +687,7 @@
 		background: var(--muted);
 		padding: 0 4px;
 		font-family: var(--font-mono);
-		font-size: 13px;
+		font-size: 0.8125rem;
 	}
 	/* 長い行は横スクロールさせずに折り返す */
 	.markdown pre {
@@ -755,7 +772,7 @@
 	}
 	.markdown .raw-md pre {
 		font-family: var(--font-mono);
-		font-size: 13px;
+		font-size: 0.8125rem;
 	}
 	/* チェックリスト。表示は <input type="checkbox">、エディタは ::before で描く */
 	.markdown .contains-task-list {

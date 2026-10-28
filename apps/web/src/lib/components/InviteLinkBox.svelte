@@ -38,7 +38,7 @@
 <style>
 	.box {
 		display: flex;
-		height: 32px;
+		height: 2rem;
 		border: 1px solid var(--input);
 		border-radius: var(--radius-sm);
 		overflow: hidden;
@@ -49,7 +49,7 @@
 		border: none;
 		padding: 0 12px;
 		background: var(--muted);
-		font-size: 13px;
+		font-size: 0.8125rem;
 		outline: none;
 	}
 	button {

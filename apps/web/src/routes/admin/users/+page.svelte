@@ -99,7 +99,9 @@
 				{#each data.users as u (u.id)}
 					<div role="row" class:opacity-65={!!u.disabledAt}>
 						<span role="cell" class="truncate font-medium">{u.name}</span>
-						<span role="cell" class="truncate text-[13px] text-muted-foreground">{u.email}</span>
+						<span role="cell" class="truncate text-[0.8125rem] text-muted-foreground"
+							>{u.email}</span
+						>
 						<span role="cell">
 							{#if u.id === data.user?.id}
 								<RolePill role={u.role} />
@@ -121,7 +123,7 @@
 							{#if u.disabledAt}
 								<span class="pill pill-muted">無効</span>
 							{:else}
-								<span class="text-[13px] text-muted-foreground">有効</span>
+								<span class="text-[0.8125rem] text-muted-foreground">有効</span>
 							{/if}
 						</span>
 						<span role="cell" class="flex justify-end">
@@ -176,7 +178,7 @@
 						<Mail size={16} class="shrink-0 text-muted-foreground" />
 						<span class="min-w-40 flex-1 truncate">{inv.email}</span>
 						<RolePill role={inv.role} />
-						{#if inv.projects.length > 0}<span class="text-[13px] text-muted-foreground"
+						{#if inv.projects.length > 0}<span class="text-[0.8125rem] text-muted-foreground"
 								>{inv.projects.map((p) => p.name).join('、')}</span
 							>{/if}
 						{#if inv.expired}<span class="pill pill-urgent">期限切れ</span>{/if}

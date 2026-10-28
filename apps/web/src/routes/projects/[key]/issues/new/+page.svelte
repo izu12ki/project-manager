@@ -1,7 +1,17 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { enhance } from '$app/forms';
-	import { UserRoundCheck } from '@lucide/svelte';
+	import {
+		Calendar,
+		CalendarClock,
+		CircleDot,
+		CornerLeftUp,
+		Flag,
+		Milestone,
+		Tag,
+		UserRoundCheck,
+		UsersRound
+	} from '@lucide/svelte';
 	import FormAlert from '$lib/components/FormAlert.svelte';
 	import MultiSelect from '$lib/components/MultiSelect.svelte';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
@@ -42,7 +52,7 @@
 		<h1 class="m-0 text-lg leading-snug font-bold">
 			{data.parent ? '子課題を追加' : '新規課題'}
 			{#if data.parent}
-				<span class="block text-[13px] font-normal text-muted-foreground"
+				<span class="block text-[0.8125rem] font-normal text-muted-foreground"
 					>親課題: {data.project.key}-{data.parent.number} {data.parent.title}</span
 				>
 			{/if}
@@ -52,7 +62,7 @@
 	{#if form?.message}<FormAlert message={form.message} />{/if}
 	{#if data.issueTypes.length > 0}
 		<div class="flex items-center gap-2">
-			<label for="issue-type" class="text-[13px] text-muted-foreground">種別</label>
+			<label for="issue-type" class="text-[0.8125rem] text-muted-foreground">種別</label>
 			<select
 				class="select type-select"
 				id="issue-type"
@@ -91,7 +101,7 @@
 			<div class="prop-list prop-list-wide">
 				{#if data.canSetStatus}
 					<div class="prop-row">
-						<label for="issue-status">ステータス</label>
+						<label for="issue-status"><CircleDot />ステータス</label>
 						<select class="select" id="issue-status" name="status">
 							{#each data.statuses as s (s.key)}
 								<option value={s.key}>{s.name}</option>
@@ -100,7 +110,7 @@
 					</div>
 				{/if}
 				<div class="prop-row">
-					<label for="issue-priority">優先度</label>
+					<label for="issue-priority"><Flag />優先度</label>
 					<select class="select" id="issue-priority" name="priority">
 						{#each PRIORITIES as p (p)}
 							<option value={p} selected={p === 'medium'}>{PRIORITY_LABEL[p]}</option>
@@ -108,7 +118,7 @@
 					</select>
 				</div>
 				<div class="prop-row">
-					<label for="issue-category">カテゴリー</label>
+					<label for="issue-category"><Tag />カテゴリー</label>
 					<select class="select" id="issue-category" name="categoryId">
 						<option value="">未設定</option>
 						{#each data.categories as c (c.id)}
@@ -117,14 +127,14 @@
 					</select>
 				</div>
 				<div class="prop-row">
-					<label for="issue-start-date">開始日</label>
+					<label for="issue-start-date"><Calendar />開始日</label>
 					<div><input class="input" id="issue-start-date" type="date" name="startDate" /></div>
 				</div>
 			</div>
 			<div class="prop-list prop-list-wide">
 				{#if data.canAssign}
 					<div class="prop-row">
-						<span class="prop-label" id="issue-assignee-label">担当者</span>
+						<span class="prop-label" id="issue-assignee-label"><UsersRound />担当者</span>
 						<div class="flex flex-wrap items-center gap-2">
 							<div class="assignees">
 								<MultiSelect
@@ -148,7 +158,7 @@
 					</div>
 				{/if}
 				<div class="prop-row">
-					<label for="issue-parent">親課題</label>
+					<label for="issue-parent"><CornerLeftUp />親課題</label>
 					<div>
 						<input
 							class="input parent"
@@ -167,7 +177,7 @@
 					</div>
 				</div>
 				<div class="prop-row">
-					<label for="issue-milestone">マイルストーン</label>
+					<label for="issue-milestone"><Milestone />マイルストーン</label>
 					<select class="select" id="issue-milestone" name="milestoneId">
 						<option value="">未設定</option>
 						{#each data.milestones as m (m.id)}
@@ -176,7 +186,7 @@
 					</select>
 				</div>
 				<div class="prop-row">
-					<label for="issue-due-date">期限日</label>
+					<label for="issue-due-date"><CalendarClock />期限日</label>
 					<div><input class="input" id="issue-due-date" type="date" name="dueDate" /></div>
 				</div>
 			</div>
@@ -192,8 +202,8 @@
 	}
 	.title {
 		background: var(--card);
-		font-size: 15px;
-		height: 36px;
+		font-size: 0.9375rem;
+		height: 2.25rem;
 	}
 	.sheet {
 		display: grid;
@@ -219,12 +229,12 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
-		height: 30px;
+		height: 1.875rem;
 		padding: 0 12px;
 		border: 1px solid var(--border);
 		border-radius: 999px;
 		background: var(--card);
-		font-size: 13px;
+		font-size: 0.8125rem;
 		cursor: pointer;
 	}
 	.assign-me:hover {

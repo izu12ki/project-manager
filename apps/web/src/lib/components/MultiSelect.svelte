@@ -63,7 +63,7 @@
 				<span class="truncate">{o.label}</span>
 			</label>
 		{:else}
-			<p class="m-0 px-2 py-1.5 text-[13px] text-muted-foreground">選択肢がありません</p>
+			<p class="m-0 px-2 py-1.5 text-[0.8125rem] text-muted-foreground">選択肢がありません</p>
 		{/each}
 	</div>
 </details>

@@ -71,7 +71,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
-		height: 42px;
+		height: 2.625rem;
 		padding: 0 12px;
 		color: var(--muted-foreground);
 		font-weight: 600;

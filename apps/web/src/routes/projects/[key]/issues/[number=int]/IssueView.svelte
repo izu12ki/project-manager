@@ -1,5 +1,22 @@
 <script lang="ts">
-	import { Copy, CornerLeftUp, ListTree, Paperclip, Pencil, Plus, Trash2, X } from '@lucide/svelte';
+	import {
+		Calendar,
+		CalendarClock,
+		CircleCheck,
+		CircleDot,
+		Copy,
+		CornerLeftUp,
+		Flag,
+		ListTree,
+		Milestone,
+		Paperclip,
+		Pencil,
+		Plus,
+		Tag,
+		Trash2,
+		UsersRound,
+		X
+	} from '@lucide/svelte';
 	import { untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { formatBytes } from '$lib/attachment-rules';
@@ -164,7 +181,7 @@
 		<h2 class="card-title">属性</h2>
 		<div class="prop-list">
 			<div class="prop-row">
-				<label for="issue-status">ステータス</label>
+				<label for="issue-status"><CircleDot style="--c: var(--c-blue)" />ステータス</label>
 				<select
 					class="select"
 					id="issue-status"
@@ -177,7 +194,7 @@
 				</select>
 			</div>
 			<div class="prop-row">
-				<label for="issue-resolution">完了理由</label>
+				<label for="issue-resolution"><CircleCheck style="--c: var(--c-green)" />完了理由</label>
 				<select
 					class="select"
 					id="issue-resolution"
@@ -191,7 +208,7 @@
 				</select>
 			</div>
 			<div class="prop-row">
-				<label for="issue-priority">優先度</label>
+				<label for="issue-priority"><Flag style="--c: var(--c-orange)" />優先度</label>
 				<select
 					class="select"
 					id="issue-priority"
@@ -204,7 +221,9 @@
 				</select>
 			</div>
 			<div class="prop-row">
-				<span class="prop-label" id={`issue-assignee-${variant}-label`}>担当者</span>
+				<span class="prop-label" id={`issue-assignee-${variant}-label`}
+					><UsersRound style="--c: var(--c-pink)" />担当者</span
+				>
 				<div class="min-w-0">
 					<!-- 全員外したときも送るための空の値（サービス側で除く） -->
 					{#if perms.assign}<input type="hidden" name={assigneeName} value="" />{/if}
@@ -221,7 +240,9 @@
 				</div>
 			</div>
 			<div class="prop-row">
-				<label for={`issue-parent-${variant}`}>親課題</label>
+				<label for={`issue-parent-${variant}`}
+					><CornerLeftUp style="--c: var(--c-violet)" />親課題</label
+				>
 				<div class="min-w-0">
 					<input
 						class="input"
@@ -243,7 +264,7 @@
 				</div>
 			</div>
 			<div class="prop-row">
-				<label for="issue-category">カテゴリー</label>
+				<label for="issue-category"><Tag style="--c: var(--c-amber)" />カテゴリー</label>
 				<select
 					class="select"
 					id="issue-category"
@@ -257,7 +278,7 @@
 				</select>
 			</div>
 			<div class="prop-row">
-				<label for="issue-milestone">マイルストーン</label>
+				<label for="issue-milestone"><Milestone style="--c: var(--c-teal)" />マイルストーン</label>
 				<select
 					class="select"
 					id="issue-milestone"
@@ -271,7 +292,7 @@
 				</select>
 			</div>
 			<div class="prop-row">
-				<label for="issue-start">開始日</label>
+				<label for="issue-start"><Calendar style="--c: var(--c-lime)" />開始日</label>
 				<input
 					class="input"
 					id="issue-start"
@@ -280,7 +301,7 @@
 				/>
 			</div>
 			<div class="prop-row">
-				<label for="issue-due">期限日</label>
+				<label for="issue-due"><CalendarClock style="--c: var(--c-red)" />期限日</label>
 				<input
 					class="input"
 					id="issue-due"
@@ -330,7 +351,8 @@
 			{/if}
 			{#if detail.issueTypes.length > 0 || issue.typeId}
 				<div class="flex items-center gap-2">
-					<label for={`issue-type-${variant}`} class="text-[13px] text-muted-foreground">種別</label
+					<label for={`issue-type-${variant}`} class="text-[0.8125rem] text-muted-foreground"
+						>種別</label
 					>
 					<!-- 属性フォームに form 属性で紐づける。タイトル・本文の編集中でなければ選んだ時点で保存する -->
 					<select
@@ -351,12 +373,12 @@
 				</div>
 			{/if}
 			<div class="flex flex-wrap items-center gap-2">
-				<span class="mono text-[13px] text-muted-foreground">{projectKey}-{issue.number}</span>
+				<span class="mono text-[0.8125rem] text-muted-foreground">{projectKey}-{issue.number}</span>
 				<StatusPill status={issue.status} statuses={detail.statuses} />
 				<PriorityPill priority={issue.priority} />
 			</div>
 			<div class="flex items-start gap-2">
-				<h1 class="page-title" style="font-size: 22px; text-wrap: pretty">{issue.title}</h1>
+				<h1 class="page-title" style="font-size: 1.375rem; text-wrap: pretty">{issue.title}</h1>
 				<button
 					type="button"
 					class="btn btn-outline btn-sm mt-0.5 shrink-0"
@@ -366,7 +388,7 @@
 					<Copy />課題キーをコピー
 				</button>
 			</div>
-			<p class="m-0 text-[13px] text-muted-foreground">
+			<p class="m-0 text-[0.8125rem] text-muted-foreground">
 				{issue.reporterName} が {formatDateTime(issue.createdAt)} に起票
 			</p>
 		</header>
@@ -420,7 +442,7 @@
 					<h2 class="card-title">
 						<ListTree class="size-4" /> 子課題
 						{#if detail.children.length > 0}
-							<span class="text-[13px] font-normal text-muted-foreground"
+							<span class="text-[0.8125rem] font-normal text-muted-foreground"
 								>{detail.children.filter((c) => c.status === DONE_STATUS).length} / {detail.children
 									.length} 完了</span
 							>
@@ -438,7 +460,7 @@
 						{#each detail.children as c (c.id)}
 							<li>
 								<a href={issueHref(c.number)} class="child-link">
-									<span class="mono shrink-0 text-[13px] text-muted-foreground"
+									<span class="mono shrink-0 text-[0.8125rem] text-muted-foreground"
 										>{projectKey}-{c.number}</span
 									>
 									<span class="min-w-0 truncate">{c.title}</span>
@@ -455,7 +477,7 @@
 						{/each}
 					</ul>
 				{:else}
-					<p class="m-0 text-[13px] text-muted-foreground">子課題はありません</p>
+					<p class="m-0 text-[0.8125rem] text-muted-foreground">子課題はありません</p>
 				{/if}
 			</section>
 		{/if}
@@ -687,7 +709,7 @@
 	}
 	@media (min-width: 1100px) {
 		.detail:not(.sheet) {
-			grid-template-columns: minmax(0, 1fr) 300px;
+			grid-template-columns: minmax(0, 1fr) 18.75rem;
 			column-gap: 40px;
 		}
 		.side {
@@ -698,7 +720,7 @@
 	/* 大きい画面では本文と属性の間を広げ、画面幅を使い切る（+layout の .container も広がる） */
 	@media (min-width: 1400px) {
 		.detail:not(.sheet) {
-			grid-template-columns: minmax(0, 1fr) 340px;
+			grid-template-columns: minmax(0, 1fr) 21.25rem;
 			column-gap: 64px;
 		}
 	}
@@ -734,7 +756,7 @@
 		border-radius: var(--radius-md);
 		background: var(--muted);
 		list-style: none;
-		font-size: 13px;
+		font-size: 0.8125rem;
 	}
 	.change-list li {
 		display: flex;
@@ -783,7 +805,7 @@
 		min-width: 0;
 		width: fit-content;
 		max-width: 100%;
-		font-size: 13px;
+		font-size: 0.8125rem;
 		color: var(--muted-foreground);
 	}
 	.parent-link:hover {

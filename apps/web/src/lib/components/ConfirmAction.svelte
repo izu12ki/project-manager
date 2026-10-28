@@ -151,7 +151,7 @@
 	}
 	h2 {
 		margin: 0;
-		font-size: 15px;
+		font-size: 0.9375rem;
 		font-weight: 600;
 	}
 	.close {
@@ -175,7 +175,7 @@
 	p {
 		margin: 0;
 		padding: 24px 20px 0;
-		font-size: 15px;
+		font-size: 0.9375rem;
 		font-weight: 600;
 		line-height: 1.7;
 		text-align: center;

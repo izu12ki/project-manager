@@ -68,7 +68,7 @@
 		z-index: 45;
 		display: flex;
 		flex-direction: column;
-		width: min(680px, 100vw);
+		width: min(42.5rem, 100vw);
 		background: var(--background);
 		border-left: 1px solid var(--border);
 		box-shadow: -8px 0 24px rgb(0 0 0 / 0.12);
@@ -97,7 +97,7 @@
 	.toolbar h2 {
 		flex: 1;
 		margin: 0;
-		font-size: 13px;
+		font-size: 0.8125rem;
 		font-weight: 500;
 		color: var(--muted-foreground);
 	}

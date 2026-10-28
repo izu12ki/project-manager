@@ -57,7 +57,7 @@
 		border: 1px dashed var(--border);
 		background: transparent;
 		color: var(--muted-foreground);
-		font-size: 12px;
+		font-size: 0.75rem;
 	}
 	.swatch input {
 		position: absolute;

@@ -472,7 +472,7 @@
 		padding: 0 6px;
 		margin-left: 4px;
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: 0.6875rem;
 		font-weight: 700;
 		letter-spacing: 0.02em;
 		box-shadow: inset 0 0 0 1px var(--border);
@@ -502,7 +502,7 @@
 		margin: 0;
 		padding: 2px 12px 6px;
 		color: var(--destructive, #dc2626);
-		font-size: 12px;
+		font-size: 0.75rem;
 	}
 	.link-pop {
 		position: absolute;
@@ -522,7 +522,7 @@
 	.link-error {
 		margin: 4px 2px 0;
 		color: var(--destructive, #dc2626);
-		font-size: 12px;
+		font-size: 0.75rem;
 	}
 	.toolbar {
 		display: flex;
@@ -538,6 +538,6 @@
 		color: var(--foreground);
 	}
 	.hint {
-		font-size: 12px;
+		font-size: 0.75rem;
 	}
 </style>

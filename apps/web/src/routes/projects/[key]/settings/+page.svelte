@@ -66,7 +66,7 @@
 		<div class="flex flex-wrap items-end gap-4">
 			<span
 				class="avatar avatar-square"
-				style="--size: 40px; font-size: 18px"
+				style="--size: 40px; font-size: 1.125rem"
 				style:--c={projectColor({ key: key || 'A', color: color || null })}
 				aria-hidden="true">{projectIcon({ key: key || '?', icon: icon || null })}</span
 			>
@@ -148,7 +148,7 @@
 					<span class="avatar" style:--c={colorFor(m.name)}>{m.name[0]}</span>
 					<div class="grid min-w-0" style="line-height: 1.3">
 						<span class="font-medium">{m.name}</span>
-						<span class="truncate text-[13px] text-muted-foreground">{m.email}</span>
+						<span class="truncate text-[0.8125rem] text-muted-foreground">{m.email}</span>
 					</div>
 					<RolePill role={m.role} />
 					<ConfirmAction
@@ -207,7 +207,7 @@
 		{#if form?.inviteUrl}<InviteLinkBox url={form.inviteUrl} />{/if}
 		{#if data.invitations.length > 0}
 			<div class="grid">
-				<div class="pb-1 text-[13px] font-medium text-muted-foreground">招待中</div>
+				<div class="pb-1 text-[0.8125rem] font-medium text-muted-foreground">招待中</div>
 				{#each data.invitations as inv (inv.id)}
 					<div class="invite">
 						<Mail size={16} class="shrink-0 text-muted-foreground" />
@@ -571,7 +571,7 @@
 								>{m.name}</span
 							>
 						{/if}
-						<span class="row-meta text-[13px] text-muted-foreground tabular-nums"
+						<span class="row-meta text-[0.8125rem] text-muted-foreground tabular-nums"
 							>{m.completedAt ? '完了 · ' : ''}{m.releaseDate
 								? `${m.releaseDate.replaceAll('-', '/')} リリース`
 								: '日付なし'}</span

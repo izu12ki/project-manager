@@ -12,13 +12,13 @@
 		display: inline-flex;
 		align-items: center;
 		max-width: 8em;
-		height: 20px;
+		height: 1.25rem;
 		padding: 0 7px;
 		overflow: hidden;
 		border-radius: var(--radius-pill);
 		background: var(--c);
 		color: white;
-		font-size: 12px;
+		font-size: 0.75rem;
 		font-weight: 600;
 		white-space: nowrap;
 		text-overflow: ellipsis;

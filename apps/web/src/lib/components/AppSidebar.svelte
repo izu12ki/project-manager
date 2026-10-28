@@ -196,7 +196,7 @@
 		line-height: 1.25;
 	}
 	.sub {
-		font-size: 12px;
+		font-size: 0.75rem;
 		color: var(--muted-foreground);
 	}
 	.truncate {
@@ -241,11 +241,11 @@
 		gap: 2px;
 	}
 	.group-label {
-		height: 32px;
+		height: 2rem;
 		display: flex;
 		align-items: center;
 		padding: 0 8px;
-		font-size: 12px;
+		font-size: 0.75rem;
 		font-weight: 500;
 		color: var(--muted-foreground);
 	}
@@ -254,7 +254,7 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		height: 32px;
+		height: 2rem;
 		padding: 0 8px;
 		border: none;
 		border-radius: var(--radius-md);
@@ -267,7 +267,7 @@
 	}
 	/* プロジェクト・管理の行は端まで塗る 40px 行 */
 	.row {
-		height: 40px;
+		height: 2.5rem;
 		padding: 0 12px;
 		border-radius: 0;
 	}
@@ -289,7 +289,7 @@
 		color: color-mix(in oklch, var(--c) 60%, var(--foreground));
 		display: grid;
 		place-items: center;
-		font-size: 11px;
+		font-size: 0.6875rem;
 		font-weight: 700;
 	}
 	.footer {
@@ -343,9 +343,9 @@
 		border-radius: 999px;
 		background: var(--primary);
 		color: var(--primary-foreground);
-		font-size: 11px;
+		font-size: 0.6875rem;
 		font-weight: 600;
-		line-height: 18px;
+		line-height: 1.125rem;
 		text-align: center;
 	}
 </style>

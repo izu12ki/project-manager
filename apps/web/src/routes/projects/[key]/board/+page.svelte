@@ -107,7 +107,7 @@
 			onchange={(e) => e.currentTarget.requestSubmit()}
 		>
 			<div class="field w-56 gap-1.5">
-				<label class="label text-[13px]" for="board-milestone">マイルストーン</label>
+				<label class="label text-[0.8125rem]" for="board-milestone">マイルストーン</label>
 				<select class="select" id="board-milestone" name="milestone">
 					<option value="">すべて</option>
 					<option value="none" selected={ref.milestone === 'none'}>未設定</option>
@@ -277,19 +277,19 @@
 		align-items: center;
 		gap: 8px;
 		padding: 0 4px;
-		height: 24px;
-		font-size: 14px;
+		height: 1.5rem;
+		font-size: 0.875rem;
 		font-weight: 700;
 	}
 	.count {
 		display: inline-flex;
 		align-items: center;
-		height: 20px;
+		height: 1.25rem;
 		padding: 0 8px;
 		border-radius: var(--radius-pill);
 		background: color-mix(in oklch, var(--c) 16%, transparent);
 		color: color-mix(in oklch, var(--c) 75%, var(--foreground));
-		font-size: 12px;
+		font-size: 0.75rem;
 	}
 	ul {
 		flex: 1;

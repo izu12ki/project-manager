@@ -35,7 +35,7 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius-md);
 		background: var(--card);
-		font-size: 13px;
+		font-size: 0.8125rem;
 		line-height: 1.6;
 	}
 	.row {
@@ -75,6 +75,6 @@
 		padding: 2px 8px;
 		background: var(--muted);
 		color: var(--muted-foreground);
-		font-size: 12px;
+		font-size: 0.75rem;
 	}
 </style>

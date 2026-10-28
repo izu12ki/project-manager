@@ -25,7 +25,7 @@
 		onchange={(e) => e.currentTarget.requestSubmit()}
 	>
 		<div class="field w-56 gap-1.5">
-			<label class="label text-[13px]" for="filter-q">キーワード</label>
+			<label class="label text-[0.8125rem]" for="filter-q">キーワード</label>
 			<div class="search">
 				<Search size={16} class="search-icon" />
 				<input
@@ -40,7 +40,7 @@
 			</div>
 		</div>
 		<div class="field w-40 gap-1.5">
-			<label class="label text-[13px]" for="filter-status">ステータス</label>
+			<label class="label text-[0.8125rem]" for="filter-status">ステータス</label>
 			<select class="select" id="filter-status" name="status">
 				<option value="">すべて</option>
 				{#each data.statuses as s (s.key)}
@@ -50,7 +50,7 @@
 		</div>
 		{#if data.issueTypes.length > 0}
 			<div class="field w-36 gap-1.5">
-				<label class="label text-[13px]" for="filter-type">種別</label>
+				<label class="label text-[0.8125rem]" for="filter-type">種別</label>
 				<select class="select" id="filter-type" name="type">
 					<option value="">すべて</option>
 					<option value="none" selected={data.filters.typeId === 'none'}>未設定</option>
@@ -61,7 +61,7 @@
 			</div>
 		{/if}
 		<div class="field w-36 gap-1.5">
-			<label class="label text-[13px]" for="filter-priority">優先度</label>
+			<label class="label text-[0.8125rem]" for="filter-priority">優先度</label>
 			<select class="select" id="filter-priority" name="priority">
 				<option value="">すべて</option>
 				{#each PRIORITIES as p (p)}
@@ -70,7 +70,7 @@
 			</select>
 		</div>
 		<div class="field w-40 gap-1.5">
-			<label class="label text-[13px]" for="filter-assignee">担当者</label>
+			<label class="label text-[0.8125rem]" for="filter-assignee">担当者</label>
 			<select class="select" id="filter-assignee" name="assignee">
 				<option value="">すべて</option>
 				<option value="none" selected={data.filters.assigneeId === 'none'}>未割当</option>
@@ -81,7 +81,7 @@
 		</div>
 		{#if data.categories.length > 0}
 			<div class="field w-40 gap-1.5">
-				<label class="label text-[13px]" for="filter-category">カテゴリー</label>
+				<label class="label text-[0.8125rem]" for="filter-category">カテゴリー</label>
 				<select class="select" id="filter-category" name="category">
 					<option value="">すべて</option>
 					<option value="none" selected={data.filters.categoryId === 'none'}>未設定</option>
@@ -93,7 +93,7 @@
 		{/if}
 		{#if data.milestones.length > 0}
 			<div class="field w-48 gap-1.5">
-				<label class="label text-[13px]" for="filter-milestone">マイルストーン</label>
+				<label class="label text-[0.8125rem]" for="filter-milestone">マイルストーン</label>
 				<select class="select" id="filter-milestone" name="milestone">
 					<option value="">すべて</option>
 					<option value="none" selected={data.filters.milestoneId === 'none'}>未設定</option>
@@ -106,7 +106,7 @@
 			</div>
 		{/if}
 		<noscript><button type="submit" class="btn btn-outline">絞り込む</button></noscript>
-		<span class="ml-auto pb-2 text-[13px] text-muted-foreground">{data.issues.length} 件</span>
+		<span class="ml-auto pb-2 text-[0.8125rem] text-muted-foreground">{data.issues.length} 件</span>
 	</form>
 
 	{#if data.issues.length === 0}
@@ -142,7 +142,7 @@
 				</div>
 				{#each data.issues as i (i.id)}
 					<div role="row" class="row">
-						<span role="cell" class="mono text-[13px] text-muted-foreground"
+						<span role="cell" class="mono text-[0.8125rem] text-muted-foreground"
 							>{data.project.key}-{i.number}</span
 						>
 						<span role="cell" class="flex min-w-0 items-center gap-2">
@@ -186,13 +186,14 @@
 
 	{#if data.deletedIssues.length > 0}
 		<details class="deleted">
-			<summary class="text-[13px] text-muted-foreground">
+			<summary class="text-[0.8125rem] text-muted-foreground">
 				<Trash2 size={14} />削除した課題 {data.deletedIssues.length} 件
 			</summary>
 			<ul>
 				{#each data.deletedIssues as d (d.number)}
 					<li>
-						<span class="mono text-[13px] text-muted-foreground">{data.project.key}-{d.number}</span
+						<span class="mono text-[0.8125rem] text-muted-foreground"
+							>{data.project.key}-{d.number}</span
 						>
 						<a href={`${base}/issues/${d.number}`} class="min-w-0 truncate">{d.title}</a>
 						<span class="ml-auto shrink-0 text-xs text-muted-foreground"
@@ -245,7 +246,7 @@
 		padding: 1px 8px;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-pill);
-		font-size: 12px;
+		font-size: 0.75rem;
 		color: var(--muted-foreground);
 	}
 	.search {

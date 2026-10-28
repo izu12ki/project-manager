@@ -286,6 +286,25 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(editBox).toBeHidden();
 	await expect(myComment.locator('.markdown .mention')).toHaveText('@顧客 太郎');
 	await expect(myComment.locator('.markdown')).toHaveText('@顧客 太郎 確認お願いします');
+	// 絵文字でリアクションし、ホバーで誰が付けたかを出す。もう一度押すと外れる
+	await myComment.getByLabel('リアクションを追加').first().click();
+	await myComment
+		.getByRole('group', { name: 'リアクション' })
+		.getByRole('button', { name: '🎉' })
+		.click();
+	const party = myComment.locator('button.reaction', { hasText: '🎉' });
+	await expect(party).toHaveAttribute('aria-pressed', 'true');
+	await expect(party).toContainText('1');
+	const tip = myComment.getByRole('tooltip');
+	await expect(tip).toBeHidden();
+	await party.hover();
+	await expect(tip).toBeVisible();
+	await expect(tip).toHaveText(/^\S.* が 🎉 でリアクションしました$/);
+	// 付けたリアクションは保存されている
+	await page.reload();
+	await expect(party).toHaveAttribute('aria-pressed', 'true');
+	await party.click();
+	await expect(party).toBeHidden();
 
 	// 6c. メンバーがタイムラインで日付を調整する
 	await page.goto('/projects/ACME/issues/new');

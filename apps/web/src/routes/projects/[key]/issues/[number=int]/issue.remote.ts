@@ -12,7 +12,8 @@ import {
 	addComment,
 	deleteComment,
 	editComment,
-	listComments
+	listComments,
+	toggleReaction
 } from '$lib/server/services/comments';
 import {
 	listCategories,
@@ -186,6 +187,15 @@ export const removeComment = command(
 	({ key, number, commentId }) =>
 		runCommand(async () => {
 			await deleteComment(remoteContext(), key, number, commentId);
+			void getComments({ key, number }).refresh();
+		})
+);
+
+export const reactToComment = command(
+	v.object({ ...IssueRefFields, commentId: v.string(), emoji: v.string() }),
+	({ key, number, commentId, emoji }) =>
+		runCommand(async () => {
+			await toggleReaction(remoteContext(), key, number, commentId, { emoji });
 			void getComments({ key, number }).refresh();
 		})
 );

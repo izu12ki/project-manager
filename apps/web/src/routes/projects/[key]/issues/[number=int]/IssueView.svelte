@@ -20,11 +20,13 @@
 	import { untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { formatBytes } from '$lib/attachment-rules';
+	import CommentReactions from '$lib/components/CommentReactions.svelte';
 	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
 	import MultiSelect from '$lib/components/MultiSelect.svelte';
 	import FormAlert from '$lib/components/FormAlert.svelte';
 	import PriorityPill from '$lib/components/PriorityPill.svelte';
+	import ReactionPicker from '$lib/components/ReactionPicker.svelte';
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import {
 		DONE_STATUS,
@@ -37,6 +39,7 @@
 		formatDateTime,
 		milestoneLabel
 	} from '$lib/labels';
+	import { toggleReactionIn } from '$lib/reactions';
 	import { toast } from '$lib/toast.svelte';
 	import {
 		getAttachments,
@@ -44,6 +47,7 @@
 		getComments,
 		getIssueDetail,
 		postComment,
+		reactToComment,
 		readIssueNotifications,
 		removeAttachment,
 		removeComment,
@@ -114,6 +118,23 @@
 	async function deleteComment(commentId: string) {
 		try {
 			await removeComment({ ...ref, commentId });
+		} catch {
+			failed();
+		}
+	}
+
+	// 押したらすぐ表示を変え、サーバーの結果で置き換える
+	async function react(commentId: string, emoji: string) {
+		if (!me) return;
+		const user = { id: me.id, name: me.name };
+		try {
+			await reactToComment({ ...ref, commentId, emoji }).updates(
+				commentsQuery.withOverride((list) =>
+					list.map((c) =>
+						c.id === commentId ? { ...c, reactions: toggleReactionIn(c.reactions, emoji, user) } : c
+					)
+				)
+			);
 		} catch {
 			failed();
 		}
@@ -568,8 +589,17 @@
 							<div class="flex items-center gap-2">
 								<span class="font-medium">{c.authorName}</span>
 								<span class="text-xs text-muted-foreground">{formatDateTime(c.createdAt)}</span>
-								{#if c.canModify}
-									<div class="ml-auto flex items-center">
+								<div class="ml-auto flex items-center">
+									{#if perms.writable}
+										<ReactionPicker
+											align="end"
+											selected={c.reactions
+												.filter((g) => g.users.some((u) => u.id === me?.id))
+												.map((g) => g.emoji)}
+											onpick={(emoji) => react(c.id, emoji)}
+										/>
+									{/if}
+									{#if c.canModify}
 										<button
 											type="button"
 											class="icon-btn"
@@ -590,8 +620,8 @@
 										>
 											{#snippet trigger()}<Trash2 />{/snippet}
 										</ConfirmAction>
-									</div>
-								{/if}
+									{/if}
+								</div>
 							</div>
 							{#if editingComment === c.id}
 								{@const edit = updateComment.for(c.id)}
@@ -633,6 +663,13 @@
 								<!-- eslint-disable-next-line svelte/no-at-html-tags -- markdown-it(html:false) で生成した HTML -->
 								<div class="markdown">{@html c.html}</div>
 							{/if}
+							<CommentReactions
+								id={`comment-${c.id}`}
+								reactions={c.reactions}
+								meId={me?.id}
+								canReact={perms.writable}
+								ontoggle={(emoji) => react(c.id, emoji)}
+							/>
 						</div>
 					</article>
 				{/if}

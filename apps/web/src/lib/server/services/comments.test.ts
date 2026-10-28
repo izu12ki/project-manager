@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
+import { commentReaction } from '../db/schema';
 import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
-import { addComment, deleteComment, editComment, listComments } from './comments';
-import { createIssue } from './issues';
+import { addComment, deleteComment, editComment, listComments, toggleReaction } from './comments';
+import { createIssue, deleteIssue } from './issues';
 
 describe('comments', () => {
 	let db: DB;
@@ -55,6 +56,56 @@ describe('comments', () => {
 		const [c] = await listComments(as(guest), 'ACME', 1);
 		await expect(deleteComment(as(guest), 'ACME', 2, c.id)).rejects.toMatchObject({
 			code: 'not_found'
+		});
+	});
+
+	describe('リアクション', () => {
+		let commentId: string;
+		const reactionsOf = async () => (await listComments(as(member), 'ACME', 1))[0].reactions;
+		beforeEach(async () => {
+			await addComment(as(guest), 'ACME', 1, { body: 'g' });
+			commentId = (await listComments(as(guest), 'ACME', 1))[0].id;
+		});
+
+		it('付けた人が絵文字ごとにまとまり、もう一度押すと外れる', async () => {
+			await toggleReaction(as(member), 'ACME', 1, commentId, { emoji: '👍' });
+			await toggleReaction(as(guest), 'ACME', 1, commentId, { emoji: '🎉' });
+			await toggleReaction(as(guest), 'ACME', 1, commentId, { emoji: '👍' });
+			expect((await reactionsOf()).map((r) => [r.emoji, r.users.map((u) => u.name)])).toEqual([
+				['👍', ['member', 'guest']],
+				['🎉', ['guest']]
+			]);
+			await toggleReaction(as(member), 'ACME', 1, commentId, { emoji: '👍' });
+			await toggleReaction(as(guest), 'ACME', 1, commentId, { emoji: '🎉' });
+			expect((await reactionsOf()).map((r) => [r.emoji, r.users.map((u) => u.name)])).toEqual([
+				['👍', ['guest']]
+			]);
+		});
+
+		it('決まった絵文字以外は validation', async () => {
+			await expect(
+				toggleReaction(as(member), 'ACME', 1, commentId, { emoji: '<b>' })
+			).rejects.toMatchObject({ code: 'validation' });
+		});
+
+		it('別の課題のコメントには付けられない', async () => {
+			await createIssue(as(member), 'ACME', { title: 'B' });
+			await expect(
+				toggleReaction(as(member), 'ACME', 2, commentId, { emoji: '👍' })
+			).rejects.toMatchObject({ code: 'not_found' });
+		});
+
+		it('削除した課題では付けられない', async () => {
+			await deleteIssue(as(member), 'ACME', 1);
+			await expect(
+				toggleReaction(as(member), 'ACME', 1, commentId, { emoji: '👍' })
+			).rejects.toThrow();
+		});
+
+		it('コメントを消すとリアクションも消える', async () => {
+			await toggleReaction(as(member), 'ACME', 1, commentId, { emoji: '👍' });
+			await deleteComment(as(guest), 'ACME', 1, commentId);
+			expect(await db.select().from(commentReaction)).toHaveLength(0);
 		});
 	});
 });

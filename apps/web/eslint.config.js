@@ -37,5 +37,19 @@ export default defineConfig(
 		// Override or add rule settings here, such as:
 		// 'svelte/button-has-type': 'error'
 		rules: {}
+	},
+	{
+		// Vitest は isolate: false（vite.config.ts）なので、モジュールの差し替えは後のテストファイルに残る
+		files: ['**/*.test.ts'],
+		rules: {
+			'no-restricted-properties': [
+				'error',
+				...['mock', 'doMock'].map((property) => ({
+					object: 'vi',
+					property,
+					message: 'ファイルをまたいで残るので vi.spyOn を使ってください'
+				}))
+			]
+		}
 	}
 );

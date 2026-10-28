@@ -21,7 +21,7 @@ export default defineConfig({
 		expect: { requireAssertions: true },
 		environment: 'node',
 		// 実行時間の大半がファイルごとのモジュール再 import だったので、ファイル間でモジュールを共有する。
-		// テストはモジュールレベルの状態に依存しないこと
+		// テストはモジュールレベルの状態に依存しないこと。vi.mock は後のファイルに残るので ESLint で禁止している
 		isolate: false,
 		include: ['src/**/*.test.ts']
 	}

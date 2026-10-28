@@ -11,11 +11,13 @@ import {
 	UNDO_COMMAND
 } from 'lexical';
 import type { UploadResult } from '$lib/attachment-upload';
+import { toast } from '$lib/toast.svelte';
 import { createMarkdownEditor } from './create-editor';
 import { $isUploadPlaceholderNode } from './nodes';
 import { insertUploadsIntoEditor, registerEditorUploads } from './uploads';
 
-vi.mock('$lib/toast.svelte', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+// spy はファイルの終わりに戻る（vi.mock はファイルをまたいで残るので使わない）
+vi.spyOn(toast, 'error').mockImplementation(() => {});
 
 function deferred<T>() {
 	let resolve!: (v: T) => void;
@@ -94,7 +96,6 @@ describe('insertUploadsIntoEditor', () => {
 		await insertUploadsIntoEditor(h.editor, null, 'A', [file('a.png', 'image/png')], upload);
 		expect(placeholders(h)).toBe(0);
 		expect(h.getMarkdown()).toBe('本文');
-		const { toast } = await import('$lib/toast.svelte');
 		expect(toast.error).toHaveBeenCalledWith('ファイルは25MB以下にしてください');
 	});
 

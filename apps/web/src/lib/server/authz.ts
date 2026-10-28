@@ -21,12 +21,15 @@ export type Action =
 	| 'comment:create'
 	| 'comment:modify'
 	| 'attachment:create'
-	| 'attachment:delete';
+	| 'attachment:delete'
+	| 'emoji:create'
+	| 'emoji:delete';
 
 export interface Resource {
 	reporterId?: string;
 	authorId?: string;
 	uploaderId?: string;
+	creatorId?: string;
 }
 
 export function can(actor: Actor, action: Action, res: Resource = {}): boolean {
@@ -45,12 +48,16 @@ export function can(actor: Actor, action: Action, res: Resource = {}): boolean {
 		case 'comment:create':
 		case 'attachment:create':
 			return true;
+		// 課題の削除とカスタム絵文字の登録はメンバー以上（ゲストは絵文字をリアクションに使うだけ）
 		case 'issue:delete':
+		case 'emoji:create':
 			return isMember;
 		case 'comment:modify':
 			return res.authorId === actor.id;
 		case 'attachment:delete':
 			return res.uploaderId === actor.id;
+		case 'emoji:delete':
+			return res.creatorId === actor.id;
 	}
 }
 

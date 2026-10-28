@@ -305,6 +305,28 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(party).toHaveAttribute('aria-pressed', 'true');
 	await party.click();
 	await expect(party).toBeHidden();
+	// カスタム絵文字を登録し、リアクションに使う。名前はファイル名から補う
+	const issueUrl = page.url();
+	await page.goto('/emoji');
+	await page
+		.getByLabel('画像', { exact: true })
+		.setInputFiles({ name: 'Ship It.png', mimeType: 'image/png', buffer: PNG });
+	await expect(page.getByLabel('名前', { exact: true })).toHaveValue('ship_it');
+	await page.getByRole('button', { name: '追加する' }).click();
+	await expect(
+		page.getByRole('list', { name: 'カスタム絵文字一覧' }).getByRole('img', { name: ':ship_it:' })
+	).toBeVisible();
+	await page.goto(issueUrl);
+	await myComment.getByLabel('リアクションを追加').first().click();
+	await myComment
+		.getByRole('group', { name: 'リアクション' })
+		.getByRole('button', { name: ':ship_it:' })
+		.click();
+	const shipIt = myComment.locator('button.reaction[aria-label^=":ship_it:"]');
+	await expect(shipIt).toHaveAttribute('aria-pressed', 'true');
+	await expect(shipIt.locator('img')).toHaveAttribute('src', /^\/emoji\/[0-9a-f-]{36}$/);
+	await page.reload();
+	await expect(shipIt).toHaveAttribute('aria-pressed', 'true');
 
 	// 6c. メンバーがタイムラインで日付を調整する
 	await page.goto('/projects/ACME/issues/new');

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { reactorsLabel, type ReactionGroup } from '$lib/reactions';
+	import EmojiGlyph from './EmojiGlyph.svelte';
 	import ReactionPicker from './ReactionPicker.svelte';
 
 	interface Props {
@@ -32,7 +33,7 @@
 					aria-disabled={!canReact || undefined}
 					onclick={() => canReact && ontoggle(g.emoji)}
 				>
-					<span class="emoji">{g.emoji}</span>
+					<span class="emoji"><EmojiGlyph emoji={g.emoji} size="18px" /></span>
 					<span class="count">{g.users.length}</span>
 				</button>
 				<span id={tipId} role="tooltip" class="tip">
@@ -84,6 +85,7 @@
 		color: var(--primary-ink);
 	}
 	.emoji {
+		display: inline-flex;
 		font-size: 0.9375rem;
 	}
 	.count {

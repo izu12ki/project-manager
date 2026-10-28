@@ -3,12 +3,14 @@ import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
 import { authorize } from '../authz';
 import type { AppContext } from '../context';
+import { customEmojiName } from '../../custom-emoji';
 import { REACTION_EMOJIS, type ReactionGroup } from '../../reactions';
 import { comment, commentReaction, issue as issueTable, user } from '../db/schema';
 import { AppError } from '../errors';
 import { notify } from '../notifications';
 import { parse } from '../validation';
 import { linkAttachments } from './attachment-links';
+import { findCustomEmojiByName } from './custom-emojis';
 import { assertNotDeleted, getIssue } from './issues';
 import { assertWritable, requireProject } from './projects';
 
@@ -128,9 +130,16 @@ export async function deleteComment(
 	await ctx.db.delete(comment).where(eq(comment.id, c.id));
 }
 
-const ReactionInput = v.object({
-	emoji: v.picklist(REACTION_EMOJIS, 'この絵文字ではリアクションできません')
-});
+const ReactionInput = v.object({ emoji: v.string() });
+const UNKNOWN_EMOJI = 'この絵文字ではリアクションできません';
+
+/** 標準の絵文字か、登録済みのカスタム絵文字（:name:）だけを受け付ける */
+async function assertReactable(ctx: AppContext, emoji: string): Promise<void> {
+	if ((REACTION_EMOJIS as readonly string[]).includes(emoji)) return;
+	const name = customEmojiName(emoji);
+	if (!name || !(await findCustomEmojiByName(ctx, name)))
+		throw new AppError('validation', UNKNOWN_EMOJI);
+}
 
 /** 自分のリアクションを付け外しする。付けていなければ付け、付けていれば外す */
 export async function toggleReaction(
@@ -145,6 +154,7 @@ export async function toggleReaction(
 	assertNotDeleted(issue);
 	authorize(ctx.actor, 'comment:create');
 	const { emoji } = parse(ReactionInput, input);
+	await assertReactable(ctx, emoji);
 	const [c] = await ctx.db
 		.select({ id: comment.id })
 		.from(comment)

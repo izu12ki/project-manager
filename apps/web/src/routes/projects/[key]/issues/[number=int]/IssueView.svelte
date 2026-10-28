@@ -437,10 +437,12 @@
 					<ul>
 						{#each detail.children as c (c.id)}
 							<li>
-								<span class="mono shrink-0 text-[13px] text-muted-foreground"
-									>{projectKey}-{c.number}</span
-								>
-								<a href={issueHref(c.number)} class="min-w-0 truncate">{c.title}</a>
+								<a href={issueHref(c.number)} class="child-link">
+									<span class="mono shrink-0 text-[13px] text-muted-foreground"
+										>{projectKey}-{c.number}</span
+									>
+									<span class="min-w-0 truncate">{c.title}</span>
+								</a>
 								<span class="ml-auto flex shrink-0 items-center gap-2">
 									{#if c.assignees.length > 0}
 										<span class="max-w-40 truncate text-xs text-muted-foreground"
@@ -800,6 +802,12 @@
 		min-width: 0;
 		min-height: 40px;
 		border-top: 1px solid var(--border);
+	}
+	.child-link {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		min-width: 0;
 	}
 	.attachments ul {
 		display: grid;

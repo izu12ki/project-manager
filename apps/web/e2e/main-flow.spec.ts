@@ -608,6 +608,34 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.keyboard.press('Escape');
 	await expect(sheet).toBeHidden();
 
+	// 8e. シートで保存するのは変えた項目だけ。開いた後にほかで変わった項目を、表示していた古い値で戻さない
+	// 動かすバーがシートに隠れないよう、ACME-2 の開始日から表示する
+	await page.goto(`/projects/ACME/timeline?from=${jstDay(4)}`);
+	await page.getByTestId('open-2').click();
+	const sheet2 = page.getByRole('complementary', { name: 'ACME-2' });
+	await sheet2.getByLabel('開始日').fill(jstDay(5));
+	await sheet2.getByRole('button', { name: '保存' }).click();
+	await expect(page.getByTestId('bar-2')).toHaveAttribute('data-start', jstDay(5));
+	// 一度保存した項目も、その後タイムラインで動かした値を表示する
+	const moved2 = savedResponse(page);
+	await dragBy(page, page.getByTestId('bar-2'), -32);
+	await moved2;
+	await expect(sheet2.getByLabel('開始日')).toHaveValue(jstDay(4));
+	// 別のタブで優先度を変えても、シートは古い優先度のまま
+	const other = await page.context().newPage();
+	await other.goto('/projects/ACME/issues/2');
+	await other.getByLabel('優先度').selectOption({ label: '緊急' });
+	await other.getByRole('button', { name: '保存' }).click();
+	await expect(other.getByText('保存しました')).toBeVisible();
+	await other.close();
+	await sheet2.getByLabel('完了理由').selectOption({ label: '対応済み' });
+	await sheet2.getByRole('button', { name: '保存' }).click();
+	await expect(sheet2.getByLabel('優先度').locator('option:checked')).toHaveText('緊急');
+	await page.goto('/projects/ACME/issues/2');
+	await expect(page.getByLabel('優先度').locator('option:checked')).toHaveText('緊急');
+	await expect(page.getByLabel('完了理由').locator('option:checked')).toHaveText('対応済み');
+	await expect(page.getByLabel('開始日')).toHaveValue(jstDay(4));
+
 	// 9. 管理者がゲストを無効化（確認ダイアログ）
 	await logout(page);
 	await login(page, 'admin@example.com');

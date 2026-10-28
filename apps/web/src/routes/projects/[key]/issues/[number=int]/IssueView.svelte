@@ -67,8 +67,11 @@
 	let { projectKey, number, variant = 'page', onsaved }: Props = $props();
 	const ref = $derived({ key: projectKey, number });
 	const me = $derived(page.data.user);
-	// 同じページで別の課題に切り替えても入力が混ざらないよう、フォームは課題ごとに分ける
-	const save = $derived(saveIssue.for(`${projectKey}-${number}`));
+	// 同じページで別の課題に切り替えても入力が混ざらないよう、フォームは課題ごとに分ける。
+	// 保存のたびにも作り直す。フォームは一度入力した項目の値を持ち続け、後でボードなどで
+	// 変わっても表示が追いつかないため
+	let saves = $state(0);
+	const save = $derived(saveIssue.for(`${projectKey}-${number}-${saves}`));
 	const post = $derived(postComment.for(`${projectKey}-${number}`));
 	// 開いた課題についての自分宛て未読を既読にする
 	// コマンドの内部状態を依存に含めないよう、課題が変わったときだけ走らせる
@@ -104,6 +107,20 @@
 		}
 	}
 	const issue = $derived(detail.issue);
+	/** 属性フォームの各項目の、表示中の課題での値（入力の初期値と、変えたかどうかの比較に使う） */
+	const shown = $derived({
+		title: issue.title,
+		description: issue.description,
+		typeId: issue.typeId ?? '',
+		status: issue.status,
+		resolution: issue.resolution ?? '',
+		priority: issue.priority,
+		parentNumber: issue.parent ? String(issue.parent.number) : '',
+		categoryId: issue.categoryId ?? '',
+		milestoneId: issue.milestoneId ?? '',
+		startDate: issue.startDate ?? '',
+		dueDate: issue.dueDate ?? ''
+	});
 	const perms = $derived(detail.perms);
 	const canSave = $derived(perms.edit || perms.changeStatus || perms.assign);
 	let editing = $state(false);
@@ -114,6 +131,22 @@
 	// チェックボックスを送る name（リモートフォームの配列フィールド）
 	const assigneeName = $derived(save.fields.assigneeIds.as('checkbox', 'x').name);
 	const issueHref = (n: number) => `/projects/${projectKey}/issues/${n}`;
+
+	// 送るのは表示中の値から変えた項目だけにする。全項目を送ると、開いた後にタイムラインや
+	// 他の人が変えた項目まで、画面に残っていた古い値で上書きしてしまう
+	function dropUnchanged(e: FormDataEvent) {
+		for (const field of Object.keys(shown) as (keyof typeof shown)[]) {
+			const { name } = save.fields[field].as('text');
+			if (e.formData.get(name) === shown[field]) e.formData.delete(name);
+		}
+		const ids = e.formData.getAll(assigneeName).filter(Boolean);
+		if (
+			ids.length === issue.assigneeIds.length &&
+			ids.every((id) => issue.assigneeIds.includes(id as string))
+		) {
+			e.formData.delete(assigneeName);
+		}
+	}
 
 	async function deleteComment(commentId: string) {
 		try {
@@ -185,10 +218,12 @@
 		id={attrFormId}
 		class="card"
 		style="padding: 20px"
+		onformdata={dropUnchanged}
 		{...save.enhance(async ({ submit }) => {
 			try {
 				if (await submit()) {
 					editing = false;
+					saves++;
 					toast.success('保存しました');
 					onsaved?.();
 				}
@@ -206,7 +241,7 @@
 				<select
 					class="select"
 					id="issue-status"
-					{...save.fields.status.as('select', issue.status)}
+					{...save.fields.status.as('select', shown.status)}
 					disabled={!perms.changeStatus}
 				>
 					{#each detail.statuses as s (s.key)}
@@ -219,7 +254,7 @@
 				<select
 					class="select"
 					id="issue-resolution"
-					{...save.fields.resolution.as('select', issue.resolution ?? '')}
+					{...save.fields.resolution.as('select', shown.resolution)}
 					disabled={!perms.edit}
 				>
 					<option value="">未設定</option>
@@ -233,7 +268,7 @@
 				<select
 					class="select"
 					id="issue-priority"
-					{...save.fields.priority.as('select', issue.priority)}
+					{...save.fields.priority.as('select', shown.priority)}
 					disabled={!perms.edit}
 				>
 					{#each PRIORITIES as p (p)}
@@ -271,10 +306,7 @@
 						list={`issue-parent-${variant}-options`}
 						inputmode="numeric"
 						placeholder={detail.children.length > 0 ? '子課題があるため設定不可' : '課題番号'}
-						{...save.fields.parentNumber.as(
-							'text',
-							issue.parent ? String(issue.parent.number) : ''
-						)}
+						{...save.fields.parentNumber.as('text', shown.parentNumber)}
 						disabled={!perms.edit || detail.children.length > 0}
 					/>
 					<datalist id={`issue-parent-${variant}-options`}>
@@ -289,7 +321,7 @@
 				<select
 					class="select"
 					id="issue-category"
-					{...save.fields.categoryId.as('select', issue.categoryId ?? '')}
+					{...save.fields.categoryId.as('select', shown.categoryId)}
 					disabled={!perms.edit}
 				>
 					<option value="">未設定</option>
@@ -303,7 +335,7 @@
 				<select
 					class="select"
 					id="issue-milestone"
-					{...save.fields.milestoneId.as('select', issue.milestoneId ?? '')}
+					{...save.fields.milestoneId.as('select', shown.milestoneId)}
 					disabled={!perms.edit}
 				>
 					<option value="">未設定</option>
@@ -317,7 +349,7 @@
 				<input
 					class="input"
 					id="issue-start"
-					{...save.fields.startDate.as('date', issue.startDate ?? '')}
+					{...save.fields.startDate.as('date', shown.startDate)}
 					disabled={!perms.edit}
 				/>
 			</div>
@@ -326,7 +358,7 @@
 				<input
 					class="input"
 					id="issue-due"
-					{...save.fields.dueDate.as('date', issue.dueDate ?? '')}
+					{...save.fields.dueDate.as('date', shown.dueDate)}
 					disabled={!perms.edit}
 				/>
 			</div>
@@ -379,7 +411,7 @@
 					<select
 						class="select type-select"
 						id={`issue-type-${variant}`}
-						{...save.fields.typeId.as('select', issue.typeId ?? '')}
+						{...save.fields.typeId.as('select', shown.typeId)}
 						form={attrFormId}
 						disabled={!perms.edit}
 						onchange={(e) => {
@@ -426,7 +458,7 @@
 					<input
 						class="input"
 						id="issue-title"
-						{...save.fields.title.as('text', issue.title)}
+						{...save.fields.title.as('text', shown.title)}
 						form={attrFormId}
 						required
 						maxlength={200}
@@ -436,7 +468,7 @@
 					<label class="label" for="issue-description">本文</label>
 					<MarkdownEditor
 						id="issue-description"
-						{...save.fields.description.as('text', issue.description)}
+						{...save.fields.description.as('text', shown.description)}
 						form={attrFormId}
 						rows={10}
 						label="本文"

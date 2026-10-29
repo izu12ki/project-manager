@@ -24,7 +24,7 @@ const app: Handle = async ({ event, resolve }) => {
 
 	const appEnv = readEnv(env);
 	const db = createDb(appEnv);
-	const mailer = createMailer(appEnv);
+	const mailer = createMailer({ ...appEnv, EMAIL: env.EMAIL });
 	const auth = createAuth(appEnv, db, {
 		mailer,
 		waitUntil,

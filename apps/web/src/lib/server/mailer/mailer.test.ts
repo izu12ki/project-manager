@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createMailer } from './index';
+import { createMailer, parseFrom } from './index';
 
 const msg = { to: 'to@example.com', subject: 'S', text: 'T' };
 
@@ -10,6 +10,38 @@ function okFetch() {
 }
 
 describe('createMailer', () => {
+	it('cloudflare: send_email バインディングで送り、送信元は名前とアドレスに分ける', async () => {
+		const send = vi.fn(async () => ({ messageId: 'm' }));
+		const f = okFetch();
+		await createMailer(
+			{ MAIL_PROVIDER: 'cloudflare', MAIL_FROM: 'PM <a@x.com>', EMAIL: { send } },
+			f
+		).send({ ...msg, html: '<p>T</p>' });
+		expect(send).toHaveBeenCalledWith({
+			from: { name: 'PM', email: 'a@x.com' },
+			to: 'to@example.com',
+			subject: 'S',
+			text: 'T',
+			html: '<p>T</p>'
+		});
+		expect(f).not.toHaveBeenCalled();
+	});
+
+	it('cloudflare: API キーは不要で、バインディングが無ければ作成時に例外', () => {
+		expect(() => createMailer({ MAIL_PROVIDER: 'cloudflare', MAIL_FROM: 'a@x.com' })).toThrow(
+			'EMAIL'
+		);
+	});
+
+	it('cloudflare: 送信の失敗は例外にする', async () => {
+		const send = vi.fn(async () => {
+			throw new Error('E_SENDER_NOT_VERIFIED');
+		});
+		await expect(
+			createMailer({ MAIL_PROVIDER: 'cloudflare', MAIL_FROM: 'a@x.com', EMAIL: { send } }).send(msg)
+		).rejects.toThrow('E_SENDER_NOT_VERIFIED');
+	});
+
 	it('smtp2go: API キーをヘッダに載せて JSON を POST する', async () => {
 		const f = okFetch();
 		await createMailer(
@@ -53,8 +85,11 @@ describe('createMailer', () => {
 		).rejects.toThrow('401');
 	});
 
-	it('console 以外で API キーか送信元が無ければ作成時に例外', () => {
-		expect(() => createMailer({ MAIL_PROVIDER: 'smtp2go' })).toThrow('MAIL_API_KEY');
+	it('console 以外で送信元が無ければ、smtp2go・resend で API キーが無ければ作成時に例外', () => {
+		expect(() => createMailer({ MAIL_PROVIDER: 'cloudflare' })).toThrow('MAIL_FROM');
+		expect(() => createMailer({ MAIL_PROVIDER: 'smtp2go', MAIL_FROM: 'a@x.com' })).toThrow(
+			'MAIL_API_KEY'
+		);
 	});
 
 	it('console は fetch しない', async () => {
@@ -64,5 +99,17 @@ describe('createMailer', () => {
 		expect(f).not.toHaveBeenCalled();
 		expect(log).toHaveBeenCalled();
 		log.mockRestore();
+	});
+});
+
+describe('parseFrom', () => {
+	it('"名前 <addr>" は名前とアドレスに分け、アドレスだけならそのまま', () => {
+		expect(parseFrom('Project Manager <noreply@example.com>')).toEqual({
+			name: 'Project Manager',
+			email: 'noreply@example.com'
+		});
+		expect(parseFrom('"PM" <a@x.com>')).toEqual({ name: 'PM', email: 'a@x.com' });
+		expect(parseFrom('<a@x.com>')).toBe('a@x.com');
+		expect(parseFrom(' a@x.com ')).toBe('a@x.com');
 	});
 });

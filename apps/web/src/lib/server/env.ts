@@ -9,7 +9,7 @@ const EnvSchema = v.object({
 		v.url(),
 		v.transform((s) => s.replace(/\/+$/, ''))
 	),
-	MAIL_PROVIDER: v.optional(v.picklist(['smtp2go', 'resend', 'console']), 'console'),
+	MAIL_PROVIDER: v.optional(v.picklist(['cloudflare', 'smtp2go', 'resend', 'console']), 'console'),
 	MAIL_API_KEY: v.optional(v.string()),
 	SLACK_BOT_TOKEN: v.optional(v.string()),
 	MAIL_FROM: v.optional(v.string())

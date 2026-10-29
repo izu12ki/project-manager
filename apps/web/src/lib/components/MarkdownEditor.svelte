@@ -151,7 +151,8 @@
 			load().catch((e) => console.error('エディタの読み込みに失敗しました', e));
 		};
 		const idle = 'requestIdleCallback' in window;
-		const id = idle ? requestIdleCallback(start) : setTimeout(start, 200);
+		// 手が空かない間（CI など）もいつまでも textarea のままにしないよう、待つのは 1 秒まで
+		const id = idle ? requestIdleCallback(start, { timeout: 1000 }) : setTimeout(start, 200);
 		return () => {
 			disposed = true;
 			if (idle) cancelIdleCallback(id as number);

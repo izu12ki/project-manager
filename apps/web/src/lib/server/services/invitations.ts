@@ -64,6 +64,19 @@ export async function createInvitation(
 	if (existing)
 		throw new AppError('conflict', 'このメールアドレスのユーザーは既に登録されています');
 
+	// 同じメールの未承諾の招待は、新しいリンク 1 つにまとめる（古いリンクは使えなくなる）。
+	// 期限内の招待の参加プロジェクトは引き継ぎ、別のプロジェクトから招待しても前に招待された
+	// プロジェクトに入れるようにする。ロールは新しい招待のもの
+	const pending = await ctx.db
+		.select({ id: invitation.id, expiresAt: invitation.expiresAt })
+		.from(invitation)
+		.where(and(eq(invitation.email, data.email), isNull(invitation.acceptedAt)));
+	const live = pending.filter((p) => p.expiresAt.getTime() >= Date.now()).map((p) => p.id);
+	for (const p of [...(await projectsOf(ctx.db, live)).values()].flat()) {
+		if (!projects.some((q) => q.id === p.id)) projects.push(p);
+	}
+	projects.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+
 	const token = randomToken();
 	const id = uuidv7();
 	await ctx.db.batch([

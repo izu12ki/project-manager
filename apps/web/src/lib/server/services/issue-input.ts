@@ -17,7 +17,7 @@ import type { DB } from '../db';
 import { category, issue, issueType, milestone, user } from '../db/schema';
 import { AppError } from '../errors';
 import type { IssueEvent } from '../notifications';
-import { emptyToNull, parse } from '../validation';
+import { DateOrEmptySchema as DateOrEmpty, emptyToNull, parse } from '../validation';
 import { listStatusesOf } from './issue-fields';
 import { listAssignableUsers } from './projects';
 
@@ -107,10 +107,6 @@ const TitleSchema = v.pipe(
 const DescriptionSchema = v.pipe(
 	v.string(),
 	v.maxLength(50_000, '説明は50,000文字以内で入力してください')
-);
-const DateOrEmpty = v.union(
-	[v.literal(''), v.pipe(v.string(), v.isoDate())],
-	'日付の形式が正しくありません'
 );
 export const StatusSchema = v.pipe(v.string(), v.minLength(1, 'ステータスを選択してください'));
 const ResolutionOrEmpty = v.union(

@@ -1,7 +1,7 @@
 import { building } from '$app/env';
 import { getRequestEvent } from '$app/server';
 import { redirect } from '@sveltejs/kit';
-import type { Handle, HandleServerError } from '@sveltejs/kit/hooks';
+import { sequence, type Handle, type HandleServerError } from '@sveltejs/kit/hooks';
 import { svelteKitHandler, sveltekitCookies } from 'better-auth/svelte-kit';
 import { env, waitUntil } from 'cloudflare:workers';
 import { createAuth } from '$lib/server/auth';
@@ -19,7 +19,7 @@ const PUBLIC_PATHS = [
 	/^\/api\/auth\//
 ];
 
-export const handle: Handle = async ({ event, resolve }) => {
+const app: Handle = async ({ event, resolve }) => {
 	if (building) return resolve(event);
 
 	const appEnv = readEnv(env);
@@ -75,6 +75,17 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	return svelteKitHandler({ auth, event, resolve, building });
 };
+
+// CSP（frame-ancestors を含む）は SvelteKit 3.1 に上げてから入れる。
+// それまでは、ほかのサイトのフレームに埋め込んで操作させる（クリックジャッキング）ことだけ止める
+const securityHeaders: Handle = async ({ event, resolve }) => {
+	const response = await resolve(event);
+	response.headers.set('x-frame-options', 'DENY');
+	response.headers.set('x-content-type-options', 'nosniff');
+	return response;
+};
+
+export const handle = sequence(securityHeaders, app);
 
 export const handleError: HandleServerError = ({ error, event }) => {
 	console.error(`[${event.request.method} ${event.url.pathname}]`, error);

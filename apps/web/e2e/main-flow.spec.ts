@@ -72,6 +72,9 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	baseURL
 }) => {
 	// 1. 初期セットアップ
+	// ほかのサイトのフレームには埋め込ませない
+	const loginRes = await page.request.get('/login');
+	expect(loginRes.headers()['x-frame-options']).toBe('DENY');
 	await page.goto('/login');
 	await expect(page).toHaveURL(/\/setup/);
 	await page.getByLabel('名前').fill('管理者');

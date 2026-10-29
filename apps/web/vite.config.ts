@@ -14,7 +14,24 @@ export default defineConfig({
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
 			adapter: adapter(),
-			alias: { $lib: 'src/lib' }
+			alias: { $lib: 'src/lib' },
+			// スクリプトは自サイトと、SvelteKit がページごとに nonce を付けたインラインのものだけ実行する
+			csp: {
+				directives: {
+					'default-src': ['self'],
+					'script-src': ['self'],
+					// style 属性（style: ディレクティブ・エディタ・ドラッグ）が多く、nonce では許せないので inline を許す
+					'style-src': ['self', 'unsafe-inline', 'https://fonts.googleapis.com'],
+					'font-src': ['self', 'https://fonts.gstatic.com'],
+					// Markdown には外部の画像も書ける。blob: は絵文字登録のプレビュー
+					'img-src': ['self', 'data:', 'blob:', 'https:'],
+					'object-src': ['none'],
+					'base-uri': ['self'],
+					'form-action': ['self'],
+					// ほかのサイトのフレームには埋め込ませない（クリックジャッキング対策）
+					'frame-ancestors': ['none']
+				}
+			}
 		})
 	],
 	test: {

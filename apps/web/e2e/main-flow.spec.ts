@@ -630,7 +630,10 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(sheet2.getByLabel('開始日')).toHaveValue(jstDay(4));
 	// 別のタブで優先度を変えても、シートは古い優先度のまま
 	const other = await page.context().newPage();
+	// ハイドレーション前に選んだ値は描画で戻されるので、表示後に送る既読の通知を待ってから選ぶ
+	const otherReady = other.waitForResponse((r) => r.url().includes('/readIssueNotifications'));
 	await other.goto('/projects/ACME/issues/2');
+	await otherReady;
 	await other.getByLabel('優先度').selectOption({ label: '緊急' });
 	await other.getByRole('button', { name: '保存' }).click();
 	await expect(other.getByText('保存しました')).toBeVisible();

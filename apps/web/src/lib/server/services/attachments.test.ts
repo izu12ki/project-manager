@@ -169,21 +169,29 @@ describe('attachments: open / delete', () => {
 
 	it('参加者は中身を取得できる', async () => {
 		const up = await uploadAttachment(as(guest), 'ACME', file('a.txt', 5, 'text/plain'));
-		const { row, body } = await openAttachment(as(member), 'ACME', up.id);
+		const { row, body } = await openAttachment(as(member), up.id);
 		expect(row.filename).toBe('a.txt');
 		expect((await new Response(body).arrayBuffer()).byteLength).toBe(5);
 	});
 
-	it('未参加・別プロジェクトのキー・R2 に実体がない場合は not_found', async () => {
+	it('プロジェクトのキーを変えても、前に貼ったリンクの添付を開ける', async () => {
+		const up = await uploadAttachment(as(guest), 'ACME', file('a.txt', 5, 'text/plain'));
+		await db.update(project).set({ key: 'ACME2' }).where(eq(project.key, 'ACME'));
+		const { row } = await openAttachment(as(member), up.id);
+		expect(row.filename).toBe('a.txt');
+	});
+
+	it('添付のプロジェクトに未参加・R2 に実体がない場合は not_found', async () => {
 		const up = await uploadAttachment(as(guest), 'ACME', file());
-		await expect(openAttachment(as(outsider), 'ACME', up.id)).rejects.toMatchObject({
+		// outsider は BETA の参加者だが、添付は ACME のもの
+		await expect(openAttachment(as(outsider), up.id)).rejects.toMatchObject({
 			code: 'not_found'
 		});
-		await expect(openAttachment(as(member), 'BETA', up.id)).rejects.toMatchObject({
+		await expect(openAttachment(as(member), 'nope')).rejects.toMatchObject({
 			code: 'not_found'
 		});
 		store.objects.clear();
-		await expect(openAttachment(as(member), 'ACME', up.id)).rejects.toMatchObject({
+		await expect(openAttachment(as(member), up.id)).rejects.toMatchObject({
 			code: 'not_found'
 		});
 	});
@@ -191,11 +199,11 @@ describe('attachments: open / delete', () => {
 	it('削除できるのは本人と admin。member でも他人の添付は forbidden', async () => {
 		const a = await uploadAttachment(as(guest), 'ACME', file('a.png'));
 		const b = await uploadAttachment(as(guest), 'ACME', file('b.png'));
-		await expect(deleteAttachment(as(member), 'ACME', a.id)).rejects.toMatchObject({
+		await expect(deleteAttachment(as(member), a.id)).rejects.toMatchObject({
 			code: 'forbidden'
 		});
-		await deleteAttachment(as(guest), 'ACME', a.id);
-		await deleteAttachment(as(admin), 'ACME', b.id);
+		await deleteAttachment(as(guest), a.id);
+		await deleteAttachment(as(admin), b.id);
 		await settle();
 		expect(await db.select().from(attachment)).toHaveLength(0);
 		expect(store.objects.size).toBe(0);
@@ -204,7 +212,7 @@ describe('attachments: open / delete', () => {
 	it('アーカイブ済みプロジェクトでは削除できない', async () => {
 		const a = await uploadAttachment(as(guest), 'ACME', file());
 		await db.update(project).set({ archivedAt: new Date() }).where(eq(project.key, 'ACME'));
-		await expect(deleteAttachment(as(guest), 'ACME', a.id)).rejects.toMatchObject({
+		await expect(deleteAttachment(as(guest), a.id)).rejects.toMatchObject({
 			code: 'conflict'
 		});
 	});

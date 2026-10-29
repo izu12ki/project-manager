@@ -11,7 +11,7 @@ import type { AppContext } from '../context';
 import { attachment, user } from '../db/schema';
 import { AppError } from '../errors';
 import { getIssue } from './issues';
-import { assertWritable, requireProject } from './projects';
+import { assertWritable, requireProject, requireProjectById } from './projects';
 
 /** 仮置きのまま残す期間 */
 const STALE_MS = 24 * 60 * 60 * 1000;
@@ -112,25 +112,25 @@ export async function listAttachments(ctx: AppContext, key: string, number: numb
 		.orderBy(asc(attachment.createdAt), asc(attachment.id));
 }
 
-async function findAttachment(ctx: AppContext, key: string, id: string) {
-	const p = await requireProject(ctx, key);
-	const [row] = await ctx.db
-		.select()
-		.from(attachment)
-		.where(and(eq(attachment.id, id), eq(attachment.projectId, p.id)));
+/**
+ * 添付と、その添付のプロジェクト（参加者でなければ not_found）。URL のキーではなく添付の ID で引く。
+ * プロジェクトのキーを変えても、本文やコメントに貼った古いキーのリンクが切れないようにするため
+ */
+async function findAttachment(ctx: AppContext, id: string) {
+	const [row] = await ctx.db.select().from(attachment).where(eq(attachment.id, id));
 	if (!row) throw new AppError('not_found', '添付ファイルが見つかりません');
-	return { project: p, row };
+	return { project: await requireProjectById(ctx, row.projectId), row };
 }
 
-export async function openAttachment(ctx: AppContext, key: string, id: string) {
-	const { row } = await findAttachment(ctx, key, id);
+export async function openAttachment(ctx: AppContext, id: string) {
+	const { row } = await findAttachment(ctx, id);
 	const obj = await ctx.bucket.get(row.r2Key);
 	if (!obj) throw new AppError('not_found', '添付ファイルが見つかりません');
 	return { row, body: obj.body };
 }
 
-export async function deleteAttachment(ctx: AppContext, key: string, id: string): Promise<void> {
-	const { project: p, row } = await findAttachment(ctx, key, id);
+export async function deleteAttachment(ctx: AppContext, id: string): Promise<void> {
+	const { project: p, row } = await findAttachment(ctx, id);
 	assertWritable(p);
 	authorize(ctx.actor, 'attachment:delete', { uploaderId: row.uploaderId });
 	await ctx.db.delete(attachment).where(eq(attachment.id, row.id));

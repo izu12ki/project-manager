@@ -204,7 +204,7 @@ export const removeAttachment = command(
 	v.object({ ...IssueRefFields, attachmentId: v.string() }),
 	({ key, number, attachmentId }) =>
 		runCommand(async () => {
-			await deleteAttachment(remoteContext(), key, attachmentId);
+			await deleteAttachment(remoteContext(), attachmentId);
 			void getAttachments({ key, number }).refresh();
 		})
 );

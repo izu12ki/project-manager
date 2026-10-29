@@ -6,7 +6,8 @@ import type { RequestHandler } from './$types';
 export const GET: RequestHandler = async ({ locals, params }) => {
 	const ctx = appContext(locals);
 	return handleLoad(async () => {
-		const { row, body } = await openAttachment(ctx, params.key, params.id);
+		// URL のキーは見ない（キーを変える前に貼ったリンクも開けるように）
+		const { row, body } = await openAttachment(ctx, params.id);
 		return new Response(body, { headers: downloadHeaders(row) });
 	});
 };

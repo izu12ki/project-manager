@@ -1,12 +1,12 @@
 import { error, redirect } from '@sveltejs/kit';
-import { appContext } from '$lib/server/context';
-import { handleAction, handleLoad } from '$lib/server/errors';
+import { appContext } from '#lib/server/context.ts';
+import { handleAction, handleLoad } from '#lib/server/errors.ts';
 import {
 	createInvitation,
 	listPendingInvitations,
 	reissueInvitation,
 	revokeInvitation
-} from '$lib/server/services/invitations';
+} from '#lib/server/services/invitations.ts';
 import {
 	createCategory,
 	createIssueType,
@@ -26,7 +26,7 @@ import {
 	updateIssueType,
 	updateMilestone,
 	updateStatus
-} from '$lib/server/services/issue-fields';
+} from '#lib/server/services/issue-fields.ts';
 import {
 	addMember,
 	listMembers,
@@ -34,9 +34,9 @@ import {
 	requireProject,
 	setProjectArchived,
 	updateProject
-} from '$lib/server/services/projects';
-import { listUsers } from '$lib/server/services/users';
-import { formObject } from '$lib/server/validation';
+} from '#lib/server/services/projects.ts';
+import { listUsers } from '#lib/server/services/users.ts';
+import { formObject } from '#lib/server/validation.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, params }) => {

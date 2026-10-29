@@ -11,8 +11,8 @@
 		Smile,
 		Users
 	} from '@lucide/svelte';
-	import { ROLE_LABEL, colorFor, projectColor, projectIcon } from '$lib/labels';
-	import { getUnreadCount } from '$lib/notifications.remote';
+	import { ROLE_LABEL, colorFor, projectColor, projectIcon } from '#lib/labels.ts';
+	import { getUnreadCount } from '#lib/notifications.remote.ts';
 	import ThemeToggle from './ThemeToggle.svelte';
 
 	let {

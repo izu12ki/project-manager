@@ -1,11 +1,11 @@
-import { appContext } from '$lib/server/context';
-import { can } from '$lib/server/authz';
-import { handleAction } from '$lib/server/errors';
+import { appContext } from '#lib/server/context.ts';
+import { can } from '#lib/server/authz.ts';
+import { handleAction } from '#lib/server/errors.ts';
 import {
 	addCustomEmoji,
 	deleteCustomEmoji,
 	listCustomEmojis
-} from '$lib/server/services/custom-emojis';
+} from '#lib/server/services/custom-emojis.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {

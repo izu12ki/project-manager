@@ -1,7 +1,7 @@
 <script lang="ts" generics="T extends TimelineIssue & { title: string; canEdit: boolean }">
 	import { ChevronLeft, ChevronRight } from '@lucide/svelte';
 	import { page } from '$app/state';
-	import { DONE_STATUS, statusColor, statusName } from '$lib/labels';
+	import { DONE_STATUS, statusColor, statusName } from '#lib/labels.ts';
 	import {
 		addDays,
 		applyDrag,
@@ -18,7 +18,7 @@
 		type IssueGroup,
 		type TimelineIssue,
 		type ViewRange
-	} from '$lib/timeline';
+	} from '#lib/timeline.ts';
 
 	interface Props {
 		projectKey: string;

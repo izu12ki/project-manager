@@ -4,7 +4,7 @@ import * as v from 'valibot';
 import { authorize } from '../authz';
 import type { AppContext } from '../context';
 import type { DB } from '../db';
-import { COLORS } from '$lib/labels';
+import { COLORS } from '#lib/labels.ts';
 import { issue, project, projectMember, user } from '../db/schema';
 import { AppError } from '../errors';
 import { parse } from '../validation';

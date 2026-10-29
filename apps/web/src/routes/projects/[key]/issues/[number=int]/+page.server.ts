@@ -1,7 +1,7 @@
 import { redirect } from '@sveltejs/kit';
-import { appContext } from '$lib/server/context';
-import { handleAction } from '$lib/server/errors';
-import { deleteIssue } from '$lib/server/services/issues';
+import { appContext } from '#lib/server/context.ts';
+import { handleAction } from '#lib/server/errors.ts';
+import { deleteIssue } from '#lib/server/services/issues.ts';
 import type { Actions } from './$types';
 
 export const actions: Actions = {

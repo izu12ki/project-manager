@@ -1,4 +1,4 @@
-import { mentionsToPlain } from '$lib/mentions';
+import { mentionsToPlain } from '#lib/mentions.ts';
 
 /** 通知・外部通知用に Markdown をプレーンな 1 行にして max 文字で切る */
 export function excerpt(markdown: string, max: number): string {

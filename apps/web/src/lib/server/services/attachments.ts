@@ -5,7 +5,7 @@ import {
 	TOO_LARGE_MESSAGE,
 	attachmentUrl,
 	isSafeImage
-} from '$lib/attachment-rules';
+} from '#lib/attachment-rules.ts';
 import { authorize } from '../authz';
 import type { AppContext } from '../context';
 import { attachment, user } from '../db/schema';

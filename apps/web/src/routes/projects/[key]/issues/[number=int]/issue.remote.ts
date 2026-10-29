@@ -1,35 +1,35 @@
 import { inArray } from 'drizzle-orm';
 import * as v from 'valibot';
 import { command, form, query } from '$app/server';
-import { attachmentUrl, isSafeImage } from '$lib/attachment-rules';
-import { can } from '$lib/server/authz';
-import { user } from '$lib/server/db/schema';
-import { renderMarkdown } from '$lib/server/markdown';
-import { getUnreadCount } from '$lib/notifications.remote';
-import { remoteContext, runCommand, runForm, runQuery } from '$lib/server/remote-helpers';
-import { deleteAttachment, listAttachments } from '$lib/server/services/attachments';
+import { attachmentUrl, isSafeImage } from '#lib/attachment-rules.ts';
+import { can } from '#lib/server/authz.ts';
+import { user } from '#lib/server/db/schema.ts';
+import { renderMarkdown } from '#lib/server/markdown.ts';
+import { getUnreadCount } from '#lib/notifications.remote.ts';
+import { remoteContext, runCommand, runForm, runQuery } from '#lib/server/remote-helpers.ts';
+import { deleteAttachment, listAttachments } from '#lib/server/services/attachments.ts';
 import {
 	addComment,
 	deleteComment,
 	editComment,
 	listComments,
 	toggleReaction
-} from '$lib/server/services/comments';
+} from '#lib/server/services/comments.ts';
 import {
 	listCategories,
 	listIssueTypesOf,
 	listMilestones,
 	listStatusesOf
-} from '$lib/server/services/issue-fields';
+} from '#lib/server/services/issue-fields.ts';
 import {
 	getIssue,
 	listChildIssues,
 	listIssueChanges,
 	listIssues,
 	updateIssue
-} from '$lib/server/services/issues';
-import { markIssueRead } from '$lib/server/services/notifications';
-import { listAssignableUsers, requireProject } from '$lib/server/services/projects';
+} from '#lib/server/services/issues.ts';
+import { markIssueRead } from '#lib/server/services/notifications.ts';
+import { listAssignableUsers, requireProject } from '#lib/server/services/projects.ts';
 
 const IssueRef = v.object({
 	key: v.string(),

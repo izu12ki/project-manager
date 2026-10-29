@@ -1,9 +1,9 @@
 import { json } from '@sveltejs/kit';
-import { MAX_ATTACHMENT_BYTES, TOO_LARGE_MESSAGE } from '$lib/attachment-rules';
-import { appContext } from '$lib/server/context';
-import { AppError } from '$lib/server/errors';
-import { runCommand } from '$lib/server/remote-helpers';
-import { uploadAttachment } from '$lib/server/services/attachments';
+import { MAX_ATTACHMENT_BYTES, TOO_LARGE_MESSAGE } from '#lib/attachment-rules.ts';
+import { appContext } from '#lib/server/context.ts';
+import { AppError } from '#lib/server/errors.ts';
+import { runCommand } from '#lib/server/remote-helpers.ts';
+import { uploadAttachment } from '#lib/server/services/attachments.ts';
 import type { RequestHandler } from './$types';
 
 // multipart の境界やヘッダの分の余裕

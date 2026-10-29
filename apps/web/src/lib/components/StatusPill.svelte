@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { statusColor, statusName, type Status, type StatusDef } from '$lib/labels';
+	import { statusColor, statusName, type Status, type StatusDef } from '#lib/labels.ts';
 
 	// 定義を渡さなければ、プロジェクト配下のページで読み込んだ定義を使う
 	let { status, statuses = page.data.statuses }: { status: Status; statuses?: StatusDef[] } =

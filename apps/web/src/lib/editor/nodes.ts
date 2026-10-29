@@ -26,7 +26,7 @@ import {
 	mentionFromMarkdown,
 	mentionToMarkdown,
 	type MentionMdast
-} from '$lib/markdown/mention-mdast';
+} from '#lib/markdown/mention-mdast.ts';
 import { renderTable, tableToMarkdown } from './table';
 
 /** 表など、エディタでは編集せず元の Markdown をそのまま書き出すブロック */

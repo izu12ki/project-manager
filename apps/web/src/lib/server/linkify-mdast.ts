@@ -1,6 +1,6 @@
 import { LinkifyIt } from 'linkify-it';
 import type { Nodes, Parents, PhrasingContent, Root } from 'mdast';
-import { isAllowedUrl } from '$lib/markdown/url';
+import { isAllowedUrl } from '#lib/markdown/url.ts';
 
 // markdown-it の既定（`new LinkifyIt()`）と同じ設定。自動リンクの検出結果を揃える
 const linkify = new LinkifyIt();

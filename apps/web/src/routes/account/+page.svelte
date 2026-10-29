@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { enhance } from '$lib/forms';
+	import { enhance } from '#lib/forms.ts';
 	import { Check, Copy } from '@lucide/svelte';
-	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
-	import FormAlert from '$lib/components/FormAlert.svelte';
-	import PasswordInput from '$lib/components/PasswordInput.svelte';
-	import { FONT_SIZES, fontSize } from '$lib/font-size.svelte';
-	import { formatDate, formatDateTime } from '$lib/labels';
-	import { toast } from '$lib/toast.svelte';
+	import ConfirmAction from '#lib/components/ConfirmAction.svelte';
+	import FormAlert from '#lib/components/FormAlert.svelte';
+	import PasswordInput from '#lib/components/PasswordInput.svelte';
+	import { FONT_SIZES, fontSize } from '#lib/font-size.svelte.ts';
+	import { formatDate, formatDateTime } from '#lib/labels.ts';
+	import { toast } from '#lib/toast.svelte.ts';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();

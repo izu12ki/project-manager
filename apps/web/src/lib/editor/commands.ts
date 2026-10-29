@@ -25,7 +25,7 @@ import {
 	type LexicalNode,
 	type RangeSelection
 } from 'lexical';
-import { normalizeLinkUrl } from '$lib/markdown/url';
+import { normalizeLinkUrl } from '#lib/markdown/url.ts';
 
 export type Format = 'bold' | 'strikethrough' | 'code' | 'link' | 'bullet' | 'check' | 'quote';
 

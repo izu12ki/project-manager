@@ -1,12 +1,12 @@
 import * as v from 'valibot';
 import { command, query } from '$app/server';
-import { remoteContext, runCommand, runQuery } from '$lib/server/remote-helpers';
+import { remoteContext, runCommand, runQuery } from '#lib/server/remote-helpers.ts';
 import {
 	countUnread,
 	listNotifications,
 	markAllRead,
 	markRead
-} from '$lib/server/services/notifications';
+} from '#lib/server/services/notifications.ts';
 
 export const getUnreadCount = query(() => runQuery(() => countUnread(remoteContext())));
 

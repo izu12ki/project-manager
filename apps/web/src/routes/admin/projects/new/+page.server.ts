@@ -1,8 +1,8 @@
 import { redirect } from '@sveltejs/kit';
-import { appContext } from '$lib/server/context';
-import { handleAction } from '$lib/server/errors';
-import { createProject } from '$lib/server/services/projects';
-import { formObject } from '$lib/server/validation';
+import { appContext } from '#lib/server/context.ts';
+import { handleAction } from '#lib/server/errors.ts';
+import { createProject } from '#lib/server/services/projects.ts';
+import { formObject } from '#lib/server/validation.ts';
 import type { Actions } from './$types';
 
 export const actions: Actions = {

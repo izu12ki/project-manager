@@ -4,11 +4,11 @@ import { redirect } from '@sveltejs/kit';
 import { sequence, type Handle, type HandleServerError } from '@sveltejs/kit/hooks';
 import { svelteKitHandler, sveltekitCookies } from 'better-auth/svelte-kit';
 import { env, waitUntil } from 'cloudflare:workers';
-import { createAuth } from '$lib/server/auth';
-import type { Role } from '$lib/server/authz';
-import { createDb } from '$lib/server/db';
-import { readEnv } from '$lib/server/env';
-import { createMailer } from '$lib/server/mailer';
+import { createAuth } from '#lib/server/auth.ts';
+import type { Role } from '#lib/server/authz.ts';
+import { createDb } from '#lib/server/db/index.ts';
+import { readEnv } from '#lib/server/env.ts';
+import { createMailer } from '#lib/server/mailer/index.ts';
 
 const PUBLIC_PATHS = [
 	/^\/login$/,

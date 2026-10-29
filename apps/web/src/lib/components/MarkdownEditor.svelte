@@ -8,18 +8,18 @@
 		onPendingUploadsChange,
 		pendingUploads,
 		uploadable
-	} from '$lib/attachment-upload';
-	import { autosize } from '$lib/autosize';
-	import type { Format } from '$lib/editor/commands';
-	import type { MarkdownEditorHandle } from '$lib/editor/create-editor';
-	import type { MentionCandidate } from '$lib/mentions';
+	} from '#lib/attachment-upload.ts';
+	import { autosize } from '#lib/autosize.ts';
+	import type { Format } from '#lib/editor/commands.ts';
+	import type { MarkdownEditorHandle } from '#lib/editor/create-editor.ts';
+	import type { MentionCandidate } from '#lib/mentions.ts';
 	import AttachButton from './AttachButton.svelte';
 	import EditorMentionMenu from './EditorMentionMenu.svelte';
 	import MentionMenu from './MentionMenu.svelte';
 
-	type Commands = typeof import('$lib/editor/commands');
-	type MentionApi = typeof import('$lib/editor/mention-query');
-	type UploadsApi = typeof import('$lib/editor/uploads');
+	type Commands = typeof import('#lib/editor/commands.ts');
+	type MentionApi = typeof import('#lib/editor/mention-query.ts');
+	type UploadsApi = typeof import('#lib/editor/uploads.ts');
 	type Mode = 'rich' | 'source';
 
 	let {
@@ -107,10 +107,10 @@
 
 		async function load() {
 			const [{ createMarkdownEditor }, cmds, mention, ups] = await Promise.all([
-				import('$lib/editor/create-editor'),
-				import('$lib/editor/commands'),
-				import('$lib/editor/mention-query'),
-				import('$lib/editor/uploads')
+				import('#lib/editor/create-editor.ts'),
+				import('#lib/editor/commands.ts'),
+				import('#lib/editor/mention-query.ts'),
+				import('#lib/editor/uploads.ts')
 			]);
 			if (disposed || !body || !textarea) return;
 			const hadFocus = document.activeElement === textarea;

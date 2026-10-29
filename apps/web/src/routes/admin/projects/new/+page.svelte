@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { enhance } from '$lib/forms';
-	import FormAlert from '$lib/components/FormAlert.svelte';
+	import { enhance } from '#lib/forms.ts';
+	import FormAlert from '#lib/components/FormAlert.svelte';
 	import type { PageProps } from './$types';
 
 	let { form }: PageProps = $props();

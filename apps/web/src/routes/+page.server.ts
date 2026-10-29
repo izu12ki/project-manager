@@ -1,6 +1,6 @@
-import { appContext } from '$lib/server/context';
-import { countOpenIssues } from '$lib/server/services/issues';
-import { listProjects } from '$lib/server/services/projects';
+import { appContext } from '#lib/server/context.ts';
+import { countOpenIssues } from '#lib/server/services/issues.ts';
+import { listProjects } from '#lib/server/services/projects.ts';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {

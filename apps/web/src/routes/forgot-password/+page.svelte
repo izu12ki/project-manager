@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { enhance } from '$lib/forms';
+	import { enhance } from '#lib/forms.ts';
 	import { CircleCheck } from '@lucide/svelte';
-	import FormAlert from '$lib/components/FormAlert.svelte';
+	import FormAlert from '#lib/components/FormAlert.svelte';
 	import type { PageProps } from './$types';
 
 	let { form }: PageProps = $props();

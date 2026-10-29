@@ -1,6 +1,6 @@
 import { and, count, desc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
-import { statusName } from '$lib/labels';
+import { statusName } from '#lib/labels.ts';
 import type { AppContext } from '../context';
 import {
 	comment,

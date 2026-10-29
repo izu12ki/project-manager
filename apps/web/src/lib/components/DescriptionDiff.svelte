@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { diffText } from '$lib/text-diff';
+	import { diffText } from '#lib/text-diff.ts';
 
 	let { before, after }: { before: string; after: string } = $props();
 	const rows = $derived(diffText(before, after));

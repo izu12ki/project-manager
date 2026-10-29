@@ -1,9 +1,9 @@
-import { PRIORITIES, type Priority } from '$lib/labels';
-import { appContext } from '$lib/server/context';
-import { handleLoad } from '$lib/server/errors';
-import { listCategories, listMilestones } from '$lib/server/services/issue-fields';
-import { listDeletedIssues, listIssues } from '$lib/server/services/issues';
-import { listAssignableUsers, requireProject } from '$lib/server/services/projects';
+import { PRIORITIES, type Priority } from '#lib/labels.ts';
+import { appContext } from '#lib/server/context.ts';
+import { handleLoad } from '#lib/server/errors.ts';
+import { listCategories, listMilestones } from '#lib/server/services/issue-fields.ts';
+import { listDeletedIssues, listIssues } from '#lib/server/services/issues.ts';
+import { listAssignableUsers, requireProject } from '#lib/server/services/projects.ts';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {

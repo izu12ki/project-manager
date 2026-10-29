@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { CornerDownRight, Flag, Inbox, Search, SearchX, Trash2 } from '@lucide/svelte';
-	import IssueTypeTag from '$lib/components/IssueTypeTag.svelte';
-	import PriorityPill from '$lib/components/PriorityPill.svelte';
-	import StatusPill from '$lib/components/StatusPill.svelte';
+	import IssueTypeTag from '#lib/components/IssueTypeTag.svelte';
+	import PriorityPill from '#lib/components/PriorityPill.svelte';
+	import StatusPill from '#lib/components/StatusPill.svelte';
 	import {
 		PRIORITIES,
 		PRIORITY_LABEL,
@@ -10,7 +10,7 @@
 		formatDue,
 		isDueAlert,
 		milestoneLabel
-	} from '$lib/labels';
+	} from '#lib/labels.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();

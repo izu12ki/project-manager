@@ -19,9 +19,9 @@ import {
 	type LexicalEditor,
 	type RangeSelection
 } from 'lexical';
-import { shouldUploadPaste } from '$lib/attachment-rules';
-import { trackUpload, uploadFile, type UploadResult } from '$lib/attachment-upload';
-import { toast } from '$lib/toast.svelte';
+import { shouldUploadPaste } from '#lib/attachment-rules.ts';
+import { trackUpload, uploadFile, type UploadResult } from '#lib/attachment-upload.ts';
+import { toast } from '#lib/toast.svelte.ts';
 import {
 	$createImageNode,
 	$createUploadPlaceholderNode,

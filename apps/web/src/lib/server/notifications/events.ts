@@ -1,4 +1,4 @@
-import type { Priority, Status } from '$lib/labels';
+import type { Priority, Status } from '#lib/labels.ts';
 
 /** services が notify に渡す出来事。ID と本文だけを持ち、名前の解決は notify が行う */
 export type IssueEvent =

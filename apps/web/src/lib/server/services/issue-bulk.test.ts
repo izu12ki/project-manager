@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { mentionToken } from '$lib/mentions';
+import { mentionToken } from '#lib/mentions.ts';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
 import {

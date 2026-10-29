@@ -1,7 +1,7 @@
-import { appContext } from '$lib/server/context';
-import { handleLoad } from '$lib/server/errors';
-import { listIssueTypesOf, listStatusesOf } from '$lib/server/services/issue-fields';
-import { requireProject } from '$lib/server/services/projects';
+import { appContext } from '#lib/server/context.ts';
+import { handleLoad } from '#lib/server/errors.ts';
+import { listIssueTypesOf, listStatusesOf } from '#lib/server/services/issue-fields.ts';
+import { requireProject } from '#lib/server/services/projects.ts';
 import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = async ({ locals, params }) => {

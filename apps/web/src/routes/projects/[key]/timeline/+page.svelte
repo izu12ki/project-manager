@@ -2,8 +2,8 @@
 	import { ChevronLeft, ChevronRight, SearchX } from '@lucide/svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { milestoneLabel, todayJst } from '$lib/labels';
-	import { toast } from '$lib/toast.svelte';
+	import { milestoneLabel, todayJst } from '#lib/labels.ts';
+	import { toast } from '#lib/toast.svelte.ts';
 	import {
 		addDays,
 		filterItems,
@@ -14,7 +14,7 @@
 		type Dated,
 		type GroupBy,
 		type Scale
-	} from '$lib/timeline';
+	} from '#lib/timeline.ts';
 	import IssueSheet from '../IssueSheet.svelte';
 	import { getChanges, getIssueDetail } from '../issues/[number=int]/issue.remote';
 	import TimelineGrid from './TimelineGrid.svelte';

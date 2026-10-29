@@ -10,8 +10,8 @@ import {
 	PASTE_COMMAND,
 	UNDO_COMMAND
 } from 'lexical';
-import type { UploadResult } from '$lib/attachment-upload';
-import { toast } from '$lib/toast.svelte';
+import type { UploadResult } from '#lib/attachment-upload.ts';
+import { toast } from '#lib/toast.svelte.ts';
 import { createMarkdownEditor } from './create-editor';
 import { $isUploadPlaceholderNode } from './nodes';
 import { insertUploadsIntoEditor, registerEditorUploads } from './uploads';

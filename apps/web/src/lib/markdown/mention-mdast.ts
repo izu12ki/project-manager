@@ -1,7 +1,7 @@
 import type { Extension } from 'mdast-util-from-markdown';
 import type { Options } from 'mdast-util-to-markdown';
 import type { Nodes, Parents, Root } from 'mdast';
-import { MENTION_SOURCE, mentionToken } from '$lib/mentions';
+import { MENTION_SOURCE, mentionToken } from '#lib/mentions.ts';
 
 export interface MentionMdast {
 	type: 'mention';

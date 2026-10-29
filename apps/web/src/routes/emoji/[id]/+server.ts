@@ -1,6 +1,6 @@
-import { appContext } from '$lib/server/context';
-import { handleLoad } from '$lib/server/errors';
-import { openCustomEmoji } from '$lib/server/services/custom-emojis';
+import { appContext } from '#lib/server/context.ts';
+import { handleLoad } from '#lib/server/errors.ts';
+import { openCustomEmoji } from '#lib/server/services/custom-emojis.ts';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals, params }) => {

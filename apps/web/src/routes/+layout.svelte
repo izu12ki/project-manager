@@ -5,11 +5,11 @@
 	import { page } from '$app/state';
 	import { MediaQuery } from 'svelte/reactivity';
 	import { ChevronRight, FolderKanban, PanelLeft } from '@lucide/svelte';
-	import AppSidebar from '$lib/components/AppSidebar.svelte';
-	import NavProgress from '$lib/components/NavProgress.svelte';
-	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-	import ImageLightbox from '$lib/components/ImageLightbox.svelte';
-	import Toaster from '$lib/components/Toaster.svelte';
+	import AppSidebar from '#lib/components/AppSidebar.svelte';
+	import NavProgress from '#lib/components/NavProgress.svelte';
+	import ThemeToggle from '#lib/components/ThemeToggle.svelte';
+	import ImageLightbox from '#lib/components/ImageLightbox.svelte';
+	import Toaster from '#lib/components/Toaster.svelte';
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();

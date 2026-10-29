@@ -2,8 +2,8 @@
 	import { Calendar, CircleAlert, CornerDownRight, Flag, X } from '@lucide/svelte';
 	import { page } from '$app/state';
 	import { dndzone, type DndEvent } from 'svelte-dnd-action';
-	import IssueTypeTag from '$lib/components/IssueTypeTag.svelte';
-	import PriorityPill from '$lib/components/PriorityPill.svelte';
+	import IssueTypeTag from '#lib/components/IssueTypeTag.svelte';
+	import PriorityPill from '#lib/components/PriorityPill.svelte';
 	import {
 		colorFor,
 		colorVar,
@@ -11,7 +11,7 @@
 		isDueAlert,
 		milestoneLabel,
 		type Status
-	} from '$lib/labels';
+	} from '#lib/labels.ts';
 	import IssueSheet from '../IssueSheet.svelte';
 	import { getChanges, getIssueDetail } from '../issues/[number=int]/issue.remote';
 	import { getBoard, moveCard } from './board.remote';

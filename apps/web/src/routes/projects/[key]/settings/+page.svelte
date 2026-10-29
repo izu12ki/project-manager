@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { SubmitFunction } from '$app/forms';
-	import { enhance } from '$lib/forms';
+	import { enhance } from '#lib/forms.ts';
 	import {
 		Archive,
 		ArchiveRestore,
@@ -13,11 +13,11 @@
 		RotateCcw,
 		Tag
 	} from '@lucide/svelte';
-	import ColorPicker from '$lib/components/ColorPicker.svelte';
-	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
-	import FormAlert from '$lib/components/FormAlert.svelte';
-	import InviteLinkBox from '$lib/components/InviteLinkBox.svelte';
-	import RolePill from '$lib/components/RolePill.svelte';
+	import ColorPicker from '#lib/components/ColorPicker.svelte';
+	import ConfirmAction from '#lib/components/ConfirmAction.svelte';
+	import FormAlert from '#lib/components/FormAlert.svelte';
+	import InviteLinkBox from '#lib/components/InviteLinkBox.svelte';
+	import RolePill from '#lib/components/RolePill.svelte';
 	import {
 		FIXED_STATUSES,
 		ROLE_LABEL,
@@ -25,8 +25,8 @@
 		colorVar,
 		projectColor,
 		projectIcon
-	} from '$lib/labels';
-	import { toast } from '$lib/toast.svelte';
+	} from '#lib/labels.ts';
+	import { toast } from '#lib/toast.svelte.ts';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();

@@ -1,6 +1,6 @@
-import type { Auth } from '$lib/server/auth';
-import type { Actor } from '$lib/server/authz';
-import type { BaseContext } from '$lib/server/context';
+import type { Auth } from '#lib/server/auth.ts';
+import type { Actor } from '#lib/server/authz.ts';
+import type { BaseContext } from '#lib/server/context.ts';
 
 declare global {
 	namespace App {

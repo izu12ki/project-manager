@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Archive, ChevronDown, ChevronRight, FolderOpen, Plus } from '@lucide/svelte';
-	import { formatDate, projectColor, projectIcon } from '$lib/labels';
+	import { formatDate, projectColor, projectIcon } from '#lib/labels.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();

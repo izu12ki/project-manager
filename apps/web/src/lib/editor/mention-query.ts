@@ -9,7 +9,7 @@ import {
 	type LexicalEditor,
 	type TextNode
 } from 'lexical';
-import { findMentionQuery, type MentionCandidate } from '$lib/mentions';
+import { findMentionQuery, type MentionCandidate } from '#lib/mentions.ts';
 import { $createMentionNode } from './nodes';
 
 /** 折りたたまれた選択が text ノードの中にあるとき、そのノードの先頭からキャレットまでを調べる */

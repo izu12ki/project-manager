@@ -11,7 +11,7 @@ import {
 	RESOLUTION_LABEL,
 	type IssueChangeItem,
 	type StatusDef
-} from '$lib/labels';
+} from '#lib/labels.ts';
 import { authorize, type Actor } from '../authz';
 import type { DB } from '../db';
 import { category, issue, issueType, milestone, user } from '../db/schema';

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { COLORS, COLOR_LABEL, colorVar } from '$lib/labels';
+	import { COLORS, COLOR_LABEL, colorVar } from '#lib/labels.ts';
 
 	interface Props {
 		name: string;

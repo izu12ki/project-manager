@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ROLE_CLASS, ROLE_COLOR, ROLE_LABEL } from '$lib/labels';
+	import { ROLE_CLASS, ROLE_COLOR, ROLE_LABEL } from '#lib/labels.ts';
 
 	let { role }: { role: keyof typeof ROLE_LABEL } = $props();
 </script>

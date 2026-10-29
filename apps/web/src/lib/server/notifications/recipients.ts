@@ -1,4 +1,4 @@
-import type { Status } from '$lib/labels';
+import type { Status } from '#lib/labels.ts';
 import type { NotificationType } from '../db/schema';
 
 export type Change =

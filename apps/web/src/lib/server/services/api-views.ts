@@ -1,5 +1,5 @@
 import * as v from 'valibot';
-import type { Status } from '$lib/labels';
+import type { Status } from '#lib/labels.ts';
 import { AppError } from '../errors';
 import { parse } from '../validation';
 import { apiUser } from '../api';

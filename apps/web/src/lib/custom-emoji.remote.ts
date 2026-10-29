@@ -1,6 +1,6 @@
 import { query } from '$app/server';
-import { remoteContext, runQuery } from '$lib/server/remote-helpers';
-import { listCustomEmojis } from '$lib/server/services/custom-emojis';
+import { remoteContext, runQuery } from '#lib/server/remote-helpers.ts';
+import { listCustomEmojis } from '#lib/server/services/custom-emojis.ts';
 import type { CustomEmoji } from './custom-emoji';
 
 /** リアクションのピッカーと表示に使う、登録済みのカスタム絵文字 */

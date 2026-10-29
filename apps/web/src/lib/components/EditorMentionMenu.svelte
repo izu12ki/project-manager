@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { LexicalEditor } from 'lexical';
-	import { filterCandidates, type MentionCandidate } from '$lib/mentions';
+	import { filterCandidates, type MentionCandidate } from '#lib/mentions.ts';
 
 	// Lexical の実体は props で受け取る（このコンポーネントから静的に import しない）
 	let {
@@ -9,7 +9,7 @@
 		candidates
 	}: {
 		editor: LexicalEditor;
-		api: typeof import('$lib/editor/mention-query');
+		api: typeof import('#lib/editor/mention-query.ts');
 		candidates: MentionCandidate[];
 	} = $props();
 

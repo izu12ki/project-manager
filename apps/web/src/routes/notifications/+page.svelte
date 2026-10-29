@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { colorFor, formatDateTime } from '$lib/labels';
-	import { toast } from '$lib/toast.svelte';
+	import { colorFor, formatDateTime } from '#lib/labels.ts';
+	import { toast } from '#lib/toast.svelte.ts';
 	import {
 		getNotifications,
 		openNotification,
 		readAllNotifications
-	} from '$lib/notifications.remote';
+	} from '#lib/notifications.remote.ts';
 
 	const items = $derived(await getNotifications());
 	const hasUnread = $derived(items.some((n) => !n.read));

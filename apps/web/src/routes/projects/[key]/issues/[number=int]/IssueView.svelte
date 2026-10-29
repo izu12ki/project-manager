@@ -19,15 +19,15 @@
 	} from '@lucide/svelte';
 	import { untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
-	import { formatBytes } from '$lib/attachment-rules';
-	import CommentReactions from '$lib/components/CommentReactions.svelte';
-	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
-	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
-	import MultiSelect from '$lib/components/MultiSelect.svelte';
-	import FormAlert from '$lib/components/FormAlert.svelte';
-	import PriorityPill from '$lib/components/PriorityPill.svelte';
-	import ReactionPicker from '$lib/components/ReactionPicker.svelte';
-	import StatusPill from '$lib/components/StatusPill.svelte';
+	import { formatBytes } from '#lib/attachment-rules.ts';
+	import CommentReactions from '#lib/components/CommentReactions.svelte';
+	import ConfirmAction from '#lib/components/ConfirmAction.svelte';
+	import MarkdownEditor from '#lib/components/MarkdownEditor.svelte';
+	import MultiSelect from '#lib/components/MultiSelect.svelte';
+	import FormAlert from '#lib/components/FormAlert.svelte';
+	import PriorityPill from '#lib/components/PriorityPill.svelte';
+	import ReactionPicker from '#lib/components/ReactionPicker.svelte';
+	import StatusPill from '#lib/components/StatusPill.svelte';
 	import {
 		DONE_STATUS,
 		ISSUE_CHANGE_FIELD_LABEL,
@@ -38,9 +38,9 @@
 		colorFor,
 		formatDateTime,
 		milestoneLabel
-	} from '$lib/labels';
-	import { toggleReactionIn } from '$lib/reactions';
-	import { toast } from '$lib/toast.svelte';
+	} from '#lib/labels.ts';
+	import { toggleReactionIn } from '#lib/reactions.ts';
+	import { toast } from '#lib/toast.svelte.ts';
 	import {
 		getAttachments,
 		getChanges,
@@ -594,7 +594,7 @@
 											>
 												<summary>本文を変更しました（差分を表示）</summary>
 												{#if openDiffs.has(h.id)}
-													{#await import('$lib/components/DescriptionDiff.svelte') then { default: DescriptionDiff }}
+													{#await import('#lib/components/DescriptionDiff.svelte') then { default: DescriptionDiff }}
 														<DescriptionDiff {before} {after} />
 													{/await}
 												{/if}

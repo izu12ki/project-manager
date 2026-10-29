@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Moon, Sun } from '@lucide/svelte';
-	import { theme } from '$lib/theme.svelte';
+	import { theme } from '#lib/theme.svelte.ts';
 
 	let { class: className = 'icon-btn icon-btn-bordered' }: { class?: string } = $props();
 

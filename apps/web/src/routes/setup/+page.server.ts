@@ -1,9 +1,9 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { APIError } from 'better-auth/api';
-import { handleAction } from '$lib/server/errors';
-import { consumeRateLimit, SIGNUP_LIMIT } from '$lib/server/ratelimit';
-import { createFirstAdmin, needsSetup } from '$lib/server/services/setup';
-import { formObject } from '$lib/server/validation';
+import { handleAction } from '#lib/server/errors.ts';
+import { consumeRateLimit, SIGNUP_LIMIT } from '#lib/server/ratelimit.ts';
+import { createFirstAdmin, needsSetup } from '#lib/server/services/setup.ts';
+import { formObject } from '#lib/server/validation.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {

@@ -1,10 +1,10 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { APIError } from 'better-auth/api';
-import { ROLE_LABEL } from '$lib/labels';
-import { AppError, handleAction } from '$lib/server/errors';
-import { consumeRateLimit, SIGNUP_LIMIT } from '$lib/server/ratelimit';
-import { acceptInvitation, getInvitationByToken } from '$lib/server/services/invitations';
-import { formObject } from '$lib/server/validation';
+import { ROLE_LABEL } from '#lib/labels.ts';
+import { AppError, handleAction } from '#lib/server/errors.ts';
+import { consumeRateLimit, SIGNUP_LIMIT } from '#lib/server/ratelimit.ts';
+import { acceptInvitation, getInvitationByToken } from '#lib/server/services/invitations.ts';
+import { formObject } from '#lib/server/validation.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, params }) => {

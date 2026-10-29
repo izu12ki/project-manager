@@ -1,7 +1,7 @@
 import { asc, eq } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
-import { isSafeImage } from '$lib/attachment-rules';
+import { isSafeImage } from '#lib/attachment-rules.ts';
 import {
 	MAX_CUSTOM_EMOJI_BYTES,
 	MAX_CUSTOM_EMOJI_NAME,
@@ -9,7 +9,7 @@ import {
 	customEmojiUrl,
 	isValidEmojiName,
 	normalizeEmojiName
-} from '$lib/custom-emoji';
+} from '#lib/custom-emoji.ts';
 import { authorize, can } from '../authz';
 import type { AppContext } from '../context';
 import { commentReaction, customEmoji, user } from '../db/schema';

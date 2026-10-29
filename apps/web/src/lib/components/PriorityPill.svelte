@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { PRIORITY_CLASS, PRIORITY_LABEL, type Priority } from '$lib/labels';
+	import { PRIORITY_CLASS, PRIORITY_LABEL, type Priority } from '#lib/labels.ts';
 
 	let { priority, small = false }: { priority: Priority; small?: boolean } = $props();
 </script>

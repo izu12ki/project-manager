@@ -23,7 +23,7 @@ import {
 	type Priority,
 	type Status,
 	type StatusDef
-} from '$lib/labels';
+} from '#lib/labels.ts';
 import { authorize, can } from '../authz';
 import type { AppContext } from '../context';
 import type { DB } from '../db';

@@ -16,7 +16,7 @@ import {
 	INITIAL_STATUS,
 	STATUS_LABEL,
 	type StatusDef
-} from '$lib/labels';
+} from '#lib/labels.ts';
 import { category, issue, issueStatus, issueType, milestone } from '../db/schema';
 import { AppError } from '../errors';
 import { DateOrEmptySchema as DateOrEmpty, emptyToNull, parse } from '../validation';

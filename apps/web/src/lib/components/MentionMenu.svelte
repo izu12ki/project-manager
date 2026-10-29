@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { caretRect } from '$lib/caret';
+	import { caretRect } from '#lib/caret.ts';
 	import {
 		filterCandidates,
 		findMentionQuery,
 		mentionToken,
 		type MentionCandidate
-	} from '$lib/mentions';
+	} from '#lib/mentions.ts';
 
 	let {
 		target,

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { reactorsLabel, type ReactionGroup } from '$lib/reactions';
+	import { reactorsLabel, type ReactionGroup } from '#lib/reactions.ts';
 	import EmojiGlyph from './EmojiGlyph.svelte';
 	import ReactionPicker from './ReactionPicker.svelte';
 

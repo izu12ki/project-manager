@@ -1,7 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
-import { extractMentionIds } from '$lib/mentions';
-import type { Priority } from '$lib/labels';
+import { extractMentionIds } from '#lib/mentions.ts';
+import type { Priority } from '#lib/labels.ts';
 import type { AppContext } from '../context';
 import type { DB } from '../db';
 import { comment, issue, notification, userIntegration } from '../db/schema';

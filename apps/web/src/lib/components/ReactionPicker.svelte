@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { SmilePlus } from '@lucide/svelte';
 	import { page } from '$app/state';
-	import { customEmojiCode, normalizeEmojiName } from '$lib/custom-emoji';
-	import { getCustomEmojis } from '$lib/custom-emoji.remote';
-	import { REACTION_EMOJIS } from '$lib/reactions';
+	import { customEmojiCode, normalizeEmojiName } from '#lib/custom-emoji.ts';
+	import { getCustomEmojis } from '#lib/custom-emoji.remote.ts';
+	import { REACTION_EMOJIS } from '#lib/reactions.ts';
 
 	interface Props {
 		/** 自分が付けている絵文字 */

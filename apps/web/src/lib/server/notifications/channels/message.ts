@@ -1,4 +1,4 @@
-import { PRIORITY_LABEL, statusName, type Priority, type StatusDef } from '$lib/labels';
+import { PRIORITY_LABEL, statusName, type Priority, type StatusDef } from '#lib/labels.ts';
 import type { IssueEvent } from '../events';
 import { excerpt } from '../format';
 import type { PlannedNotification } from '../recipients';

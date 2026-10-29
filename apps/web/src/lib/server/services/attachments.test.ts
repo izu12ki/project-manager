@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { MAX_ATTACHMENT_BYTES } from '$lib/attachment-rules';
+import { MAX_ATTACHMENT_BYTES } from '#lib/attachment-rules.ts';
 import { createMemoryStore } from '../attachment-store';
 import type { Actor } from '../authz';
 import type { DB } from '../db';

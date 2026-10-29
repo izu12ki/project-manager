@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { enhance } from '$lib/forms';
-	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
-	import FormAlert from '$lib/components/FormAlert.svelte';
-	import { MAX_CUSTOM_EMOJI_NAME, normalizeEmojiName } from '$lib/custom-emoji';
-	import { formatDate } from '$lib/labels';
-	import { toast } from '$lib/toast.svelte';
+	import { enhance } from '#lib/forms.ts';
+	import ConfirmAction from '#lib/components/ConfirmAction.svelte';
+	import FormAlert from '#lib/components/FormAlert.svelte';
+	import { MAX_CUSTOM_EMOJI_NAME, normalizeEmojiName } from '#lib/custom-emoji.ts';
+	import { formatDate } from '#lib/labels.ts';
+	import { toast } from '#lib/toast.svelte.ts';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();

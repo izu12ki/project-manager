@@ -1,8 +1,8 @@
 import * as v from 'valibot';
 import { command, query } from '$app/server';
-import { remoteContext, runCommand, runQuery } from '$lib/server/remote-helpers';
-import { listMilestones } from '$lib/server/services/issue-fields';
-import { listBoard, moveIssue } from '$lib/server/services/issues';
+import { remoteContext, runCommand, runQuery } from '#lib/server/remote-helpers.ts';
+import { listMilestones } from '#lib/server/services/issue-fields.ts';
+import { listBoard, moveIssue } from '#lib/server/services/issues.ts';
 
 /** milestone: 絞り込むマイルストーン ID（'none' は未設定、'' は絞り込みなし） */
 const BoardRef = v.object({ key: v.string(), milestone: v.string() });

@@ -42,7 +42,7 @@ export default defineConfig(
 						{
 							name: '$app/forms',
 							importNames: ['enhance'],
-							message: '二度押しを防ぐ $lib/forms の enhance を使ってください'
+							message: '二度押しを防ぐ #lib/forms.ts の enhance を使ってください'
 						}
 					]
 				}

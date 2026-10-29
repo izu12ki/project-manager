@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { colorVar } from '$lib/labels';
+	import { colorVar } from '#lib/labels.ts';
 
 	let { name, color }: { name: string; color: string | null } = $props();
 </script>

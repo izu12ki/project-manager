@@ -1,5 +1,5 @@
-import { appContext } from '$lib/server/context';
-import { listProjects } from '$lib/server/services/projects';
+import { appContext } from '#lib/server/context.ts';
+import { listProjects } from '#lib/server/services/projects.ts';
 import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = async ({ locals }) => {

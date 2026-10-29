@@ -1,9 +1,9 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { APIError } from 'better-auth/api';
-import { isLoginBlocked, recordLoginFailure, recordLoginSuccess } from '$lib/server/ratelimit';
-import { safeRedirect } from '$lib/server/redirect';
-import { needsSetup } from '$lib/server/services/setup';
-import { isDisabledEmail } from '$lib/server/services/users';
+import { isLoginBlocked, recordLoginFailure, recordLoginSuccess } from '#lib/server/ratelimit.ts';
+import { safeRedirect } from '#lib/server/redirect.ts';
+import { needsSetup } from '#lib/server/services/setup.ts';
+import { isDisabledEmail } from '#lib/server/services/users.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 const INVALID = 'メールアドレスまたはパスワードが違います';

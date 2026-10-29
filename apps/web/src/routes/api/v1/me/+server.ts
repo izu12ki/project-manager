@@ -1,4 +1,4 @@
-import { apiHandler, apiUser } from '$lib/server/api';
+import { apiHandler, apiUser } from '#lib/server/api.ts';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = (event) =>

@@ -14,7 +14,6 @@ export default defineConfig({
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
 			adapter: adapter(),
-			alias: { $lib: 'src/lib' },
 			// スクリプトは自サイトと、SvelteKit がページごとに nonce を付けたインラインのものだけ実行する
 			csp: {
 				directives: {

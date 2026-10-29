@@ -1,13 +1,13 @@
 <script lang="ts">
-	import { enhance } from '$lib/forms';
+	import { enhance } from '#lib/forms.ts';
 	import { Mail } from '@lucide/svelte';
-	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
-	import FormAlert from '$lib/components/FormAlert.svelte';
-	import InviteLinkBox from '$lib/components/InviteLinkBox.svelte';
-	import MultiSelect from '$lib/components/MultiSelect.svelte';
-	import RolePill from '$lib/components/RolePill.svelte';
-	import { formatDate, ROLE_LABEL } from '$lib/labels';
-	import { toast } from '$lib/toast.svelte';
+	import ConfirmAction from '#lib/components/ConfirmAction.svelte';
+	import FormAlert from '#lib/components/FormAlert.svelte';
+	import InviteLinkBox from '#lib/components/InviteLinkBox.svelte';
+	import MultiSelect from '#lib/components/MultiSelect.svelte';
+	import RolePill from '#lib/components/RolePill.svelte';
+	import { formatDate, ROLE_LABEL } from '#lib/labels.ts';
+	import { toast } from '#lib/toast.svelte.ts';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { Archive, ChartGantt, List, Plus, Settings, SquareKanban } from '@lucide/svelte';
-	import { projectColor, projectIcon } from '$lib/labels';
+	import { projectColor, projectIcon } from '#lib/labels.ts';
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();

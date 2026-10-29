@@ -1,11 +1,11 @@
 import { redirect } from '@sveltejs/kit';
-import { can } from '$lib/server/authz';
-import { appContext } from '$lib/server/context';
-import { handleAction, handleLoad } from '$lib/server/errors';
-import { listCategories, listMilestones } from '$lib/server/services/issue-fields';
-import { createIssue, listIssues } from '$lib/server/services/issues';
-import { listAssignableUsers, requireProject } from '$lib/server/services/projects';
-import { formObject } from '$lib/server/validation';
+import { can } from '#lib/server/authz.ts';
+import { appContext } from '#lib/server/context.ts';
+import { handleAction, handleLoad } from '#lib/server/errors.ts';
+import { listCategories, listMilestones } from '#lib/server/services/issue-fields.ts';
+import { createIssue, listIssues } from '#lib/server/services/issues.ts';
+import { listAssignableUsers, requireProject } from '#lib/server/services/projects.ts';
+import { formObject } from '#lib/server/validation.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {

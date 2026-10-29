@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { customEmojiName } from '$lib/custom-emoji';
-	import { getCustomEmojis } from '$lib/custom-emoji.remote';
+	import { customEmojiName } from '#lib/custom-emoji.ts';
+	import { getCustomEmojis } from '#lib/custom-emoji.remote.ts';
 
 	/** 標準の絵文字はそのまま、カスタム絵文字（:name:）は画像で出す */
 	let { emoji, size = '1.25em' }: { emoji: string; size?: string } = $props();

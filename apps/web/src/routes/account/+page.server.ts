@@ -1,12 +1,12 @@
 import { fail, isActionFailure } from '@sveltejs/kit';
 import { APIError } from 'better-auth/api';
 import * as v from 'valibot';
-import { appContext } from '$lib/server/context';
-import { can } from '$lib/server/authz';
-import { handleAction } from '$lib/server/errors';
-import { createApiKey, listApiKeys, revokeApiKey } from '$lib/server/services/api-keys';
-import { disableSlack, enableSlack, getSlackStatus } from '$lib/server/services/integrations';
-import { formObject, NameSchema, parse, PasswordSchema } from '$lib/server/validation';
+import { appContext } from '#lib/server/context.ts';
+import { can } from '#lib/server/authz.ts';
+import { handleAction } from '#lib/server/errors.ts';
+import { createApiKey, listApiKeys, revokeApiKey } from '#lib/server/services/api-keys.ts';
+import { disableSlack, enableSlack, getSlackStatus } from '#lib/server/services/integrations.ts';
+import { formObject, NameSchema, parse, PasswordSchema } from '#lib/server/validation.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {

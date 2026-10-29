@@ -1,6 +1,6 @@
-import { appContext } from '$lib/server/context';
-import { handleLoad } from '$lib/server/errors';
-import { downloadHeaders, openAttachment } from '$lib/server/services/attachments';
+import { appContext } from '#lib/server/context.ts';
+import { handleLoad } from '#lib/server/errors.ts';
+import { downloadHeaders, openAttachment } from '#lib/server/services/attachments.ts';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals, params }) => {

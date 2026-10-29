@@ -1,9 +1,9 @@
 import * as v from 'valibot';
 import { command, query } from '$app/server';
-import { remoteContext, runCommand, runQuery } from '$lib/server/remote-helpers';
-import { listCategories, listMilestones } from '$lib/server/services/issue-fields';
-import { listTimeline, updateIssue } from '$lib/server/services/issues';
-import { listAssignableUsers, requireProject } from '$lib/server/services/projects';
+import { remoteContext, runCommand, runQuery } from '#lib/server/remote-helpers.ts';
+import { listCategories, listMilestones } from '#lib/server/services/issue-fields.ts';
+import { listTimeline, updateIssue } from '#lib/server/services/issues.ts';
+import { listAssignableUsers, requireProject } from '#lib/server/services/projects.ts';
 
 /** 絞り込みはクライアント側で行うので、プロジェクトの課題をすべて返す */
 export const getTimeline = query(v.string(), (key) => {

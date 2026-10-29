@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { enhance } from '$lib/forms';
+	import { enhance } from '#lib/forms.ts';
 	import {
 		Calendar,
 		CalendarClock,
@@ -12,10 +12,10 @@
 		UserRoundCheck,
 		UsersRound
 	} from '@lucide/svelte';
-	import FormAlert from '$lib/components/FormAlert.svelte';
-	import MultiSelect from '$lib/components/MultiSelect.svelte';
-	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
-	import { PRIORITIES, PRIORITY_LABEL, milestoneLabel } from '$lib/labels';
+	import FormAlert from '#lib/components/FormAlert.svelte';
+	import MultiSelect from '#lib/components/MultiSelect.svelte';
+	import MarkdownEditor from '#lib/components/MarkdownEditor.svelte';
+	import { PRIORITIES, PRIORITY_LABEL, milestoneLabel } from '#lib/labels.ts';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();

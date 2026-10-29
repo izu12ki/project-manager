@@ -1,7 +1,13 @@
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
-import { createIssue } from '$lib/server/services/issues';
-import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '$lib/server/test-utils';
+import { createIssue } from '#lib/server/services/issues.ts';
+import {
+	createTestBase,
+	createTestDb,
+	ctxOf,
+	seedProject,
+	seedUser
+} from '#lib/server/test-utils.ts';
 import { uuidv7 } from 'uuidv7';
 import { comment, issue, notification, project, user, userIntegration } from './schema';
 

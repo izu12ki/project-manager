@@ -1,8 +1,8 @@
 import type { RequestEvent } from '@sveltejs/kit';
-import { apiHandler, readJson } from '$lib/server/api';
-import { AppError } from '$lib/server/errors';
-import { toBulkServiceInput } from '$lib/server/services/api-views';
-import { bulkCreateIssues, bulkUpdateIssues } from '$lib/server/services/issue-bulk';
+import { apiHandler, readJson } from '#lib/server/api.ts';
+import { AppError } from '#lib/server/errors.ts';
+import { toBulkServiceInput } from '#lib/server/services/api-views.ts';
+import { bulkCreateIssues, bulkUpdateIssues } from '#lib/server/services/issue-bulk.ts';
 import type { RequestHandler } from './$types';
 
 /** dryRun は未指定・true・false だけ受け付ける。それ以外は誤って書き込まないよう 400 */

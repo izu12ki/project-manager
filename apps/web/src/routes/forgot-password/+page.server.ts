@@ -1,5 +1,5 @@
 import { fail } from '@sveltejs/kit';
-import { consumeRateLimit, RESET_LIMIT } from '$lib/server/ratelimit';
+import { consumeRateLimit, RESET_LIMIT } from '#lib/server/ratelimit.ts';
 import type { Actions } from './$types';
 
 export const actions: Actions = {

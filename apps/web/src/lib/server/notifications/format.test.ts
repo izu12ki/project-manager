@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mentionToken } from '$lib/mentions';
+import { mentionToken } from '#lib/mentions.ts';
 import { excerpt } from './format';
 
 describe('excerpt', () => {

@@ -1,9 +1,15 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { DB } from '$lib/server/db';
-import { createApiKey } from '$lib/server/services/api-keys';
-import { listIssues } from '$lib/server/services/issues';
-import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '$lib/server/test-utils';
+import type { DB } from '#lib/server/db/index.ts';
+import { createApiKey } from '#lib/server/services/api-keys.ts';
+import { listIssues } from '#lib/server/services/issues.ts';
+import {
+	createTestBase,
+	createTestDb,
+	ctxOf,
+	seedProject,
+	seedUser
+} from '#lib/server/test-utils.ts';
 import { PATCH, POST } from './+server';
 
 type Body = { error?: { code: string; fields?: Record<string, string[]> }; numbers?: number[] };

@@ -1,6 +1,6 @@
-import { apiHandler, readJson } from '$lib/server/api';
-import { getApiIssue, listApiIssues, toServiceInput } from '$lib/server/services/api-views';
-import { createIssue } from '$lib/server/services/issues';
+import { apiHandler, readJson } from '#lib/server/api.ts';
+import { getApiIssue, listApiIssues, toServiceInput } from '#lib/server/services/api-views.ts';
+import { createIssue } from '#lib/server/services/issues.ts';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = (event) =>

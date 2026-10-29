@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
 import { authorize } from '../authz';
@@ -60,12 +60,17 @@ export function requireProject(ctx: AppContext, key: string): Promise<ProjectRow
 	const memoKey = projectMemoKey(key);
 	const hit = ctx.memo?.get(memoKey) as Promise<ProjectRow> | undefined;
 	if (hit) return hit;
-	const p = fetchProject(ctx, key);
+	const p = fetchProject(ctx, eq(project.key, key));
 	ctx.memo?.set(memoKey, p);
 	return p;
 }
 
-async function fetchProject(ctx: AppContext, key: string): Promise<ProjectRow> {
+/** requireProject を ID で引く版。キーを変えても変わらない参照（添付など）から引くときに使う */
+export function requireProjectById(ctx: AppContext, id: string): Promise<ProjectRow> {
+	return fetchProject(ctx, eq(project.id, id));
+}
+
+async function fetchProject(ctx: AppContext, where: SQL): Promise<ProjectRow> {
 	const [row] = await ctx.db
 		.select({ project, memberId: projectMember.userId })
 		.from(project)
@@ -73,7 +78,7 @@ async function fetchProject(ctx: AppContext, key: string): Promise<ProjectRow> {
 			projectMember,
 			and(eq(projectMember.projectId, project.id), eq(projectMember.userId, ctx.actor.id))
 		)
-		.where(eq(project.key, key));
+		.where(where);
 	if (!row || (ctx.actor.role !== 'admin' && !row.memberId)) {
 		throw new AppError('not_found', 'プロジェクトが見つかりません');
 	}

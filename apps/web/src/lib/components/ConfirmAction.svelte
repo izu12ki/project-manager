@@ -1,7 +1,8 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { X } from '@lucide/svelte';
-	import { enhance, type ActionResult } from '$app/forms';
+	import type { ActionResult } from '$app/forms';
+	import { enhance } from '$lib/forms';
 
 	let {
 		action,

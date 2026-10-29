@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { enhance, type SubmitFunction } from '$app/forms';
+	import type { SubmitFunction } from '$app/forms';
+	import { enhance } from '$lib/forms';
 	import {
 		Archive,
 		ArchiveRestore,

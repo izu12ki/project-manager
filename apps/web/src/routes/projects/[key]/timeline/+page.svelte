@@ -16,6 +16,7 @@
 		type Scale
 	} from '$lib/timeline';
 	import IssueSheet from '../IssueSheet.svelte';
+	import { getChanges, getIssueDetail } from '../issues/[number=int]/issue.remote';
 	import TimelineGrid from './TimelineGrid.svelte';
 	import { getTimeline, setIssueDates } from './timeline.remote';
 	import type { PageProps } from './$types';
@@ -78,6 +79,16 @@
 				startDate: next.startDate ?? '',
 				dueDate: next.dueDate ?? ''
 			});
+			// シートで開いている課題なら、表示中の日付と履歴も取り直す
+			if (item.number === opened) {
+				const ref = { key: params.key, number: item.number };
+				getIssueDetail(ref)
+					.refresh()
+					.catch(() => {});
+				getChanges(ref)
+					.refresh()
+					.catch(() => {});
+			}
 		} catch (err) {
 			toast.error(failure(err));
 			getTimeline(params.key)

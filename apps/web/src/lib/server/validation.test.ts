@@ -1,9 +1,24 @@
 import * as v from 'valibot';
 import { describe, expect, it } from 'vitest';
 import { AppError } from './errors';
-import { EmailSchema, emptyToNull, formObject, parse, PasswordSchema } from './validation';
+import {
+	DateOrEmptySchema,
+	EmailSchema,
+	emptyToNull,
+	formObject,
+	parse,
+	PasswordSchema
+} from './validation';
 
 describe('validation', () => {
+	it('日付は暦にあるものだけ受け付ける（空は未設定）', () => {
+		for (const ok of ['', '2026-10-29', '2028-02-29', '2026-12-31']) {
+			expect(v.is(DateOrEmptySchema, ok)).toBe(true);
+		}
+		for (const ng of ['2027-02-29', '2026-02-30', '2026-04-31', '2026-13-01', '2026-1-01']) {
+			expect(v.is(DateOrEmptySchema, ng)).toBe(false);
+		}
+	});
 	it('メールアドレスを trim して小文字にする', () => {
 		expect(parse(EmailSchema, '  Foo@Example.COM ')).toBe('foo@example.com');
 	});

@@ -56,6 +56,41 @@ describe('users', () => {
 		expect(await isDisabledEmail(db, member.email)).toBe(false);
 	});
 
+	it('自分自身は有効化できない（無効化が反映される前のセッションで戻させない）', async () => {
+		const db = await createTestDb();
+		const base = createTestBase(db);
+		const admin = await seedUser(db, 'admin');
+		await db.update(user).set({ disabledAt: new Date() }).where(eq(user.id, admin.id));
+		await expect(enableUser(ctxOf(base, admin), admin.id)).rejects.toMatchObject({
+			code: 'validation',
+			message: '自分自身は有効化できません'
+		});
+		expect(await isDisabledEmail(db, admin.email)).toBe(true);
+	});
+
+	it('有効な管理者が 0 人になる無効化は拒否する', async () => {
+		const db = await createTestDb();
+		const base = createTestBase(db);
+		// 操作者 A は admin だが DB 上は無効化済み（同時に無効化し合った場合と同じ状態）
+		const a = await seedUser(db, 'admin', 'A');
+		const b = await seedUser(db, 'admin', 'B');
+		await db.update(user).set({ disabledAt: new Date() }).where(eq(user.id, a.id));
+
+		await expect(disableUser(ctxOf(base, a), b.id)).rejects.toMatchObject({
+			code: 'validation',
+			message: '管理者が 1 人もいなくなるため無効化できません'
+		});
+		expect(await isDisabledEmail(db, b.email)).toBe(false);
+		await expect(disableUser(ctxOf(base, a), 'nope')).rejects.toMatchObject({
+			code: 'not_found'
+		});
+
+		// 他に有効な admin がいれば成功する
+		await seedUser(db, 'admin', 'C');
+		await disableUser(ctxOf(base, a), b.id);
+		expect(await isDisabledEmail(db, b.email)).toBe(true);
+	});
+
 	describe('changeUserRole', () => {
 		it('ロールを変更でき、その人のセッションが消える', async () => {
 			const db = await createTestDb();

@@ -34,9 +34,25 @@ export default defineConfig(
 		}
 	},
 	{
-		// Override or add rule settings here, such as:
-		// 'svelte/button-has-type': 'error'
-		rules: {}
+		rules: {
+			'no-restricted-imports': [
+				'error',
+				{
+					paths: [
+						{
+							name: '$app/forms',
+							importNames: ['enhance'],
+							message: '二度押しを防ぐ $lib/forms の enhance を使ってください'
+						}
+					]
+				}
+			]
+		}
+	},
+	{
+		// ラップする元として使う
+		files: ['src/lib/forms.ts'],
+		rules: { 'no-restricted-imports': 'off' }
 	},
 	{
 		// Vitest は isolate: false（vite.config.ts）なので、モジュールの差し替えは後のテストファイルに残る

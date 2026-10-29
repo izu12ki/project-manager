@@ -20,6 +20,23 @@ export function formObject(fd: FormData): Record<string, string> {
 	return out;
 }
 
+/** 暦にある日付か（isoDate は形式だけを見るので 2027-02-29 や 2026-04-31 も通る） */
+const isCalendarDate = (s: string) => {
+	const d = new Date(`${s}T00:00:00Z`);
+	return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+};
+
+const DATE_MESSAGE = '日付の形式が正しくありません';
+
+/** 'YYYY-MM-DD' の日付。'' は未設定 */
+export const DateOrEmptySchema = v.union(
+	[
+		v.literal(''),
+		v.pipe(v.string(), v.isoDate(DATE_MESSAGE), v.check(isCalendarDate, DATE_MESSAGE))
+	],
+	DATE_MESSAGE
+);
+
 export function emptyToNull(s: string | undefined): string | null | undefined {
 	if (s === undefined) return undefined;
 	return s === '' ? null : s;

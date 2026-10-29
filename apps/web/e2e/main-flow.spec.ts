@@ -67,10 +67,14 @@ async function dragBy(page: Page, target: Locator, dx: number) {
 
 test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 → コメント', async ({
 	page,
+	browser,
 	playwright,
 	baseURL
 }) => {
 	// 1. 初期セットアップ
+	// ほかのサイトのフレームには埋め込ませない
+	const loginRes = await page.request.get('/login');
+	expect(loginRes.headers()['x-frame-options']).toBe('DENY');
 	await page.goto('/login');
 	await expect(page).toHaveURL(/\/setup/);
 	await page.getByLabel('名前').fill('管理者');
@@ -570,7 +574,10 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page.getByTestId('bar-1').locator('[data-handle]')).toHaveCount(2);
 	const guestBar2 = page.getByTestId('bar-2');
 	await expect(guestBar2.locator('[data-handle]')).toHaveCount(2);
+	// 保存が終わる前に再読み込みしない
+	const guestSaved = savedResponse(page);
 	await dragBy(page, guestBar2, 64);
+	await guestSaved;
 	await expect(guestBar2).toHaveAttribute('data-start', jstDay(4));
 	await page.goto('/projects/ACME/timeline');
 	await expect(page.getByTestId('bar-2')).toHaveAttribute('data-start', jstDay(4));
@@ -608,7 +615,42 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.keyboard.press('Escape');
 	await expect(sheet).toBeHidden();
 
+	// 8e. シートで保存するのは変えた項目だけ。開いた後にほかで変わった項目を、表示していた古い値で戻さない
+	// 動かすバーがシートに隠れないよう、ACME-2 の開始日から表示する
+	await page.goto(`/projects/ACME/timeline?from=${jstDay(4)}`);
+	await page.getByTestId('open-2').click();
+	const sheet2 = page.getByRole('complementary', { name: 'ACME-2' });
+	await sheet2.getByLabel('開始日').fill(jstDay(5));
+	await sheet2.getByRole('button', { name: '保存' }).click();
+	await expect(page.getByTestId('bar-2')).toHaveAttribute('data-start', jstDay(5));
+	// 一度保存した項目も、その後タイムラインで動かした値を表示する
+	const moved2 = savedResponse(page);
+	await dragBy(page, page.getByTestId('bar-2'), -32);
+	await moved2;
+	await expect(sheet2.getByLabel('開始日')).toHaveValue(jstDay(4));
+	// 別のタブで優先度を変えても、シートは古い優先度のまま
+	const other = await page.context().newPage();
+	// ハイドレーション前に選んだ値は描画で戻されるので、表示後に送る既読の通知を待ってから選ぶ
+	const otherReady = other.waitForResponse((r) => r.url().includes('/readIssueNotifications'));
+	await other.goto('/projects/ACME/issues/2');
+	await otherReady;
+	await other.getByLabel('優先度').selectOption({ label: '緊急' });
+	await other.getByRole('button', { name: '保存' }).click();
+	await expect(other.getByText('保存しました')).toBeVisible();
+	await other.close();
+	await sheet2.getByLabel('完了理由').selectOption({ label: '対応済み' });
+	await sheet2.getByRole('button', { name: '保存' }).click();
+	await expect(sheet2.getByLabel('優先度').locator('option:checked')).toHaveText('緊急');
+	await page.goto('/projects/ACME/issues/2');
+	await expect(page.getByLabel('優先度').locator('option:checked')).toHaveText('緊急');
+	await expect(page.getByLabel('完了理由').locator('option:checked')).toHaveText('対応済み');
+	await expect(page.getByLabel('開始日')).toHaveValue(jstDay(4));
+
 	// 9. 管理者がゲストを無効化（確認ダイアログ）
+	// 無効化の前から開いていたゲストの画面（別のセッション）で、無効化の後に書き込ませない
+	const guestPage = await browser.newPage({ baseURL });
+	await login(guestPage, 'guest@example.com');
+	await guestPage.goto('/projects/ACME/issues/1');
 	await logout(page);
 	await login(page, 'admin@example.com');
 	await page.goto('/admin/users');
@@ -624,6 +666,14 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(disableDialog).toBeHidden();
 	await expect(row.getByText('無効', { exact: true })).toBeVisible();
 	await expect(row.getByRole('button', { name: '有効化' })).toBeVisible();
+	// ログイン状態のキャッシュ（Cookie）が残っていても、書き込みはログイン画面に戻される
+	await guestPage.getByRole('textbox', { name: 'コメントを追加' }).fill('無効化の後のコメント');
+	await guestPage.getByRole('button', { name: 'コメントする' }).click();
+	await expect(guestPage).toHaveURL(/\/login/);
+	await guestPage.close();
+	await page.goto('/projects/ACME/issues/1');
+	await expect(page.getByRole('heading', { name: 'ログインできない' })).toBeVisible();
+	await expect(page.getByText('無効化の後のコメント')).toHaveCount(0);
 	// 10. 管理者が一覧・ボードを絞り込む
 	await page.goto('/projects/ACME');
 	const issueRow = page.getByRole('row', { name: /ログインできない/ });
@@ -678,7 +728,8 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.getByRole('link', { name: '子課題を追加' }).click();
 	await expect(page.getByLabel('親課題')).toHaveValue('1');
 	await page.getByLabel('タイトル').fill('ログイン画面の文言修正');
-	await page.getByRole('button', { name: '起票する' }).first().click();
+	// 二度押ししても 1 件だけ起票する（下の「0 / 1 完了」で確かめる）
+	await page.getByRole('button', { name: '起票する' }).first().dblclick();
 	await expect(page).toHaveURL(/\/projects\/ACME\/issues\/\d+$/);
 	await expect(page.getByRole('link', { name: /ACME-1/ })).toBeVisible();
 	await page.goto('/projects/ACME/issues/1');

@@ -52,7 +52,14 @@ export const handle: Handle = async ({ event, resolve }) => {
 		return resolve(event);
 	}
 
-	const s = await auth.api.getSession({ headers: event.request.headers });
+	// 書き込み（GET・HEAD 以外）は Cookie のキャッシュを使わず、DB でセッションを確かめる。
+	// 無効化・降格した人が反映までの数分間に管理操作などを続けられないようにする
+	// （このときキャッシュも新しい内容で書き直されるので、続く閲覧にもすぐ反映される）
+	const fresh = event.request.method !== 'GET' && event.request.method !== 'HEAD';
+	const s = await auth.api.getSession({
+		headers: event.request.headers,
+		query: fresh ? { disableCookieCache: true } : undefined
+	});
 	if (s?.user.disabledAt) {
 		await authCtx.internalAdapter.deleteUserSessions(s.user.id);
 	}

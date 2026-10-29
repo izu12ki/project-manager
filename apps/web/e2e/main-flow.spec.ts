@@ -67,6 +67,7 @@ async function dragBy(page: Page, target: Locator, dx: number) {
 
 test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 → コメント', async ({
 	page,
+	browser,
 	playwright,
 	baseURL
 }) => {
@@ -640,6 +641,10 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page.getByLabel('開始日')).toHaveValue(jstDay(4));
 
 	// 9. 管理者がゲストを無効化（確認ダイアログ）
+	// 無効化の前から開いていたゲストの画面（別のセッション）で、無効化の後に書き込ませない
+	const guestPage = await browser.newPage({ baseURL });
+	await login(guestPage, 'guest@example.com');
+	await guestPage.goto('/projects/ACME/issues/1');
 	await logout(page);
 	await login(page, 'admin@example.com');
 	await page.goto('/admin/users');
@@ -655,6 +660,14 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(disableDialog).toBeHidden();
 	await expect(row.getByText('無効', { exact: true })).toBeVisible();
 	await expect(row.getByRole('button', { name: '有効化' })).toBeVisible();
+	// ログイン状態のキャッシュ（Cookie）が残っていても、書き込みはログイン画面に戻される
+	await guestPage.getByRole('textbox', { name: 'コメントを追加' }).fill('無効化の後のコメント');
+	await guestPage.getByRole('button', { name: 'コメントする' }).click();
+	await expect(guestPage).toHaveURL(/\/login/);
+	await guestPage.close();
+	await page.goto('/projects/ACME/issues/1');
+	await expect(page.getByRole('heading', { name: 'ログインできない' })).toBeVisible();
+	await expect(page.getByText('無効化の後のコメント')).toHaveCount(0);
 	// 10. 管理者が一覧・ボードを絞り込む
 	await page.goto('/projects/ACME');
 	const issueRow = page.getByRole('row', { name: /ログインできない/ });

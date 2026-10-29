@@ -494,11 +494,13 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	// 課題を開くと、その課題の通知はすべて既読になる
 	await expect(badge).toBeHidden();
 	await page.goto('/projects/ACME/board');
+	const movedCard = savedResponse(page);
 	await dragTo(
 		page,
 		page.getByTestId('card-1'),
 		page.getByTestId('column-in_progress').locator('ul')
 	);
+	await movedCard;
 	await expect(page.getByTestId('column-in_progress').getByTestId('card-1')).toBeVisible();
 	await page.reload();
 	await expect(page.getByTestId('column-in_progress').getByTestId('card-1')).toBeVisible();

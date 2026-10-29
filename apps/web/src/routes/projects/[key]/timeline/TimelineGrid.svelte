@@ -93,7 +93,6 @@
 	const MIN_GRIP_W = 24;
 	const WEEKDAYS = '日月火水木金土';
 	const cells = $derived(dayCells(range));
-	const width = $derived(range.days * range.dayWidth);
 	const wide = $derived(range.dayWidth >= 24);
 	const months = $derived(
 		cells
@@ -104,7 +103,16 @@
 				span: (all[i + 1]?.col ?? range.days) - c.col
 			}))
 	);
-	const px = (cols: number) => `${cols * range.dayWidth}px`;
+	/**
+	 * 寸法は --timeline-unit（layout.css）を単位にし、文字サイズの設定に合わせてカレンダーも拡大する。
+	 * 1 日の幅は標準で range.dayWidth px
+	 */
+	const dayW = $derived(`calc(${range.dayWidth / 16} * var(--timeline-unit))`);
+	const colW = (cols: number) => `calc(${cols} * var(--day-w))`;
+	/** 1 日の実際の幅（px）。文字サイズの設定で変わるので、ドラッグの開始時に見出しの日付から測る */
+	function measureDayPx() {
+		return canvas?.querySelector('.day')?.getBoundingClientRect().width || range.dayWidth;
+	}
 	const colOf = (date: string) => diffDays(range.from, date);
 	const inRange = (date: string | null): date is string =>
 		!!date && date >= range.from && date <= range.to;
@@ -131,6 +139,7 @@
 		startY: number;
 		x: number;
 		y: number;
+		dayPx: number;
 		delta: number;
 		moved: boolean;
 	};
@@ -151,6 +160,7 @@
 			startY: e.clientY,
 			x: e.clientX,
 			y: e.clientY,
+			dayPx: measureDayPx(),
 			delta: 0,
 			moved: false
 		};
@@ -165,17 +175,17 @@
 		const dx = e.clientX - drag.startX;
 		const dy = e.clientY - drag.startY;
 		drag.moved ||= Math.hypot(dx, dy) >= CLICK_SLOP;
-		drag.delta = dragDelta(dx, range.dayWidth);
+		drag.delta = dragDelta(dx, drag.dayPx);
 		drag.x = e.clientX;
 		drag.y = e.clientY;
 	}
 
 	/** ポインタ位置の日付。タイムライン（見出しを含む）の外なら null */
-	function dateAt(x: number, y: number): string | null {
+	function dateAt(x: number, y: number, dayPx: number): string | null {
 		if (!canvas) return null;
 		const r = canvas.getBoundingClientRect();
 		if (y < r.top || y > r.bottom) return null;
-		const col = Math.floor((x - r.left - labelW) / range.dayWidth);
+		const col = Math.floor((x - r.left - labelW) / dayPx);
 		return col >= 0 && col < range.days ? addDays(range.from, col) : null;
 	}
 
@@ -196,7 +206,7 @@
 		suppressClick = true;
 		setTimeout(() => (suppressClick = false));
 		if (d.mode === 'place') {
-			const date = dateAt(d.x, d.y);
+			const date = dateAt(d.x, d.y, d.dayPx);
 			if (date) onsave(d.item, { startDate: date, dueDate: date });
 		} else if (d.delta !== 0) {
 			onsave(d.item, applyDrag(d.item, d.mode, d.delta));
@@ -238,20 +248,15 @@
 	}}
 />
 
-<div class="grid-wrap" class:resizing={!!resize} style:--label-w="{labelW}px">
+<div class="grid-wrap" class:resizing={!!resize} style:--label-w="{labelW}px" style:--day-w={dayW}>
 	<div class="scroller" bind:this={scroller} onscroll={() => syncScroll(scroller, hbar)}>
-		<div
-			class="canvas"
-			bind:this={canvas}
-			style:width="{labelW + width}px"
-			style:--day-w="{range.dayWidth}px"
-		>
+		<div class="canvas" bind:this={canvas} style:width="calc({labelW}px + {colW(range.days)})">
 			<div class="head">
 				<div class="row months">
 					<div class="name"></div>
 					<div class="track">
 						{#each months as m (m.date)}
-							<div class="month" style:left={px(m.col)} style:width={px(m.span)}>
+							<div class="month" style:left={colW(m.col)} style:width={colW(m.span)}>
 								<span>{monthLabel(m.date)}</span>
 							</div>
 						{/each}
@@ -284,8 +289,8 @@
 							<div
 								class="day"
 								class:off={c.off}
-								style:left={px(c.col)}
-								style:width={px(1)}
+								style:left={colW(c.col)}
+								style:width={colW(1)}
 								data-date={c.date}
 								title={c.holiday}
 							>
@@ -304,10 +309,12 @@
 			<div class="body">
 				<div class="overlay gridlines" class:fine={!wide} aria-hidden="true">
 					{#each cells as c (c.date)}
-						{#if c.off}<div class="offday" style:left={px(c.col)} style:width={px(1)}></div>{/if}
+						{#if c.off}
+							<div class="offday" style:left={colW(c.col)} style:width={colW(1)}></div>
+						{/if}
 					{/each}
 					{#if inRange(today)}
-						<div class="today" style:left="{(colOf(today) + 0.5) * range.dayWidth}px"></div>
+						<div class="today" style:left={colW(colOf(today) + 0.5)}></div>
 					{/if}
 				</div>
 
@@ -367,8 +374,8 @@
 											class:clip-end={span.clippedEnd}
 											class:open-start={span.missingStart}
 											class:open-end={span.missingDue}
-											style:left={px(span.startCol)}
-											style:width={px(span.endCol - span.startCol + 1)}
+											style:left={colW(span.startCol)}
+											style:width={colW(span.endCol - span.startCol + 1)}
 											style:--c={statusColor(page.data.statuses, item.status)}
 											data-testid={`bar-${item.number}`}
 											data-start={dates.startDate ?? ''}
@@ -397,7 +404,7 @@
 											{/if}
 										</a>
 										{#if drag?.moved && drag.item.id === item.id}
-											<span class="drag-label" style:left={px(span.startCol)} style:top="-2px"
+											<span class="drag-label" style:left={colW(span.startCol)} style:top="-2px"
 												>{period(dates)}</span
 											>
 										{/if}
@@ -408,8 +415,7 @@
 						{#if inRange(g.releaseDate)}
 							<div
 								class="release"
-								style:left="calc(var(--label-w) + {(colOf(g.releaseDate) + 0.5) *
-									range.dayWidth}px)"
+								style:left="calc(var(--label-w) + {colW(colOf(g.releaseDate) + 0.5)})"
 								title={`${g.label} リリース ${shortDate(g.releaseDate)}`}
 							>
 								<span>{g.label}</span>
@@ -427,7 +433,7 @@
 			data-testid="timeline-hscroll"
 			onscroll={() => syncScroll(hbar, scroller)}
 		>
-			<div style:width="{width}px"></div>
+			<div style:width={colW(range.days)}></div>
 		</div>
 	</div>
 </div>
@@ -461,7 +467,7 @@
 {/if}
 
 {#if drag?.mode === 'place' && drag.moved}
-	{@const target = dateAt(drag.x, drag.y)}
+	{@const target = dateAt(drag.x, drag.y, drag.dayPx)}
 	<div class="ghost" style:left="{drag.x + 12}px" style:top="{drag.y + 12}px">
 		{projectKey}-{drag.item.number}{target ? ` → ${shortDate(target)}` : ''}
 	</div>
@@ -525,7 +531,7 @@
 	}
 	.resizer {
 		position: absolute;
-		top: -24px;
+		top: calc(-1.5 * var(--timeline-unit));
 		right: -4px;
 		bottom: 0;
 		z-index: 4;
@@ -546,7 +552,7 @@
 	.row {
 		display: grid;
 		grid-template-columns: var(--label-w) 1fr;
-		height: 32px;
+		height: calc(2 * var(--timeline-unit));
 		border-bottom: 1px solid var(--border);
 	}
 	.name {
@@ -560,13 +566,13 @@
 		padding: 0 8px;
 		background: var(--card);
 		border-right: 1px solid var(--border);
-		font-size: 0.8125rem;
+		font-size: calc(0.8125 * var(--timeline-unit));
 	}
 	.track {
 		position: relative;
 	}
 	.head .row {
-		height: 24px;
+		height: calc(1.5 * var(--timeline-unit));
 	}
 	.month {
 		position: absolute;
@@ -574,9 +580,9 @@
 		bottom: 0;
 		padding: 0 6px;
 		border-left: 1px solid var(--border);
-		font-size: 12px;
+		font-size: calc(0.75 * var(--timeline-unit));
 		font-weight: 600;
-		line-height: 24px;
+		line-height: calc(1.5 * var(--timeline-unit));
 		white-space: nowrap;
 	}
 	/* 横スクロールで月の始まりが隠れても、月名はタイトル列の右に残す */
@@ -592,12 +598,12 @@
 		align-items: baseline;
 		justify-content: center;
 		gap: 1px;
-		font-size: 11px;
-		line-height: 24px;
+		font-size: calc(0.6875 * var(--timeline-unit));
+		line-height: calc(1.5 * var(--timeline-unit));
 		white-space: nowrap;
 	}
 	.day small {
-		font-size: 9px;
+		font-size: calc(0.5625 * var(--timeline-unit));
 	}
 	.day.off {
 		color: var(--muted-foreground);
@@ -651,13 +657,13 @@
 	.count {
 		margin-left: auto;
 		flex-shrink: 0;
-		font-size: 0.75rem;
+		font-size: calc(0.75 * var(--timeline-unit));
 		font-weight: 400;
 		color: var(--muted-foreground);
 	}
 	.key {
 		flex-shrink: 0;
-		font-size: 0.75rem;
+		font-size: calc(0.75 * var(--timeline-unit));
 		color: var(--muted-foreground);
 	}
 	.open {
@@ -698,14 +704,14 @@
 		position: absolute;
 		top: 2px;
 		left: 4px;
-		font-size: 0.6875rem;
+		font-size: calc(0.6875 * var(--timeline-unit));
 		white-space: nowrap;
 		color: var(--c-amber);
 	}
 	.bar {
 		position: absolute;
-		top: 6px;
-		height: 20px;
+		top: calc(0.375 * var(--timeline-unit));
+		height: calc(1.25 * var(--timeline-unit));
 		z-index: 1;
 		display: flex;
 		align-items: center;
@@ -715,7 +721,7 @@
 		border-radius: var(--radius-sm);
 		background: color-mix(in oklch, var(--c) 28%, var(--card));
 		color: var(--foreground);
-		font-size: 0.6875rem;
+		font-size: calc(0.6875 * var(--timeline-unit));
 		white-space: nowrap;
 		user-select: none;
 	}
@@ -753,7 +759,7 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		font-size: 0.875rem;
+		font-size: calc(0.875 * var(--timeline-unit));
 		font-weight: 700;
 	}
 	.unscheduled ul {
@@ -769,17 +775,17 @@
 		align-items: center;
 		gap: 6px;
 		max-width: 280px;
-		height: 28px;
+		height: calc(1.75 * var(--timeline-unit));
 		padding: 0 10px;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm);
 		background: var(--card);
-		font-size: 0.8125rem;
+		font-size: calc(0.8125 * var(--timeline-unit));
 		user-select: none;
 	}
 	.chip .mono {
 		flex-shrink: 0;
-		font-size: 0.75rem;
+		font-size: calc(0.75 * var(--timeline-unit));
 		color: var(--muted-foreground);
 	}
 	.bar.editable {
@@ -812,7 +818,7 @@
 		border-radius: 3px;
 		background: var(--foreground);
 		color: var(--card);
-		font-size: 0.6875rem;
+		font-size: calc(0.6875 * var(--timeline-unit));
 		white-space: nowrap;
 		pointer-events: none;
 	}
@@ -827,7 +833,7 @@
 		border: 1px solid var(--primary);
 		border-radius: var(--radius-sm);
 		background: var(--card);
-		font-size: 0.75rem;
+		font-size: calc(0.75 * var(--timeline-unit));
 		pointer-events: none;
 	}
 	.unscheduled h2 .count {

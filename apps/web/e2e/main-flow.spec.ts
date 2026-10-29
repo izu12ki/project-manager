@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type BrowserContext, type Locator, type Page } from '@playwright/test';
 
 // 1x1 の透明 PNG
 const PNG = Buffer.from(
@@ -55,6 +55,20 @@ const savedResponse = (page: Page) =>
 		(r) => r.request().method() === 'POST' && r.url().includes('/_app/remote') && r.ok()
 	);
 
+/**
+ * CSP に止められた読み込み・実行を violations に集める。
+ * 初期化スクリプトは CSP の対象外なので、ページの securitypolicyviolation を拾える
+ */
+async function watchCsp(context: BrowserContext, violations: string[]) {
+	await context.exposeBinding('reportCspViolation', (_source, v: string) => violations.push(v));
+	await context.addInitScript(() => {
+		const w = window as unknown as { reportCspViolation: (v: string) => void };
+		document.addEventListener('securitypolicyviolation', (e) => {
+			w.reportCspViolation(`${e.effectiveDirective} ${e.blockedURI} (${e.documentURI})`);
+		});
+	});
+}
+
 /** 要素の中央を掴んで dx だけ横に動かす */
 async function dragBy(page: Page, target: Locator, dx: number) {
 	const b = await target.boundingBox();
@@ -71,10 +85,17 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	playwright,
 	baseURL
 }) => {
+	// 添付画像・カスタム絵文字・エディタなど、テスト中の読み込みが CSP で止められないこと（最後に確かめる）
+	const cspViolations: string[] = [];
+	await watchCsp(page.context(), cspViolations);
+
 	// 1. 初期セットアップ
-	// ほかのサイトのフレームには埋め込ませない
+	// CSP: スクリプトは自サイトと nonce 付きのものだけ。ほかのサイトのフレームには埋め込ませない
 	const loginRes = await page.request.get('/login');
-	expect(loginRes.headers()['x-frame-options']).toBe('DENY');
+	const csp = loginRes.headers()['content-security-policy'];
+	expect(csp).toMatch(/script-src 'self' 'nonce-[^']+'/);
+	expect(csp).toContain("frame-ancestors 'none'");
+	expect(loginRes.headers()['x-content-type-options']).toBe('nosniff');
 	await page.goto('/login');
 	await expect(page).toHaveURL(/\/setup/);
 	await page.getByLabel('名前').fill('管理者');
@@ -649,6 +670,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	// 9. 管理者がゲストを無効化（確認ダイアログ）
 	// 無効化の前から開いていたゲストの画面（別のセッション）で、無効化の後に書き込ませない
 	const guestPage = await browser.newPage({ baseURL });
+	await watchCsp(guestPage.context(), cspViolations);
 	await login(guestPage, 'guest@example.com');
 	await guestPage.goto('/projects/ACME/issues/1');
 	await logout(page);
@@ -886,4 +908,6 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.goto('/account');
 	await expect(page.getByRole('heading', { name: 'パスワード変更' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'API キー' })).toHaveCount(0);
+
+	expect(cspViolations).toEqual([]);
 });

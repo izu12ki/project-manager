@@ -76,11 +76,9 @@ const app: Handle = async ({ event, resolve }) => {
 	return svelteKitHandler({ auth, event, resolve, building });
 };
 
-// CSP（frame-ancestors を含む）は SvelteKit 3.1 に上げてから入れる。
-// それまでは、ほかのサイトのフレームに埋め込んで操作させる（クリックジャッキング）ことだけ止める
+// CSP（フレームへの埋め込みの禁止を含む）は vite.config.ts の csp で SvelteKit がページに付ける
 const securityHeaders: Handle = async ({ event, resolve }) => {
 	const response = await resolve(event);
-	response.headers.set('x-frame-options', 'DENY');
 	response.headers.set('x-content-type-options', 'nosniff');
 	return response;
 };

@@ -2,16 +2,38 @@
 title: メール送信の設定
 ---
 
-招待メールとパスワードリセットのメールを送るには、SMTP2GO か Resend のどちらかを使います。どちらも HTTP API で送信します。
+招待メールとパスワードリセットのメールは、次のどれかで送ります。
 
-| | 無料枠（2026-10 時点） |
-|---|---|
-| SMTP2GO | 月 1,000 通・1 日 200 通 |
-| Resend | 月 3,000 通・1 日 100 通（宛先 1 件ごとに 1 通と数える） |
+| | 使える条件 | 料金（2026-10 時点） |
+|---|---|---|
+| **Cloudflare Email Sending（推奨）** | 送信元ドメインの DNS を Cloudflare で管理している | Workers Paid プランに月 3,000 通まで含まれる。超えた分は 1,000 通あたり 0.35 ドル |
+| SMTP2GO | DNS の管理先は問わない | 無料枠: 月 1,000 通・1 日 200 通 |
+| Resend | DNS の管理先は問わない | 無料枠: 月 3,000 通・1 日 100 通（宛先 1 件ごとに 1 通と数える） |
+
+このアプリは Workers Paid プランが前提なので、送信元ドメインの DNS を Cloudflare で管理しているなら **Cloudflare Email Sending を使ってください**。別のサービスの契約も API キーも要りません。DNS を Cloudflare 以外で管理している場合は SMTP2GO か Resend を使います。
 
 最新の条件は各サービスの料金ページで確認してください。
 
-## 共通の手順
+## Cloudflare Email Sending（推奨）
+
+2026-10 時点ではベータ版です。新しいアカウントは 1 日に送れる通数が少なめに設定されていて、送信の実績に応じて自動で引き上げられます。
+
+1. 送信元に使うドメインを Cloudflare に追加していなければ、追加して DNS を Cloudflare に移す
+2. ダッシュボードの「Compute → Email Service → Email Sending」で「Onboard Domain」を選び、ドメインを選ぶ（`pnpm exec wrangler email sending enable example.com` でもよい）。SPF・DKIM・DMARC のレコードは自動で追加される
+3. シークレットを登録して再デプロイする
+
+```bash
+cd apps/web
+pnpm exec wrangler secret put MAIL_PROVIDER   # cloudflare
+pnpm exec wrangler secret put MAIL_FROM       # 例: Project Manager <noreply@example.com>（手順 2 のドメインのアドレス）
+pnpm deploy
+```
+
+`MAIL_API_KEY` は要りません。送信には Worker のバインディング（`apps/web/wrangler.jsonc` の `send_email`）を使います。
+
+ドメインに DMARC レコードが無い場合は、手順 2 で `p=reject` のレコードが追加されます。そのドメインで Google Workspace などほかのサービスからもメールを送っている場合は、そちらも SPF・DKIM を設定済みか確認してください。
+
+## SMTP2GO / Resend
 
 1. サービスに登録し、送信元に使うドメインを認証する（DNS に SPF / DKIM レコードを追加）
 2. API キーを発行する
@@ -31,5 +53,6 @@ pnpm deploy
 
 ## メールが届かないとき
 
-- 送信に失敗してもアプリの操作自体は成功します。失敗は Workers のログ（ダッシュボードの Observability、または `pnpm exec wrangler tail`）に `invitation mail failed` として出ます。
+- 送信に失敗してもアプリの操作自体は成功します。失敗は Workers のログ（ダッシュボードの Observability、または `pnpm exec wrangler tail`）に `invitation mail failed`（パスワードリセットは `reset password mail failed`）として出ます。
+- Cloudflare Email Sending では、ダッシュボードの「Email Sending」のログでも送信結果を確認できます。
 - 招待は管理画面の「未使用の招待」から「リンクをコピー」でいつでも渡せます。**コピーすると招待を再発行し、以前のリンクは無効になります。**

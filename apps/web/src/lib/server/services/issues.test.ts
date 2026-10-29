@@ -74,6 +74,10 @@ describe('issues', () => {
 		await expect(
 			updateIssue(as(member), 'ACME', 1, { startDate: '2026-10-11' })
 		).rejects.toMatchObject({ code: 'validation' });
+		// 形式が合っていても暦にない日付は保存しない
+		await expect(
+			updateIssue(as(member), 'ACME', 1, { dueDate: '2027-02-29' })
+		).rejects.toMatchObject({ code: 'validation', message: '日付の形式が正しくありません' });
 		await expect(
 			createIssue(as(member), 'ACME', { title: 'C', status: 'bogus' })
 		).rejects.toMatchObject({ code: 'validation' });

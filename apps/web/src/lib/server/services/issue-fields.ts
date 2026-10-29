@@ -19,7 +19,7 @@ import {
 } from '$lib/labels';
 import { category, issue, issueStatus, issueType, milestone } from '../db/schema';
 import { AppError } from '../errors';
-import { emptyToNull, parse } from '../validation';
+import { DateOrEmptySchema as DateOrEmpty, emptyToNull, parse } from '../validation';
 import { assertWritable, requireProject } from './projects';
 
 const NameSchema = (label: string) =>
@@ -29,10 +29,6 @@ const NameSchema = (label: string) =>
 		v.minLength(1, `${label}名を入力してください`),
 		v.maxLength(50, `${label}名は50文字以内で入力してください`)
 	);
-const DateOrEmpty = v.union(
-	[v.literal(''), v.pipe(v.string(), v.isoDate())],
-	'日付の形式が正しくありません'
-);
 
 const ColorSchema = v.picklist(COLORS, '色を選択してください');
 

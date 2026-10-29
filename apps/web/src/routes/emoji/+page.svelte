@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
+	import { enhance } from '$lib/forms';
 	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
 	import FormAlert from '$lib/components/FormAlert.svelte';
 	import { MAX_CUSTOM_EMOJI_NAME, normalizeEmojiName } from '$lib/custom-emoji';

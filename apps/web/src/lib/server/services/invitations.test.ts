@@ -81,6 +81,46 @@ describe('invitations', () => {
 		expect(joined.map((m) => m.projectId).sort()).toEqual([projectId, other].sort());
 	});
 
+	it('同じメールに別のプロジェクトから招待し直すと、前の招待のプロジェクトを引き継ぐ', async () => {
+		const { id: other } = await seedProject(db, { key: 'BETA', name: 'Beta' });
+		const ctx = ctxOf(base, admin);
+		const { url: first } = await createInvitation(ctx, {
+			email: 'g@example.com',
+			role: 'member',
+			projectIds: [projectId]
+		});
+		const { url: second } = await createInvitation(ctx, {
+			email: 'g@example.com',
+			role: 'guest',
+			projectIds: [other]
+		});
+		expect(await getInvitationByToken(db, tokenOf(first))).toBeNull();
+		expect(await getInvitationByToken(db, tokenOf(second))).toMatchObject({
+			role: 'guest',
+			projectNames: ['Acme', 'Beta']
+		});
+		expect(base.sent[1].subject).toContain('「Acme」「Beta」');
+		expect(await listPendingInvitations(ctx)).toHaveLength(1);
+		await acceptInvitation(base, { token: tokenOf(second), name: 'G', password: 'password-1234' });
+		const [u] = await db.select().from(user).where(eq(user.email, 'g@example.com'));
+		const joined = await db.select().from(projectMember).where(eq(projectMember.userId, u.id));
+		expect(joined.map((m) => m.projectId).sort()).toEqual([projectId, other].sort());
+	});
+
+	it('期限切れの招待のプロジェクトは引き継がない', async () => {
+		const { id: other } = await seedProject(db, { key: 'BETA', name: 'Beta' });
+		const ctx = ctxOf(base, admin);
+		await createInvitation(ctx, { email: 'g@example.com', role: 'guest', projectIds: [projectId] });
+		await db.update(invitation).set({ expiresAt: new Date(Date.now() - 1000) });
+		const { url } = await createInvitation(ctx, {
+			email: 'g@example.com',
+			role: 'guest',
+			projectIds: [other]
+		});
+		expect((await getInvitationByToken(db, tokenOf(url)))?.projectNames).toEqual(['Beta']);
+		expect(await listPendingInvitations(ctx)).toHaveLength(1);
+	});
+
 	it('登録済みのメールアドレスは conflict', async () => {
 		await expect(
 			createInvitation(ctxOf(base, admin), {

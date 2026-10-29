@@ -10,7 +10,7 @@
 - 顧客をゲストとして招待し、参加プロジェクトだけを見せる
 - REST API と Claude Code 用の Skill
 
-**利用には Cloudflare アカウント（Workers Paid プラン）と Turso アカウントが必要です。** 手順はドキュメント（`apps/docs`）を参照してください。
+**利用には Cloudflare アカウント（Workers Paid プラン）と Turso アカウントが必要です。** 手順は[ドキュメント](https://project-manager-docs.hirano-i.workers.dev)（ソースは `apps/docs`）を参照してください。
 
 ## 開発
 

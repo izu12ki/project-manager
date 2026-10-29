@@ -1,6 +1,7 @@
 TURSO_DATABASE_URL=http://127.0.0.1:8080
 BETTER_AUTH_SECRET=replace-with-output-of-openssl-rand-base64-32
 BETTER_AUTH_URL=http://localhost:5173
+# MAIL_PROVIDER は cloudflare / smtp2go / resend / console
 MAIL_PROVIDER=console
 # MAIL_API_KEY=
 # MAIL_FROM=Project Manager <noreply@example.com>

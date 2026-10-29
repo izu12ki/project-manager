@@ -11,6 +11,9 @@ describe('readEnv', () => {
 	it('MAIL_PROVIDER の既定値は console', () => {
 		expect(readEnv(ok).MAIL_PROVIDER).toBe('console');
 	});
+	it('MAIL_PROVIDER に cloudflare を指定できる', () => {
+		expect(readEnv({ ...ok, MAIL_PROVIDER: 'cloudflare' }).MAIL_PROVIDER).toBe('cloudflare');
+	});
 	it('必須値が無いと、名前が分かるエラーを投げる', () => {
 		expect(() => readEnv({ ...ok, BETTER_AUTH_SECRET: undefined })).toThrow('BETTER_AUTH_SECRET');
 	});

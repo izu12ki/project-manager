@@ -10,6 +10,8 @@
 	"observability": { "enabled": true },
 	// 添付ファイル。バケットは `wrangler r2 bucket create project-manager-attachments` で作る
 	"r2_buckets": [{ "binding": "BUCKET", "bucket_name": "project-manager-attachments" }],
+	// メール送信（Cloudflare Email Sending）。MAIL_PROVIDER=cloudflare のときだけ使う
+	"send_email": [{ "name": "EMAIL" }],
 	// Turso（aws-ap-northeast-1）の近くで実行し、DB 往復を短くする
 	"placement": { "region": "aws:ap-northeast-1" }
 }

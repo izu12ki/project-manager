@@ -10,9 +10,11 @@ export interface Mailer {
 }
 
 export interface MailEnv {
-	MAIL_PROVIDER: 'smtp2go' | 'resend' | 'console';
+	MAIL_PROVIDER: 'cloudflare' | 'smtp2go' | 'resend' | 'console';
 	MAIL_API_KEY?: string;
 	MAIL_FROM?: string;
+	/** Cloudflare Email Sending の send_email バインディング（MAIL_PROVIDER が cloudflare のとき使う） */
+	EMAIL?: Pick<SendEmail, 'send'>;
 }
 
 async function postJson(
@@ -29,6 +31,13 @@ async function postJson(
 	if (!res.ok) throw new Error(`mail API ${url} failed: ${res.status} ${await res.text()}`);
 }
 
+/** "名前 <addr>" をバインディングの形 { name, email } にする。名前が無ければアドレスだけ */
+export function parseFrom(from: string): string | EmailAddress {
+	const m = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(from);
+	if (!m) return from.trim();
+	return m[1] ? { name: m[1], email: m[2].trim() } : m[2].trim();
+}
+
 export function createMailer(env: MailEnv, fetchFn: typeof fetch = fetch): Mailer {
 	if (env.MAIL_PROVIDER === 'console') {
 		return {
@@ -38,8 +47,26 @@ export function createMailer(env: MailEnv, fetchFn: typeof fetch = fetch): Maile
 		};
 	}
 	const { MAIL_API_KEY: key, MAIL_FROM: from } = env;
-	if (!key || !from)
-		throw new Error('MAIL_API_KEY and MAIL_FROM are required when MAIL_PROVIDER is not console');
+	if (!from) throw new Error('MAIL_FROM is required when MAIL_PROVIDER is not console');
+
+	if (env.MAIL_PROVIDER === 'cloudflare') {
+		const binding = env.EMAIL;
+		if (!binding)
+			throw new Error('the send_email binding EMAIL is required when MAIL_PROVIDER is cloudflare');
+		const sender = parseFrom(from);
+		return {
+			async send(m) {
+				await binding.send({
+					from: sender,
+					to: m.to,
+					subject: m.subject,
+					text: m.text,
+					...(m.html ? { html: m.html } : {})
+				});
+			}
+		};
+	}
+	if (!key) throw new Error('MAIL_API_KEY is required when MAIL_PROVIDER is smtp2go or resend');
 
 	if (env.MAIL_PROVIDER === 'smtp2go') {
 		return {

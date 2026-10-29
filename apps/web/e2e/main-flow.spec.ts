@@ -570,7 +570,10 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page.getByTestId('bar-1').locator('[data-handle]')).toHaveCount(2);
 	const guestBar2 = page.getByTestId('bar-2');
 	await expect(guestBar2.locator('[data-handle]')).toHaveCount(2);
+	// 保存が終わる前に再読み込みしない
+	const guestSaved = savedResponse(page);
 	await dragBy(page, guestBar2, 64);
+	await guestSaved;
 	await expect(guestBar2).toHaveAttribute('data-start', jstDay(4));
 	await page.goto('/projects/ACME/timeline');
 	await expect(page.getByTestId('bar-2')).toHaveAttribute('data-start', jstDay(4));

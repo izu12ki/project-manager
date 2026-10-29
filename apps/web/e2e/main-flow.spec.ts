@@ -722,7 +722,8 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.getByRole('link', { name: '子課題を追加' }).click();
 	await expect(page.getByLabel('親課題')).toHaveValue('1');
 	await page.getByLabel('タイトル').fill('ログイン画面の文言修正');
-	await page.getByRole('button', { name: '起票する' }).first().click();
+	// 二度押ししても 1 件だけ起票する（下の「0 / 1 完了」で確かめる）
+	await page.getByRole('button', { name: '起票する' }).first().dblclick();
 	await expect(page).toHaveURL(/\/projects\/ACME\/issues\/\d+$/);
 	await expect(page.getByRole('link', { name: /ACME-1/ })).toBeVisible();
 	await page.goto('/projects/ACME/issues/1');

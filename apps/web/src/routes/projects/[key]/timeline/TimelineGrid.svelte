@@ -103,13 +103,15 @@
 				span: (all[i + 1]?.col ?? range.days) - c.col
 			}))
 	);
-	/** 1 日の幅は rem で持ち、文字サイズの設定に合わせてカレンダーも拡大する（標準で range.dayWidth px） */
-	const dayW = $derived(`${range.dayWidth / 16}rem`);
+	/**
+	 * 寸法は --timeline-unit（layout.css）を単位にし、文字サイズの設定に合わせてカレンダーも拡大する。
+	 * 1 日の幅は標準で range.dayWidth px
+	 */
+	const dayW = $derived(`calc(${range.dayWidth / 16} * var(--timeline-unit))`);
 	const colW = (cols: number) => `calc(${cols} * var(--day-w))`;
-	/** 1 日の実際の幅（px）。ルートの文字サイズで変わるので、ドラッグの開始時に測る */
+	/** 1 日の実際の幅（px）。文字サイズの設定で変わるので、ドラッグの開始時に見出しの日付から測る */
 	function measureDayPx() {
-		const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-		return (range.dayWidth * rem) / 16;
+		return canvas?.querySelector('.day')?.getBoundingClientRect().width || range.dayWidth;
 	}
 	const colOf = (date: string) => diffDays(range.from, date);
 	const inRange = (date: string | null): date is string =>
@@ -529,7 +531,7 @@
 	}
 	.resizer {
 		position: absolute;
-		top: -1.5rem;
+		top: calc(-1.5 * var(--timeline-unit));
 		right: -4px;
 		bottom: 0;
 		z-index: 4;
@@ -550,7 +552,7 @@
 	.row {
 		display: grid;
 		grid-template-columns: var(--label-w) 1fr;
-		height: 2rem;
+		height: calc(2 * var(--timeline-unit));
 		border-bottom: 1px solid var(--border);
 	}
 	.name {
@@ -564,13 +566,13 @@
 		padding: 0 8px;
 		background: var(--card);
 		border-right: 1px solid var(--border);
-		font-size: 0.8125rem;
+		font-size: calc(0.8125 * var(--timeline-unit));
 	}
 	.track {
 		position: relative;
 	}
 	.head .row {
-		height: 1.5rem;
+		height: calc(1.5 * var(--timeline-unit));
 	}
 	.month {
 		position: absolute;
@@ -578,9 +580,9 @@
 		bottom: 0;
 		padding: 0 6px;
 		border-left: 1px solid var(--border);
-		font-size: 0.75rem;
+		font-size: calc(0.75 * var(--timeline-unit));
 		font-weight: 600;
-		line-height: 1.5rem;
+		line-height: calc(1.5 * var(--timeline-unit));
 		white-space: nowrap;
 	}
 	/* 横スクロールで月の始まりが隠れても、月名はタイトル列の右に残す */
@@ -596,12 +598,12 @@
 		align-items: baseline;
 		justify-content: center;
 		gap: 1px;
-		font-size: 0.6875rem;
-		line-height: 1.5rem;
+		font-size: calc(0.6875 * var(--timeline-unit));
+		line-height: calc(1.5 * var(--timeline-unit));
 		white-space: nowrap;
 	}
 	.day small {
-		font-size: 0.5625rem;
+		font-size: calc(0.5625 * var(--timeline-unit));
 	}
 	.day.off {
 		color: var(--muted-foreground);
@@ -655,13 +657,13 @@
 	.count {
 		margin-left: auto;
 		flex-shrink: 0;
-		font-size: 0.75rem;
+		font-size: calc(0.75 * var(--timeline-unit));
 		font-weight: 400;
 		color: var(--muted-foreground);
 	}
 	.key {
 		flex-shrink: 0;
-		font-size: 0.75rem;
+		font-size: calc(0.75 * var(--timeline-unit));
 		color: var(--muted-foreground);
 	}
 	.open {
@@ -702,14 +704,14 @@
 		position: absolute;
 		top: 2px;
 		left: 4px;
-		font-size: 0.6875rem;
+		font-size: calc(0.6875 * var(--timeline-unit));
 		white-space: nowrap;
 		color: var(--c-amber);
 	}
 	.bar {
 		position: absolute;
-		top: 0.375rem;
-		height: 1.25rem;
+		top: calc(0.375 * var(--timeline-unit));
+		height: calc(1.25 * var(--timeline-unit));
 		z-index: 1;
 		display: flex;
 		align-items: center;
@@ -719,7 +721,7 @@
 		border-radius: var(--radius-sm);
 		background: color-mix(in oklch, var(--c) 28%, var(--card));
 		color: var(--foreground);
-		font-size: 0.6875rem;
+		font-size: calc(0.6875 * var(--timeline-unit));
 		white-space: nowrap;
 		user-select: none;
 	}
@@ -757,7 +759,7 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		font-size: 0.875rem;
+		font-size: calc(0.875 * var(--timeline-unit));
 		font-weight: 700;
 	}
 	.unscheduled ul {
@@ -773,17 +775,17 @@
 		align-items: center;
 		gap: 6px;
 		max-width: 280px;
-		height: 1.75rem;
+		height: calc(1.75 * var(--timeline-unit));
 		padding: 0 10px;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm);
 		background: var(--card);
-		font-size: 0.8125rem;
+		font-size: calc(0.8125 * var(--timeline-unit));
 		user-select: none;
 	}
 	.chip .mono {
 		flex-shrink: 0;
-		font-size: 0.75rem;
+		font-size: calc(0.75 * var(--timeline-unit));
 		color: var(--muted-foreground);
 	}
 	.bar.editable {
@@ -816,7 +818,7 @@
 		border-radius: 3px;
 		background: var(--foreground);
 		color: var(--card);
-		font-size: 0.6875rem;
+		font-size: calc(0.6875 * var(--timeline-unit));
 		white-space: nowrap;
 		pointer-events: none;
 	}
@@ -831,7 +833,7 @@
 		border: 1px solid var(--primary);
 		border-radius: var(--radius-sm);
 		background: var(--card);
-		font-size: 0.75rem;
+		font-size: calc(0.75 * var(--timeline-unit));
 		pointer-events: none;
 	}
 	.unscheduled h2 .count {

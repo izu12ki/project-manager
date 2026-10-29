@@ -669,14 +669,14 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page.getByLabel('完了理由').locator('option:checked')).toHaveText('対応済み');
 	await expect(page.getByLabel('開始日')).toHaveValue(jstDay(4));
 
-	// 8f. 文字サイズ「特大」ではカレンダーも拡大し（1 日 = 40px）、ドラッグは拡大後の幅で日数に換算する
+	// 8f. 文字サイズ「特大」ではカレンダーを標準の 1.5 倍にし（1 日 = 48px）、ドラッグは拡大後の幅で日数に換算する
 	await page.evaluate(() => localStorage.setItem('font-size', 'xlarge'));
 	await page.goto(`/projects/ACME/timeline?from=${jstDay(4)}`);
 	await expect
 		.poll(async () => (await page.locator(`.days [data-date="${jstDay(4)}"]`).boundingBox())?.width)
-		.toBe(40);
+		.toBe(48);
 	const movedLarge = savedResponse(page);
-	await dragBy(page, page.getByTestId('bar-2'), 120);
+	await dragBy(page, page.getByTestId('bar-2'), 144);
 	await movedLarge;
 	await expect(page.getByTestId('bar-2')).toHaveAttribute('data-start', jstDay(7));
 	await page.evaluate(() => localStorage.removeItem('font-size'));

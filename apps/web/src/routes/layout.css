@@ -140,11 +140,18 @@
 		background: var(--background);
 	}
 	/* 文字の大きさ（アカウント設定）。サイズは rem で書いてあるので、ルートを変えれば全体が拡大される */
+	html {
+		/* タイムラインのカレンダーの寸法の単位。細かくて読みにくいので、大・特大では本文より大きく
+		   （標準の 1.25 倍・1.5 倍に）拡大する */
+		--timeline-unit: 1rem;
+	}
 	html[data-font-size='large'] {
 		font-size: 112.5%;
+		--timeline-unit: calc(1rem * 1.25 / 1.125);
 	}
 	html[data-font-size='xlarge'] {
 		font-size: 125%;
+		--timeline-unit: calc(1rem * 1.5 / 1.25);
 	}
 	body {
 		margin: 0;

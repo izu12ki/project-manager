@@ -4,8 +4,13 @@ on:
     branches: [main]
   pull_request:
 
+# 同じ PR に新しい push が来たら古い実行を止める（main は最後まで流す）
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  ci:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -14,7 +19,17 @@ jobs:
       - run: pnpm lint
       - run: pnpm check
       - run: pnpm test:unit
-      - run: pnpm --filter web exec playwright install --with-deps chromium
+      - run: pnpm docs:build
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v5
+      - run: pnpm install --frozen-lockfile
+      # ヘッドレス実行だけなのでフル版 Chromium は入れない。
+      # 依存ライブラリはランナーイメージに揃っているので --with-deps（apt）も省く
+      - run: pnpm --filter web exec playwright install --only-shell chromium
       - run: pnpm test:e2e
         env:
           WRANGLER_SEND_METRICS: 'false'
@@ -23,4 +38,3 @@ jobs:
         with:
           name: playwright-traces
           path: apps/web/test-results
-      - run: pnpm docs:build

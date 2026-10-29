@@ -53,5 +53,19 @@ export default defineConfig(
 		// ラップする元として使う
 		files: ['src/lib/forms.ts'],
 		rules: { 'no-restricted-imports': 'off' }
+	},
+	{
+		// Vitest は isolate: false（vite.config.ts）なので、モジュールの差し替えは後のテストファイルに残る
+		files: ['**/*.test.ts'],
+		rules: {
+			'no-restricted-properties': [
+				'error',
+				...['mock', 'doMock'].map((property) => ({
+					object: 'vi',
+					property,
+					message: 'ファイルをまたいで残るので vi.spyOn を使ってください'
+				}))
+			]
+		}
 	}
 );

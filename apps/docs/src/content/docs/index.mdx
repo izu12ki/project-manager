@@ -3,26 +3,69 @@ title: Project Manager
 description: 受託開発会社と顧客が課題を共有する、セルフホスト型のプロジェクト管理ツール
 template: splash
 hero:
-  tagline: Cloudflare Workers と Turso で動く、受託開発のための軽量プロジェクト管理ツール（MIT ライセンス）
+  title: 受託開発のための、軽量プロジェクト管理
+  tagline: 顧客と課題を共有できるセルフホスト型のツール。Cloudflare Workers と Turso で動きます（MIT ライセンス）。
+  image:
+    file: ../../assets/logo.svg
+    alt: Project Manager のロゴ
   actions:
-    - text: 必要なものを確認する
+    - text: はじめる
       link: /guides/requirements/
       icon: right-arrow
+    - text: デプロイ手順
+      link: /guides/deploy/
+      icon: rocket
+      variant: minimal
 ---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 ## できること
 
-- **課題管理** — 課題番号（`ACME-12` 形式）、ステータス・種別（プロジェクトごとに変更できる）、優先度、複数の担当者、開始日と期限、カテゴリー、マイルストーン、1 階層のサブタスク。キーワードや条件で絞り込めて、編集履歴では説明文の差分も見られる
-- **カンバン** — ドラッグで列の移動と並び替え
-- **タイムライン** — 課題を開始日から期限までのバーで並べ、ドラッグで日程を変える。土日と日本の祝日は灰色で表示（[タイムライン](/guides/timeline/)）
-- **エディタ** — 課題の説明とコメントを見たまま編集できる Markdown エディタ。表、ファイルの貼り付け・ドロップ、`@` メンション
-- **コメント** — 絵文字でリアクションできる。カスタム絵文字も登録できる
-- **添付ファイル** — Cloudflare R2 に保存
-- **顧客ゲスト** — 顧客を「ゲスト」として招待し、参加しているプロジェクトだけを見せる。ゲストは起票とコメント、自分が起票した課題の編集、自分が担当の課題のステータス変更ができる
-- **通知** — 担当の割り当て、ステータスの変更、コメント、`@` メンションをアプリ内で通知
-- **Slack 連携** — 自分に関わる通知を Slack の DM で受け取る
-- **表示** — ダークモード、文字の大きさの切り替え
-- **REST API** — 管理者が発行する API キーで、課題の一括起票・一括修正やスケジュールの作成ができる。Claude Code 用の Skill を同梱
-- **招待メール / パスワードリセット** — Cloudflare Email Sending（Workers Paid プランに月 3,000 通まで含まれる）、SMTP2GO、Resend のどれかで送信。メール設定なしでも招待リンクを手渡しできる
+<CardGrid>
+	<Card title="課題管理" icon="list-format">
+		課題番号（`ACME-12` 形式）、ステータス・種別（プロジェクトごとに変更できる）、優先度、複数の担当者、開始日と期限、カテゴリー、マイルストーン、1 階層のサブタスク。キーワードや条件で絞り込めて、編集履歴では説明文の差分も見られます。
+	</Card>
+	<Card title="カンバン" icon="puzzle">
+		ドラッグで列の移動と並び替えができます。
+	</Card>
+	<Card title="タイムライン" icon="analytics">
+		課題を開始日から期限までのバーで並べ、ドラッグで日程を変えます。土日と日本の祝日は灰色で表示します（[タイムライン](/guides/timeline/)）。
+	</Card>
+	<Card title="エディタ" icon="pencil">
+		課題の説明とコメントを見たまま編集できる Markdown エディタ。表、ファイルの貼り付け・ドロップ、`@` メンションに対応しています。
+	</Card>
+	<Card title="コメント" icon="comment">
+		絵文字でリアクションできます。カスタム絵文字も登録できます。
+	</Card>
+	<Card title="添付ファイル" icon="document">
+		Cloudflare R2 に保存します。
+	</Card>
+	<Card title="顧客ゲスト" icon="padlock">
+		顧客を「ゲスト」として招待し、参加しているプロジェクトだけを見せます。ゲストは起票とコメント、自分が起票した課題の編集、自分が担当の課題のステータス変更ができます（[権限](/reference/permissions/)）。
+	</Card>
+	<Card title="通知" icon="information">
+		担当の割り当て、ステータスの変更、コメント、`@` メンションをアプリ内で通知します。
+	</Card>
+	<Card title="Slack 連携" icon="slack">
+		自分に関わる通知を Slack の DM で受け取れます（[Slack 連携](/guides/slack/)）。
+	</Card>
+	<Card title="表示" icon="moon">
+		ダークモードと、文字の大きさの切り替えに対応しています。
+	</Card>
+	<Card title="REST API" icon="setting">
+		管理者が発行する API キーで、課題の一括起票・一括修正やスケジュールの作成ができます。Claude Code 用の Skill を同梱しています。
+	</Card>
+	<Card title="招待メール / パスワードリセット" icon="email">
+		Cloudflare Email Sending（Workers Paid プランに月 3,000 通まで含まれる）、SMTP2GO、Resend のどれかで送信します。メール設定なしでも招待リンクを手渡しできます（[メール送信の設定](/guides/mail/)）。
+	</Card>
+</CardGrid>
+
+## 使い始める
 
 利用者ごとに自分の Cloudflare アカウントへデプロイして使います（SaaS としての提供はありません）。Cloudflare は Workers Paid プラン（月額 5 ドル〜）が必要です。
+
+<CardGrid>
+	<LinkCard title="必要なもの" description="用意するアカウントと、Workers Paid プランが必要な理由" href="/guides/requirements/" />
+	<LinkCard title="デプロイ手順" description="ソースの取得から初期セットアップ画面を開くまで" href="/guides/deploy/" />
+</CardGrid>

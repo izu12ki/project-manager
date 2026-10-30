@@ -1,5 +1,6 @@
 ---
 title: 環境変数
+description: Worker に設定するシークレットと環境変数の一覧
 ---
 
 本番では `wrangler secret put` で、ローカルでは `apps/web/.dev.vars` で設定します。

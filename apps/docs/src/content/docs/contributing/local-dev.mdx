@@ -1,6 +1,9 @@
 ---
 title: ローカル開発
+description: 手元で開発サーバーとテストを動かす
 ---
+
+import { FileTree } from '@astrojs/starlight/components';
 
 ```bash
 mise install
@@ -31,6 +34,11 @@ pnpm db:migrate
 
 ## 構成
 
-- `apps/web/src/lib/server/services/` — 業務ロジックと権限チェック（ここをテストする）
-- `apps/web/src/routes/` — 画面。services を呼ぶだけにする
-- `apps/web/src/hooks.server.ts` — 認証と、Cloudflare の env の読み込み（`cloudflare:workers` を import するのはここだけ）
+<FileTree>
+
+- apps/web/src
+  - lib/server/services/ 業務ロジックと権限チェック（ここをテストする）
+  - routes/ 画面。services を呼ぶだけにする
+  - hooks.server.ts 認証と、Cloudflare の env の読み込み（`cloudflare:workers` を import するのはここだけ）
+
+</FileTree>

@@ -7,6 +7,10 @@ export default defineConfig({
 	integrations: [
 		starlight({
 			title: 'Project Manager',
+			description: '受託開発会社と顧客が課題を共有する、セルフホスト型のプロジェクト管理ツール',
+			logo: { src: './src/assets/logo.svg' },
+			lastUpdated: true,
+			customCss: ['./src/styles/custom.css'],
 			defaultLocale: 'root',
 			locales: { root: { label: '日本語', lang: 'ja' } },
 			sidebar: [
@@ -15,10 +19,15 @@ export default defineConfig({
 					items: [
 						{ label: '必要なもの', slug: 'guides/requirements' },
 						{ label: 'デプロイ手順', slug: 'guides/deploy' },
+						{ label: 'アップデート', slug: 'guides/update' }
+					]
+				},
+				{
+					label: 'ガイド',
+					items: [
 						{ label: 'メール送信の設定', slug: 'guides/mail' },
 						{ label: 'Slack 連携', slug: 'guides/slack' },
-						{ label: 'タイムライン', slug: 'guides/timeline' },
-						{ label: 'アップデート', slug: 'guides/update' }
+						{ label: 'タイムライン', slug: 'guides/timeline' }
 					]
 				},
 				{

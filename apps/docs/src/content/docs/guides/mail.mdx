@@ -1,6 +1,9 @@
 ---
 title: メール送信の設定
+description: 招待メールとパスワードリセットのメールを送るサービスの選び方と設定手順
 ---
+
+import { Steps } from '@astrojs/starlight/components';
 
 招待メールとパスワードリセットのメールは、次のどれかで送ります。
 
@@ -16,36 +19,48 @@ title: メール送信の設定
 
 ## Cloudflare Email Sending（推奨）
 
+:::caution[ベータ版]
 2026-10 時点ではベータ版です。新しいアカウントは 1 日に送れる通数が少なめに設定されていて、送信の実績に応じて自動で引き上げられます。
+:::
+
+<Steps>
 
 1. 送信元に使うドメインを Cloudflare に追加していなければ、追加して DNS を Cloudflare に移す
 2. ダッシュボードの「Compute → Email Service → Email Sending」で「Onboard Domain」を選び、ドメインを選ぶ（`pnpm exec wrangler email sending enable example.com` でもよい）。SPF・DKIM・DMARC のレコードは自動で追加される
 3. シークレットを登録して再デプロイする
 
-```bash
-cd apps/web
-pnpm exec wrangler secret put MAIL_PROVIDER   # cloudflare
-pnpm exec wrangler secret put MAIL_FROM       # 例: Project Manager <noreply@example.com>（手順 2 のドメインのアドレス）
-pnpm deploy
-```
+   ```bash
+   cd apps/web
+   pnpm exec wrangler secret put MAIL_PROVIDER   # cloudflare
+   pnpm exec wrangler secret put MAIL_FROM       # 例: Project Manager <noreply@example.com>（手順 2 のドメインのアドレス）
+   pnpm deploy
+   ```
+
+</Steps>
 
 `MAIL_API_KEY` は要りません。送信には Worker のバインディング（`apps/web/wrangler.jsonc` の `send_email`）を使います。
 
-ドメインに DMARC レコードが無い場合は、手順 2 で `p=reject` のレコードが追加されます。そのドメインで Google Workspace などほかのサービスからもメールを送っている場合は、そちらも SPF・DKIM を設定済みか確認してください。
+:::caution[DMARC レコードが無いドメインの場合]
+手順 2 で `p=reject` のレコードが追加されます。そのドメインで Google Workspace などほかのサービスからもメールを送っている場合は、そちらも SPF・DKIM を設定済みか確認してください。
+:::
 
 ## SMTP2GO / Resend
+
+<Steps>
 
 1. サービスに登録し、送信元に使うドメインを認証する（DNS に SPF / DKIM レコードを追加）
 2. API キーを発行する
 3. シークレットを登録して再デプロイする
 
-```bash
-cd apps/web
-pnpm exec wrangler secret put MAIL_PROVIDER   # smtp2go または resend
-pnpm exec wrangler secret put MAIL_API_KEY
-pnpm exec wrangler secret put MAIL_FROM       # 例: Project Manager <noreply@example.com>
-pnpm deploy
-```
+   ```bash
+   cd apps/web
+   pnpm exec wrangler secret put MAIL_PROVIDER   # smtp2go または resend
+   pnpm exec wrangler secret put MAIL_API_KEY
+   pnpm exec wrangler secret put MAIL_FROM       # 例: Project Manager <noreply@example.com>
+   pnpm deploy
+   ```
+
+</Steps>
 
 ## メール送信を設定しない場合
 
@@ -55,4 +70,8 @@ pnpm deploy
 
 - 送信に失敗してもアプリの操作自体は成功します。失敗は Workers のログ（ダッシュボードの Observability、または `pnpm exec wrangler tail`）に `invitation mail failed`（パスワードリセットは `reset password mail failed`）として出ます。
 - Cloudflare Email Sending では、ダッシュボードの「Email Sending」のログでも送信結果を確認できます。
-- 招待は管理画面の「未使用の招待」から「リンクをコピー」でいつでも渡せます。**コピーすると招待を再発行し、以前のリンクは無効になります。**
+- 招待は管理画面の「未使用の招待」から「リンクをコピー」でいつでも渡せます。
+
+:::caution
+「リンクをコピー」を押すと招待を再発行し、以前のリンクは無効になります。
+:::

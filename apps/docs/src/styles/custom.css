@@ -1,0 +1,7 @@
+/* 日本語の見出しを単語の途中で折り返さない（Chromium 系のみ対応、ほかは従来どおり） */
+h1,
+h2,
+.hero .tagline,
+.link-title {
+	word-break: auto-phrase;
+}

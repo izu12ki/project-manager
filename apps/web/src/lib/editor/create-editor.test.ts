@@ -5,12 +5,20 @@ import {
 	$createParagraphNode,
 	$createTextNode,
 	$getRoot,
+	$isElementNode,
 	$isLineBreakNode,
 	type ElementNode
 } from 'lexical';
 import { renderMarkdown } from '#lib/server/markdown.ts';
 import { createMarkdownEditor } from './create-editor';
 import { $createUploadPlaceholderNode } from './nodes';
+
+// 最初のブロックを ElementNode として取り出す（lexical 0.53 で型引数による決め打ちが消えた）
+const $firstBlock = (): ElementNode => {
+	const node = $getRoot().getFirstChildOrThrow();
+	if (!$isElementNode(node)) throw new Error('最初の子がブロックではない');
+	return node;
+};
 
 const id = '0192f0c1-0000-7000-8000-000000000001';
 const roundtrip = (md: string) => {
@@ -68,7 +76,7 @@ describe('createMarkdownEditor', () => {
 		h.setMarkdown('* a');
 		expect(changes).toEqual([]);
 		h.editor.update(
-			() => $getRoot().getFirstDescendant<ElementNode>()?.getParent()?.append($createTextNode('b')),
+			() => $getRoot().getFirstDescendant()?.getParent()?.append($createTextNode('b')),
 			{ discrete: true }
 		);
 		expect(changes.at(-1)).toBe('* ab');
@@ -87,10 +95,8 @@ describe('createMarkdownEditor', () => {
 		h.editor.update(
 			() => {
 				const top = $getRoot();
-				const p =
-					top.getFirstChild<ElementNode>() ??
-					top.append($createParagraphNode()).getFirstChild<ElementNode>()!;
-				p.append($createTextNode('a'));
+				if (top.isEmpty()) top.append($createParagraphNode());
+				$firstBlock().append($createTextNode('a'));
 			},
 			{ discrete: true }
 		);
@@ -113,11 +119,7 @@ describe('createMarkdownEditor', () => {
 	it('1 回の改行は LineBreakNode として読む', () => {
 		const h = createMarkdownEditor({});
 		h.setMarkdown('a\nb');
-		h.editor.read(() =>
-			expect(
-				$getRoot().getFirstChildOrThrow<ElementNode>().getChildren().some($isLineBreakNode)
-			).toBe(true)
-		);
+		h.editor.read(() => expect($firstBlock().getChildren().some($isLineBreakNode)).toBe(true));
 	});
 
 	it('本文の文字として末尾にある &#x20; は空白に変えない', () => {
@@ -136,23 +138,16 @@ describe('createMarkdownEditor', () => {
 	it('末尾の空白はそのまま空白で書き出す', () => {
 		const h = createMarkdownEditor({});
 		h.setMarkdown('a');
-		h.editor.update(
-			() => $getRoot().getFirstChildOrThrow<ElementNode>().append($createTextNode(' ')),
-			{ discrete: true }
-		);
+		h.editor.update(() => $firstBlock().append($createTextNode(' ')), { discrete: true });
 		expect(h.getMarkdown()).toBe('a ');
 	});
 
 	it('アップロード中の仮の要素は書き出さない', () => {
 		const h = createMarkdownEditor({});
 		h.setMarkdown('a');
-		h.editor.update(
-			() =>
-				$getRoot()
-					.getFirstChildOrThrow<ElementNode>()
-					.append($createUploadPlaceholderNode('k', 'f.png')),
-			{ discrete: true }
-		);
+		h.editor.update(() => $firstBlock().append($createUploadPlaceholderNode('k', 'f.png')), {
+			discrete: true
+		});
 		expect(h.getMarkdown()).toBe('a');
 	});
 });

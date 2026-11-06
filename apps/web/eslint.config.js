@@ -20,7 +20,10 @@ export default defineConfig(
 		rules: {
 			// typescript-eslint strongly recommend that you do not use the no-undef lint rule on TypeScript projects.
 			// see: https://typescript-eslint.io/troubleshooting/faqs/eslint/#i-get-errors-from-the-no-undef-rule-about-global-variables-not-being-defined-even-though-there-are-no-typescript-errors
-			'no-undef': 'off'
+			'no-undef': 'off',
+			// base path を使わない（ルートに置く）ので resolve() を通す意味がない。
+			// eslint-plugin-svelte 3.24 で SvelteKit 3 も対象になり、初めて有効になったルール
+			'svelte/no-navigation-without-resolve': 'off'
 		}
 	},
 	{

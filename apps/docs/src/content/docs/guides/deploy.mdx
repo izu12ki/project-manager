@@ -14,6 +14,7 @@ import { Steps } from '@astrojs/starlight/components';
    ```bash
    git clone <このリポジトリの URL> project-manager
    cd project-manager
+   git checkout "$(git tag --list 'web@*' --sort=-version:refname | head -n 1)"  # 最新のリリース
    mise install
    pnpm install
    ```

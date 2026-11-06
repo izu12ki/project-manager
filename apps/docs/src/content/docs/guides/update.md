@@ -3,10 +3,13 @@ title: アップデート
 description: 新しいバージョンへ更新する手順
 ---
 
-最新のソースを取得し、マイグレーションを実行してからデプロイします。
+新しいバージョンは [GitHub Releases](https://github.com/izu12ki/project-manager/releases) で公開しています。更新する前にリリースノートを読み、DB マイグレーションや新しいリソースの作成など、必要な作業がないか確認してください。
+
+最新のリリースタグを取得し、マイグレーションを実行してからデプロイします。
 
 ```bash
-git pull
+git fetch --tags
+git checkout "$(git tag --list 'web@*' --sort=-version:refname | head -n 1)"
 mise install
 pnpm install
 cd apps/web

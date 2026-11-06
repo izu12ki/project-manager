@@ -10,5 +10,8 @@
 		"test:e2e": "pnpm --filter web test:e2e",
 		"docs:dev": "pnpm --filter docs dev",
 		"docs:build": "pnpm --filter docs build"
+	},
+	"devDependencies": {
+		"@changesets/cli": "^3.0.3"
 	}
 }

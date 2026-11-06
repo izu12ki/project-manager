@@ -1,0 +1,66 @@
+name: Release
+
+# changeset が溜まっていれば「Version Packages」PR を作成・更新し、
+# その PR がマージされたら web@x.y.z タグと GitHub Release を作る（npm には公開しない）
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  select-mode:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ steps.select-mode.outputs.mode }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@v5
+        with:
+          cache: false
+      - run: pnpm install --frozen-lockfile
+      - id: select-mode
+        uses: changesets/action/select-mode@v2
+
+  version:
+    needs: select-mode
+    if: needs.select-mode.outputs.mode == 'version'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@v5
+        with:
+          cache: false
+      - run: pnpm install --frozen-lockfile
+      # GITHUB_TOKEN で作った PR では CI が走らない。必須チェックを設定したら App トークンか PAT を github-token に渡す
+      - uses: changesets/action/version@v2
+        with:
+          commit-message: 'chore: release'
+          pr-title: 'chore: release'
+
+  publish:
+    needs: select-mode
+    if: needs.select-mode.outputs.mode == 'publish'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v5
+        with:
+          cache: false
+      - run: pnpm install --frozen-lockfile
+      # 全パッケージが private なので、changeset publish はタグを作るだけで npm には公開しない
+      - uses: changesets/action/publish@v2

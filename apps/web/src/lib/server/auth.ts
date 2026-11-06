@@ -1,5 +1,6 @@
 import { drizzleAdapter } from '@better-auth/drizzle-adapter/relations-v2';
-import { betterAuth } from 'better-auth';
+// minimal は Kysely を含まない（DB は drizzleAdapter 経由なので不要）。Worker のバンドルと起動時間が減る
+import { betterAuth } from 'better-auth/minimal';
 import type { sveltekitCookies } from 'better-auth/svelte-kit';
 import type { DB } from './db';
 import { account, rateLimit, session, user, verification } from './db/schema';

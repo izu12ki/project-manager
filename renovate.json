@@ -1,0 +1,35 @@
+{
+	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
+	"extends": ["config:recommended", ":timezone(Asia/Tokyo)"],
+	"description": "CI（lint・型チェック・ユニット・E2E・docs ビルド）がすべて通った更新だけを自動マージする",
+	"constraints": { "node": "26", "pnpm": "12" },
+	"minimumReleaseAge": "3 days",
+	"platformAutomerge": false,
+	"automergeType": "pr",
+	"lockFileMaintenance": { "enabled": true, "automerge": true },
+	"packageRules": [
+		{
+			"description": "1.0 以上の minor / patch は CI が通れば自動マージする",
+			"matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+			"matchCurrentVersion": "!/^v?0\\./",
+			"automerge": true
+		},
+		{
+			"description": "まとめて上げないと壊れるもの",
+			"groupName": "better-auth",
+			"matchPackageNames": ["better-auth", "@better-auth/**"]
+		},
+		{
+			"description": "まとめて上げないと壊れるもの。RC 版なので自動マージしない",
+			"groupName": "drizzle",
+			"matchPackageNames": ["drizzle-orm", "drizzle-kit"],
+			"automerge": false
+		},
+		{
+			"description": "Node 本体（mise）と型定義はメジャーを揃えて上げる",
+			"groupName": "Node.js",
+			"matchPackageNames": ["node", "@types/node"],
+			"matchUpdateTypes": ["major"]
+		}
+	]
+}

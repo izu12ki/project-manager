@@ -8,6 +8,7 @@
 	import RolePill from '#lib/components/RolePill.svelte';
 	import { formatDate, ROLE_LABEL } from '#lib/labels.ts';
 	import { toast } from '#lib/toast.svelte.ts';
+	import BacklogUserImport from './BacklogUserImport.svelte';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -81,6 +82,8 @@
 		</form>
 		{#if form?.inviteUrl}<InviteLinkBox url={form.inviteUrl} />{/if}
 	</div>
+
+	<BacklogUserImport />
 
 	<div class="card" style="padding: 0; gap: 0; overflow: hidden">
 		<div style="padding: 20px 24px 12px"><h2 class="card-title">ユーザー一覧</h2></div>

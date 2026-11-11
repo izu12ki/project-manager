@@ -27,7 +27,8 @@ export default defineConfig({
 					items: [
 						{ label: 'メール送信の設定', slug: 'guides/mail' },
 						{ label: 'Slack 連携', slug: 'guides/slack' },
-						{ label: 'タイムライン', slug: 'guides/timeline' }
+						{ label: 'タイムライン', slug: 'guides/timeline' },
+						{ label: 'Backlog からの移行', slug: 'guides/backlog-import' }
 					]
 				},
 				{

@@ -723,6 +723,21 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(issueRow.getByText('フロントエンド')).toBeVisible();
 	await expect(issueRow.getByText('バックエンド')).toBeVisible();
 	await expect(issueRow.getByText('v1.0')).toBeVisible();
+	// タイトルの列が狭くても、カテゴリーは消えずに列の中に収まる
+	await page.setViewportSize({ width: 900, height: 720 });
+	const tagBoxes = await issueRow.locator('.tag').evaluateAll((tags) =>
+		tags.map((t) => {
+			const tag = t.getBoundingClientRect();
+			const cell = t.closest('[role="cell"]')!.getBoundingClientRect();
+			return { width: tag.width, inside: tag.left >= cell.left && tag.right <= cell.right };
+		})
+	);
+	expect(tagBoxes).toHaveLength(2);
+	for (const box of tagBoxes) {
+		expect(box.inside).toBe(true);
+		expect(box.width).toBeGreaterThanOrEqual(24);
+	}
+	await page.setViewportSize({ width: 1280, height: 720 });
 	await page.getByLabel('キーワード').fill('存在しない課題');
 	await page.getByLabel('キーワード').press('Enter');
 	await expect(page.getByText('条件に一致する課題はありません')).toBeVisible();

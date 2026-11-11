@@ -72,7 +72,9 @@
 						options={data.projects.map((p) => ({ value: p.id, label: p.name }))}
 						aria-describedby="invite-project-hint"
 					/>
-					<p class="hint" id="invite-project-hint">複数選択可</p>
+					<p class="hint" id="invite-project-hint">
+						複数選択可。管理者は選ばなくても全プロジェクトを見られます
+					</p>
 				</div>
 			</div>
 			<div><button type="submit" class="btn btn-primary">招待する</button></div>

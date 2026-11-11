@@ -31,7 +31,14 @@
 			</div>
 			<div class="field">
 				<label class="label" for="name">名前</label>
-				<input class="input" id="name" name="name" required maxlength={50} />
+				<input
+					class="input"
+					id="name"
+					name="name"
+					required
+					maxlength={50}
+					value={data.invitation.name ?? ''}
+				/>
 			</div>
 			<div class="field">
 				<label class="label" for="password">パスワード</label>

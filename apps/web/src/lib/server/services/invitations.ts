@@ -17,7 +17,8 @@ const INVALID_INVITE = '招待リンクが無効か、期限切れです。管�
 const CreateInput = v.object({
 	email: EmailSchema,
 	role: v.picklist(['admin', 'member', 'guest'], 'ロールを選択してください'),
-	projectIds: v.optional(v.array(v.string()), [])
+	projectIds: v.optional(v.array(v.string()), []),
+	name: v.optional(v.union([v.literal(''), NameSchema]), '')
 });
 
 /** 招待ごとの参加プロジェクト（名前順） */
@@ -42,16 +43,19 @@ export async function createInvitation(
 	authorize(ctx.actor, 'user:manage');
 	const data = parse(CreateInput, input);
 	const projectIds = [...new Set(data.projectIds.filter(Boolean))];
-	if (projectIds.length === 0) {
+	if (data.role !== 'admin' && projectIds.length === 0) {
 		throw new AppError('validation', '参加プロジェクトを選択してください', {
 			projectIds: ['参加プロジェクトを選択してください']
 		});
 	}
-	const projects = await ctx.db
-		.select({ id: project.id, name: project.name })
-		.from(project)
-		.where(inArray(project.id, projectIds))
-		.orderBy(asc(project.name));
+	const projects =
+		projectIds.length === 0
+			? []
+			: await ctx.db
+					.select({ id: project.id, name: project.name })
+					.from(project)
+					.where(inArray(project.id, projectIds))
+					.orderBy(asc(project.name));
 	if (projects.length !== projectIds.length) {
 		throw new AppError('validation', 'プロジェクトが見つかりません', {
 			projectIds: ['プロジェクトが見つかりません']
@@ -66,12 +70,14 @@ export async function createInvitation(
 
 	// 同じメールの未承諾の招待は、新しいリンク 1 つにまとめる（古いリンクは使えなくなる）。
 	// 期限内の招待の参加プロジェクトは引き継ぎ、別のプロジェクトから招待しても前に招待された
-	// プロジェクトに入れるようにする。ロールは新しい招待のもの
+	// プロジェクトに入れるようにする。ロールは新しい招待のもの。名前も、指定がなければ引き継ぐ
 	const pending = await ctx.db
-		.select({ id: invitation.id, expiresAt: invitation.expiresAt })
+		.select({ id: invitation.id, expiresAt: invitation.expiresAt, name: invitation.name })
 		.from(invitation)
 		.where(and(eq(invitation.email, data.email), isNull(invitation.acceptedAt)));
-	const live = pending.filter((p) => p.expiresAt.getTime() >= Date.now()).map((p) => p.id);
+	const livePending = pending.filter((p) => p.expiresAt.getTime() >= Date.now());
+	const live = livePending.map((p) => p.id);
+	const name = data.name || livePending.find((p) => p.name)?.name || null;
 	for (const p of [...(await projectsOf(ctx.db, live)).values()].flat()) {
 		if (!projects.some((q) => q.id === p.id)) projects.push(p);
 	}
@@ -87,13 +93,18 @@ export async function createInvitation(
 			id,
 			email: data.email,
 			role: data.role,
+			name,
 			tokenHash: await sha256Hex(token),
 			invitedBy: ctx.actor.id,
 			expiresAt: new Date(Date.now() + INVITE_TTL_MS)
 		}),
-		ctx.db
-			.insert(invitationProject)
-			.values(projects.map((p) => ({ invitationId: id, projectId: p.id })))
+		...(projects.length > 0
+			? [
+					ctx.db
+						.insert(invitationProject)
+						.values(projects.map((p) => ({ invitationId: id, projectId: p.id })))
+				]
+			: [])
 	]);
 
 	const url = `${ctx.baseUrl}/invite/${token}`;
@@ -132,7 +143,12 @@ export async function reissueInvitation(
 	const projects = (await projectsOf(ctx.db, [row.id])).get(row.id) ?? [];
 	return createInvitation(
 		ctx,
-		{ email: row.email, role: row.role, projectIds: projects.map((p) => p.id) },
+		{
+			email: row.email,
+			role: row.role,
+			projectIds: projects.map((p) => p.id),
+			name: row.name ?? ''
+		},
 		{ sendMail: false }
 	);
 }
@@ -204,7 +220,12 @@ export async function getInvitationByToken(db: DB, token: string) {
 	const row = await findValidByToken(db, token);
 	if (!row) return null;
 	const projects = (await projectsOf(db, [row.id])).get(row.id) ?? [];
-	return { email: row.email, role: row.role, projectNames: projects.map((p) => p.name) };
+	return {
+		email: row.email,
+		role: row.role,
+		projectNames: projects.map((p) => p.name),
+		name: row.name
+	};
 }
 
 const AcceptInput = v.object({ token: v.string(), name: NameSchema, password: PasswordSchema });

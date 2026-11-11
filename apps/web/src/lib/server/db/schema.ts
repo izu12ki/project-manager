@@ -145,6 +145,8 @@ export const invitation = sqliteTable(
 		id: text().primaryKey(),
 		email: text().notNull(),
 		role: text({ enum: ['admin', 'member', 'guest'] }).notNull(),
+		/** 招待を受ける画面の名前欄に最初から入れる名前（Backlog のハンドルネームなど） */
+		name: text(),
 		tokenHash: text('token_hash').notNull(),
 		invitedBy: text('invited_by')
 			.notNull()

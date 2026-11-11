@@ -1,11 +1,11 @@
 import { and, eq, isNull } from 'drizzle-orm';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { BacklogUserRow, ImportRole } from '#lib/backlog-users.ts';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
 import { invitation, invitationProject, projectMember, user } from '../db/schema';
 import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
-import { createInvitation, getInvitationByToken } from './invitations';
+import { createInvitation, getInvitationByToken, revokeInvitation } from './invitations';
 import { importUsers, planUserImport } from './user-import';
 
 let n = 0;
@@ -148,7 +148,12 @@ describe('user-import', () => {
 				send(inactive)
 			]
 		});
-		expect(result).toEqual({ invited: 2, joined: 1, skipped: { unselected: 1, inactive: 1 } });
+		expect(result).toEqual({
+			invited: 2,
+			joined: 1,
+			skipped: { unselected: 1, inactive: 1 },
+			mailFailed: 0
+		});
 		await Promise.all(base.pending);
 		expect(base.sent).toHaveLength(2);
 		const invs = await db.select().from(invitation);
@@ -163,7 +168,7 @@ describe('user-import', () => {
 		const p = await plan([r]);
 		expect(p.rows[0]).toMatchObject({ action: 'invite', role: 'admin', projects: [] });
 		const down = await importUsers(ctxOf(base, admin), { rows: [send(r, { role: 'member' })] });
-		expect(down).toEqual({ invited: 0, joined: 0, skipped: { no_projects: 1 } });
+		expect(down).toEqual({ invited: 0, joined: 0, skipped: { no_projects: 1 }, mailFailed: 0 });
 		await Promise.all(base.pending);
 		expect(base.sent).toHaveLength(0);
 		const up = await importUsers(ctxOf(base, admin), { rows: [send(r, { role: 'admin' })] });
@@ -180,7 +185,12 @@ describe('user-import', () => {
 			projectIds: [demoId]
 		});
 		const result = await importUsers(ctxOf(base, admin), { rows: [send(r)] });
-		expect(result).toEqual({ invited: 0, joined: 0, skipped: { pending_invitation: 1 } });
+		expect(result).toEqual({
+			invited: 0,
+			joined: 0,
+			skipped: { pending_invitation: 1 },
+			mailFailed: 0
+		});
 		await Promise.all(base.pending);
 		expect(await db.select().from(invitation)).toHaveLength(1);
 		expect(base.sent).toHaveLength(1);
@@ -202,5 +212,63 @@ describe('user-import', () => {
 		await Promise.all(base.pending);
 		const url = base.sent[0].text.match(/http\S+\/invite\/([A-Za-z0-9_-]+)/)?.[1] ?? '';
 		expect((await getInvitationByToken(db, url))?.name).toBeNull();
+	});
+
+	it('確認画面で選べなかった行は、その後に招待できるようになっても招待しない', async () => {
+		const r = row();
+		const ctx = ctxOf(base, admin);
+		await createInvitation(
+			ctx,
+			{ email: r.email, role: 'member', projectIds: [demoId] },
+			{ sendMail: false }
+		);
+		expect((await plan([r])).rows[0].reason).toBe('pending_invitation');
+		// 確認画面を出した後に、別のタブで招待が取り消された
+		const [inv] = await db.select({ id: invitation.id }).from(invitation);
+		await revokeInvitation(ctx, inv.id);
+		const result = await importUsers(ctx, { rows: [send(r, { include: false })] });
+		expect(result.invited).toBe(0);
+		expect(result.skipped).toEqual({ unselected: 1 });
+		await Promise.all(base.pending);
+		expect(await db.select().from(invitation)).toHaveLength(0);
+		expect(base.sent).toHaveLength(0);
+	});
+
+	it('参加できるプロジェクトがなく選べなかった行は、チェックなしで送られても理由をそのまま数える', async () => {
+		const r = row({ projectKeys: [] });
+		const result = await importUsers(ctxOf(base, admin), { rows: [send(r, { include: false })] });
+		expect(result.invited).toBe(0);
+		expect(result.skipped).toEqual({ no_projects: 1 });
+	});
+
+	it('招待メールは間隔を空けて 1 通ずつ送り、送れなかった人も招待したうえで数える', async () => {
+		const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+		onTestFinished(() => err.mockRestore());
+		const delivered: { to: string; at: number }[] = [];
+		const flaky = createTestBase(db, {
+			mailer: {
+				send: async (m) => {
+					if (m.to === 'fail@example.com') throw new Error('429 Too Many Requests');
+					delivered.push({ to: m.to, at: Date.now() });
+				}
+			}
+		});
+		const rows = ['a@example.com', 'fail@example.com', 'c@example.com'].map((email) =>
+			send(row({ email }))
+		);
+		const result = await importUsers(ctxOf(flaky, admin), { rows });
+		expect(result).toEqual({ invited: 3, joined: 0, skipped: {}, mailFailed: 1 });
+		// 後回しにせず、リクエストの中で送り終えている
+		expect(flaky.pending).toHaveLength(0);
+		expect(delivered.map((d) => d.to)).toEqual(['a@example.com', 'c@example.com']);
+		// a →（120ms）→ fail →（120ms）→ c
+		expect(delivered[1].at - delivered[0].at).toBeGreaterThanOrEqual(200);
+		const invs = await db.select({ email: invitation.email }).from(invitation);
+		expect(invs.map((i) => i.email).sort()).toEqual([
+			'a@example.com',
+			'c@example.com',
+			'fail@example.com'
+		]);
+		expect(err).toHaveBeenCalledWith('invitation mail failed', expect.any(Error));
 	});
 });

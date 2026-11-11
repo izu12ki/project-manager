@@ -61,6 +61,11 @@ describe('readBacklogUsers', () => {
 		expect(load(reordered)).toEqual(rows);
 	});
 
+	it('すべてのセルが空の行は読み飛ばす', () => {
+		expect(load(text + ',,,,,,,,,,\n,,,,,,,,,,\n')).toEqual(rows);
+		expect(load(text + ' , ,\t,\n')).toEqual(rows);
+	});
+
 	it('必須の列が欠けるとエラー', () => {
 		const result = readBacklogUsers('"ハンドルネーム","メールアドレス"\n"a","a@example.com"\n');
 		expect(result).toEqual({
@@ -115,7 +120,8 @@ describe('formatImportResult', () => {
 			formatImportResult({
 				invited: 6,
 				joined: 1,
-				skipped: { no_projects: 1, inactive: 1, duplicate: 1 }
+				skipped: { no_projects: 1, inactive: 1, duplicate: 1 },
+				mailFailed: 0
 			})
 		).toBe(
 			'招待 6 人、参加の追加 1 人、取り込まなかった人 3 人（Backlog で有効でない 1、CSV 内でメールアドレスが重複 1、参加できるプロジェクトがない 1）'
@@ -123,8 +129,16 @@ describe('formatImportResult', () => {
 	});
 
 	it('skipped が空なら括弧なし', () => {
-		expect(formatImportResult({ invited: 2, joined: 0, skipped: {} })).toBe(
+		expect(formatImportResult({ invited: 2, joined: 0, skipped: {}, mailFailed: 0 })).toBe(
 			'招待 2 人、参加の追加 0 人、取り込まなかった人 0 人'
+		);
+	});
+
+	it('招待メールを送れなかった人がいれば最後に足す', () => {
+		expect(
+			formatImportResult({ invited: 3, joined: 1, skipped: { inactive: 1 }, mailFailed: 2 })
+		).toBe(
+			'招待 3 人、参加の追加 1 人、取り込まなかった人 1 人（Backlog で有効でない 1）。招待メールを送れなかった人 2 人（招待中の一覧の「リンクを再発行」でリンクを渡してください）'
 		);
 	});
 });

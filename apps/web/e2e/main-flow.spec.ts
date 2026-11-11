@@ -935,12 +935,18 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(rowOf('開発 花子')).toContainText('参加を追加');
 	await expect(rowOf('伊藤 健')).toContainText('参加できるプロジェクトがない');
 	await page.getByLabel('佐藤 次郎 さんの招待ロール').selectOption('guest');
-	await page.getByRole('button', { name: '取り込む（7 人）' }).click();
+	await expect(page.getByRole('button', { name: '取り込む（7 人）' })).toBeVisible();
+	await page.getByRole('checkbox', { name: '架空商事 小林 を取り込む' }).uncheck();
+	await page.getByRole('button', { name: '取り込む（6 人）' }).click();
 	await expect(
 		page.getByText(
-			'招待 6 人、参加の追加 1 人、取り込まなかった人 3 人（Backlog で有効でない 1、CSV 内でメールアドレスが重複 1、参加できるプロジェクトがない 1）'
+			'招待 5 人、参加の追加 1 人、取り込まなかった人 4 人（Backlog で有効でない 1、CSV 内でメールアドレスが重複 1、参加できるプロジェクトがない 1、チェックを外した 1）'
 		)
 	).toBeVisible();
+	// 選んだロールで招待され、チェックを外した人は招待されていない
+	const invites = page.locator('.invite');
+	await expect(invites.filter({ hasText: 'jiro.sato@example.com' })).toContainText('ゲスト');
+	await expect(invites.filter({ hasText: 'kobayashi@example.com' })).toHaveCount(0);
 	// 招待を受ける画面に Backlog のハンドルネームが入っている
 	const suzuki = page.locator('.invite', { hasText: 'hanako.suzuki@example.com' });
 	await suzuki.getByRole('button', { name: 'リンクを再発行' }).click();

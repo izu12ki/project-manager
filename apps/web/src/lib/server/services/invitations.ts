@@ -6,6 +6,7 @@ import type { AppContext, BaseContext } from '../context';
 import type { DB } from '../db';
 import { invitation, invitationProject, project, projectMember, user } from '../db/schema';
 import { AppError } from '../errors';
+import type { MailMessage } from '../mailer';
 import { invitationMail } from '../mailer/templates';
 import { randomToken, sha256Hex } from '../tokens';
 import { EmailSchema, NameSchema, parse, PasswordSchema } from '../validation';
@@ -39,7 +40,7 @@ export async function createInvitation(
 	ctx: AppContext,
 	input: unknown,
 	opts: { sendMail?: boolean } = {}
-): Promise<{ url: string }> {
+): Promise<{ url: string; mail: MailMessage }> {
 	authorize(ctx.actor, 'user:manage');
 	const data = parse(CreateInput, input);
 	const projectIds = [...new Set(data.projectIds.filter(Boolean))];
@@ -108,21 +109,19 @@ export async function createInvitation(
 	]);
 
 	const url = `${ctx.baseUrl}/invite/${token}`;
+	const mail: MailMessage = {
+		to: data.email,
+		...invitationMail({
+			url,
+			inviterName: ctx.actor.name,
+			projectNames: projects.map((p) => p.name)
+		})
+	};
+	// sendMail: false のときは送らずに返す（まとめて招待するときは呼び出し側が間隔を空けて送る）
 	if (opts.sendMail ?? true) {
-		ctx.waitUntil(
-			ctx.mailer
-				.send({
-					to: data.email,
-					...invitationMail({
-						url,
-						inviterName: ctx.actor.name,
-						projectNames: projects.map((p) => p.name)
-					})
-				})
-				.catch((e) => console.error('invitation mail failed', e))
-		);
+		ctx.waitUntil(ctx.mailer.send(mail).catch((e) => console.error('invitation mail failed', e)));
 	}
-	return { url };
+	return { url, mail };
 }
 
 async function findPending(ctx: AppContext, invitationId: string) {
@@ -141,7 +140,7 @@ export async function reissueInvitation(
 	authorize(ctx.actor, 'user:manage');
 	const row = await findPending(ctx, invitationId);
 	const projects = (await projectsOf(ctx.db, [row.id])).get(row.id) ?? [];
-	return createInvitation(
+	const { url } = await createInvitation(
 		ctx,
 		{
 			email: row.email,
@@ -151,6 +150,7 @@ export async function reissueInvitation(
 		},
 		{ sendMail: false }
 	);
+	return { url };
 }
 
 export async function revokeInvitation(ctx: AppContext, invitationId: string): Promise<void> {

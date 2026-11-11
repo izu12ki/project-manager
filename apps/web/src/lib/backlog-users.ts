@@ -23,7 +23,7 @@ const COLUMNS = ['ハンドルネーム', 'メールアドレス', '権限', '�
 export function readBacklogUsers(
 	text: string
 ): { ok: true; rows: BacklogUserRow[] } | { ok: false; message: string } {
-	const [header, ...body] = parseCsv(text);
+	const [header, ...lines] = parseCsv(text);
 	const index = columnIndex(header ?? [], COLUMNS);
 	if (!index) {
 		return {
@@ -32,6 +32,8 @@ export function readBacklogUsers(
 				'Backlog のユーザー CSV ではないようです（「ハンドルネーム」「メールアドレス」「権限」「状態」「参加中のプロジェクトキー（アーカイブ済みを除く）」の列が必要です）'
 		};
 	}
+	// 表計算ソフトで保存し直すと、末尾に ",,,,," だけの行が付くことがある
+	const body = lines.filter((cells) => cells.some((c) => c.trim() !== ''));
 	if (body.length === 0) return { ok: false, message: 'CSV にユーザーがいません' };
 	if (body.length > MAX_CSV_USERS) {
 		return { ok: false, message: '一度に読み込めるのは1000人までです' };
@@ -89,6 +91,8 @@ export interface UserImportResult {
 	invited: number;
 	joined: number;
 	skipped: Partial<Record<UserImportSkip, number>>;
+	/** 招待はできたが、招待メールを送れなかった人数 */
+	mailFailed: number;
 }
 
 export function formatImportResult(r: UserImportResult): string {
@@ -99,5 +103,9 @@ export function formatImportResult(r: UserImportResult): string {
 	const detail = reasons.length
 		? `（${reasons.map((x) => `${x.label} ${x.count}`).join('、')}）`
 		: '';
-	return `招待 ${r.invited} 人、参加の追加 ${r.joined} 人、取り込まなかった人 ${total} 人${detail}`;
+	const mail =
+		r.mailFailed > 0
+			? `。招待メールを送れなかった人 ${r.mailFailed} 人（招待中の一覧の「リンクを再発行」でリンクを渡してください）`
+			: '';
+	return `招待 ${r.invited} 人、参加の追加 ${r.joined} 人、取り込まなかった人 ${total} 人${detail}${mail}`;
 }

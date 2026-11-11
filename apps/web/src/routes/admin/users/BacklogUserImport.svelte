@@ -40,11 +40,10 @@
 		preview?.plan.rows.filter((r) => importable(r) && !unchecked[r.rowNumber]).length ?? 0
 	);
 
-	const failure = (err: unknown) => {
+	/** 400・409 はサーバーの文言を出し、それ以外は fallback を出す */
+	const failure = (err: unknown, fallback: string) => {
 		const { status, body } = (err ?? {}) as { status?: number; body?: { message?: string } };
-		return (status === 400 || status === 409) && body?.message
-			? body.message
-			: '取り込めませんでした';
+		return (status === 400 || status === 409) && body?.message ? body.message : fallback;
 	};
 
 	/** 確認画面を閉じる。同じ CSV を選び直しても読み込めるように選択も空にする */
@@ -71,7 +70,7 @@
 			unchecked = {};
 			preview = { plan, rows: read.rows };
 		} catch (err) {
-			message = failure(err);
+			message = failure(err, '読み込めませんでした');
 			close();
 		} finally {
 			pending = false;
@@ -82,11 +81,13 @@
 		if (!preview) return;
 		pending = true;
 		message = '';
+		const { plan, rows } = preview;
 		try {
 			const r = await runUserImport({
-				rows: preview.rows.map((row) => ({
+				// 確認画面でチェックが付いていた行だけを取り込む（計画の行は CSV の行と同じ順）
+				rows: rows.map((row, i) => ({
 					...row,
-					include: !unchecked[row.rowNumber],
+					include: importable(plan.rows[i]) && !unchecked[row.rowNumber],
 					role: roleOf[row.rowNumber]
 				}))
 			});
@@ -94,7 +95,12 @@
 			result = formatImportResult(r);
 			await invalidateAll();
 		} catch (err) {
-			message = failure(err);
+			message = failure(
+				err,
+				'途中で失敗しました。一部の人は招待や参加の追加が済んでいる可能性があります。CSV を読み込み直して確認してください'
+			);
+			// 途中まで招待できているかもしれないので、招待中の一覧を読み直す
+			await invalidateAll();
 		} finally {
 			pending = false;
 		}

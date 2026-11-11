@@ -14,6 +14,7 @@ import { authorize } from '../authz';
 import type { AppContext } from '../context';
 import { invitation, project, projectMember, user } from '../db/schema';
 import { AppError } from '../errors';
+import type { MailMessage } from '../mailer';
 import { EmailSchema, NameSchema, parse } from '../validation';
 import { createInvitation } from './invitations';
 
@@ -58,6 +59,12 @@ const ImportInput = v.object({
 		v.maxLength(MAX_CSV_USERS)
 	)
 });
+
+/**
+ * まとめて招待するときの、招待メールを送る間隔。
+ * メール送信サービスの上限（Resend は 1 秒に 10 回）を超えないようにする
+ */
+const MAIL_INTERVAL_MS = 120;
 
 const byName = (a: { name: string }, b: { name: string }) =>
 	a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
@@ -200,22 +207,23 @@ export async function importUsers(ctx: AppContext, input: unknown): Promise<User
 	};
 	const invites: { row: UserImportPlanRow; role: ImportRole }[] = [];
 	const joins: UserImportPlanRow[] = [];
+	// 確認画面で選べなかった行（取り込まない理由がある行）は、チェックの有無にかかわらずその理由で数える。
+	// 確認画面の後に招待できるようになった行も、チェックが付いていなければ招待しない
 	plan.rows.forEach((row, i) => {
 		const sent = data.rows[i];
 		if (row.action === 'skip') return count(row.reason ?? 'inactive');
-		if (!sent.include) return count('unselected');
-		if (row.action === 'invite') {
-			if (!inviteAllowed(sent.role, row.projects.length)) return count('no_projects');
-			invites.push({ row, role: sent.role });
-		} else {
-			joins.push(row);
+		if (row.action === 'invite' && !inviteAllowed(sent.role, row.projects.length)) {
+			return count('no_projects');
 		}
+		if (!sent.include) return count('unselected');
+		if (row.action === 'invite') invites.push({ row, role: sent.role });
+		else joins.push(row);
 	});
 
 	if (invites.length + joins.length > MAX_IMPORT_USERS) {
 		throw new AppError(
 			'validation',
-			'一度に取り込めるのは100人までです。チェックを外して分けて取り込んでください'
+			`一度に取り込めるのは${MAX_IMPORT_USERS}人までです。チェックを外して分けて取り込んでください`
 		);
 	}
 
@@ -236,14 +244,33 @@ export async function importUsers(ctx: AppContext, input: unknown): Promise<User
 		await ctx.db.insert(projectMember).values(values).onConflictDoNothing();
 	}
 
+	const mails: MailMessage[] = [];
 	for (const { row, role } of invites) {
 		const name = v.safeParse(NameSchema, row.name);
-		await createInvitation(ctx, {
-			email: row.email,
-			role,
-			projectIds: row.projects.map((p) => p.id),
-			name: name.success ? name.output : ''
-		});
+		const { mail } = await createInvitation(
+			ctx,
+			{
+				email: row.email,
+				role,
+				projectIds: row.projects.map((p) => p.id),
+				name: name.success ? name.output : ''
+			},
+			{ sendMail: false }
+		);
+		mails.push(mail);
 	}
-	return { invited: invites.length, joined: joins.length, skipped };
+
+	// 一度に送るとメール送信サービスに断られるので、リクエストの中で 1 通ずつ間隔を空けて送る。
+	// 送れなかった人も招待はできているので、数を返して「リンクを再発行」で渡してもらう
+	let mailFailed = 0;
+	for (const [i, mail] of mails.entries()) {
+		if (i > 0) await new Promise((resolve) => setTimeout(resolve, MAIL_INTERVAL_MS));
+		try {
+			await ctx.mailer.send(mail);
+		} catch (e) {
+			console.error('invitation mail failed', e);
+			mailFailed += 1;
+		}
+	}
+	return { invited: invites.length, joined: joins.length, skipped, mailFailed };
 }

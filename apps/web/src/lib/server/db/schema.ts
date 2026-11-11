@@ -292,6 +292,8 @@ export const issue = sqliteTable(
 			.references(() => user.id),
 		startDate: text('start_date'),
 		dueDate: text('due_date'),
+		/** 付いているカテゴリーの category.id（プロジェクトのカテゴリー順）。なしは [] */
+		categoryIds: text('category_ids', { mode: 'json' }).$type<string[]>().notNull().default([]),
 		categoryId: text('category_id').references(() => category.id, { onDelete: 'set null' }),
 		milestoneId: text('milestone_id').references(() => milestone.id, { onDelete: 'set null' }),
 		position: text().notNull(),

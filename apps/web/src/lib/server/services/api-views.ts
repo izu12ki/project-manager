@@ -57,7 +57,7 @@ export type ApiIssue = {
 	parentNumber: number | null;
 	startDate: string | null;
 	dueDate: string | null;
-	categoryId: string | null;
+	categoryIds: string[];
 	milestoneId: string | null;
 	url: string;
 	updatedAt: string;
@@ -74,7 +74,7 @@ type IssueSource = {
 	parentNumber: number | null;
 	startDate: string | null;
 	dueDate: string | null;
-	categoryId: string | null;
+	categoryIds: string[];
 	milestoneId: string | null;
 	updatedAt: Date;
 };
@@ -92,7 +92,7 @@ function apiIssue(ctx: AppContext, projectKey: string, i: IssueSource): ApiIssue
 		parentNumber: i.parentNumber,
 		startDate: i.startDate,
 		dueDate: i.dueDate,
-		categoryId: i.categoryId,
+		categoryIds: i.categoryIds,
 		milestoneId: i.milestoneId,
 		url: `${projectUrl(ctx, projectKey)}/issues/${i.number}`,
 		updatedAt: i.updatedAt.toISOString()

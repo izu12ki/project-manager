@@ -80,6 +80,27 @@ describe('api issues', () => {
 		).rejects.toMatchObject({ code: 'validation', fields: { limit: expect.any(Array) } });
 	});
 
+	it('課題の応答は categoryIds を返し、categoryId で絞り込める', async () => {
+		const admin = await seedUser(db, 'admin');
+		const { id } = await seedProject(db);
+		const ctx = ctxOf(base, admin);
+		await db.insert(category).values([
+			{ id: 'c1', projectId: id, name: 'A', createdAt: new Date(1) },
+			{ id: 'c2', projectId: id, name: 'B', createdAt: new Date(2) }
+		]);
+		await createIssue(ctx, 'ACME', { title: 'a', categoryIds: ['c2', 'c1'] });
+		await createIssue(ctx, 'ACME', { title: 'b' });
+		const numbers = async (q: string) =>
+			(await listApiIssues(ctx, 'ACME', new URLSearchParams(q))).items.map((i) => i.number);
+
+		const all = await listApiIssues(ctx, 'ACME', new URLSearchParams());
+		expect(all.items.map((i) => i.categoryIds)).toEqual([[], ['c1', 'c2']]);
+		expect(all.items[0]).not.toHaveProperty('categoryId');
+		expect(await numbers('categoryId=c2')).toEqual([1]);
+		expect(await numbers('categoryId=none')).toEqual([2]);
+		expect((await getApiIssue(ctx, 'ACME', 1)).categoryIds).toEqual(['c1', 'c2']);
+	});
+
 	it('削除済み課題の取得は not_found', async () => {
 		const admin = await seedUser(db, 'admin');
 		await seedProject(db);

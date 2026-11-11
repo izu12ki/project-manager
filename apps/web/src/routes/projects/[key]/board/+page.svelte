@@ -189,9 +189,9 @@
 							<a href={`/projects/${data.project.key}/issues/${card.number}`} class="title"
 								>{card.title}</a
 							>
-							{#if card.categoryName || card.milestoneName}
+							{#if card.categories.length > 0 || card.milestoneName}
 								<div class="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-									{#if card.categoryName}<span class="tag">{card.categoryName}</span>{/if}
+									{#each card.categories as c (c.id)}<span class="tag">{c.name}</span>{/each}
 									{#if card.milestoneName}<span class="flex min-w-0 items-center gap-1"
 											><Flag size={12} class="shrink-0" /><span class="truncate"
 												>{card.milestoneName}</span

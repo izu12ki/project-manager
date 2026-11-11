@@ -294,7 +294,11 @@ export const issue = sqliteTable(
 		dueDate: text('due_date'),
 		/** 付いているカテゴリーの category.id（プロジェクトのカテゴリー順）。なしは [] */
 		categoryIds: text('category_ids', { mode: 'json' }).$type<string[]>().notNull().default([]),
-		categoryId: text('category_id').references(() => category.id, { onDelete: 'set null' }),
+		/**
+		 * 旧・単一のカテゴリー。category_ids へ移した後は読み書きしない。
+		 * 列を消すにはテーブルの作り直しが要り、子テーブルの ON DELETE CASCADE を巻き込む恐れがあるため残している
+		 */
+		legacyCategoryId: text('category_id').references(() => category.id, { onDelete: 'set null' }),
 		milestoneId: text('milestone_id').references(() => milestone.id, { onDelete: 'set null' }),
 		position: text().notNull(),
 		/** 削除した日時。削除した課題は一覧から外し、削除履歴として閲覧だけできる */

@@ -719,13 +719,19 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	// 10. 管理者が一覧・ボードを絞り込む
 	await page.goto('/projects/ACME');
 	const issueRow = page.getByRole('row', { name: /ログインできない/ });
+	// 付いているカテゴリーはすべて出る
 	await expect(issueRow.getByText('フロントエンド')).toBeVisible();
+	await expect(issueRow.getByText('バックエンド')).toBeVisible();
 	await expect(issueRow.getByText('v1.0')).toBeVisible();
 	await page.getByLabel('キーワード').fill('存在しない課題');
 	await page.getByLabel('キーワード').press('Enter');
 	await expect(page.getByText('条件に一致する課題はありません')).toBeVisible();
 	await page.getByLabel('キーワード').fill('acme-1');
 	await page.getByLabel('キーワード').press('Enter');
+	await expect(issueRow).toBeVisible();
+	// 2 つ目に付けたカテゴリーで絞り込んでも出る
+	await page.getByLabel('カテゴリー').selectOption({ label: 'バックエンド' });
+	await expect(page).toHaveURL(/category=/);
 	await expect(issueRow).toBeVisible();
 	await page.getByLabel('マイルストーン').selectOption({ label: '未設定' });
 	await expect(page).toHaveURL(/milestone=none/);

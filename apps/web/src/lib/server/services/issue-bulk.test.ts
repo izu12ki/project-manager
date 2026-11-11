@@ -12,6 +12,7 @@ import {
 } from '../db/schema';
 import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
 import { bulkCreateIssues, bulkUpdateIssues } from './issue-bulk';
+import { createCategory, listCategories } from './issue-fields';
 import { createIssue, deleteIssue, getIssue, listIssueChanges, listIssues } from './issues';
 
 describe('issue-bulk', () => {
@@ -64,6 +65,16 @@ describe('issue-bulk', () => {
 		const positions = todo.map((r) => r.position);
 		expect([...positions].sort()).toEqual(positions);
 		expect(new Set(positions).size).toBe(positions.length);
+	});
+
+	it('一括起票・一括更新で categoryIds を指定できる', async () => {
+		await createCategory(as(admin), 'ACME', { name: 'A' });
+		await createCategory(as(admin), 'ACME', { name: 'B' });
+		const [a, b] = await listCategories(as(admin), 'ACME');
+		await create([{ title: 'A', categoryIds: [a.id] }]);
+		expect((await getIssue(as(admin), 'ACME', 1)).issue.categoryIds).toEqual([a.id]);
+		await update([{ number: 1, categoryIds: [b.id, a.id] }]);
+		expect((await getIssue(as(admin), 'ACME', 1)).issue.categoryIds).toEqual([a.id, b.id]);
 	});
 
 	it('2 件目のタイトルが空なら 400、fields に items.1.title があり、課題は 1 件も増えず nextIssueNumber も変わらない', async () => {

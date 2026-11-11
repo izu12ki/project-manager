@@ -114,6 +114,24 @@ describe('api issues', () => {
 		);
 	});
 
+	it('categoryIds を受け付け、旧 categoryId は不明な項目として 400 にする', () => {
+		expect(toServiceInput({ categoryIds: null }, 'update')).toEqual({ categoryIds: '' });
+		expect(toServiceInput({ categoryIds: ['c1'] }, 'create')).toEqual({ categoryIds: ['c1'] });
+		expect(() => toServiceInput({ categoryId: 'c1' }, 'create')).toThrowError(
+			expect.objectContaining({ code: 'validation', fields: { categoryId: ['不明な項目です'] } })
+		);
+		expect(() =>
+			toBulkServiceInput({ items: [{ title: 'a', categoryId: 'c1' }] }, 'create')
+		).toThrowError(
+			expect.objectContaining({ fields: { 'items.0.categoryId': ['不明な項目です'] } })
+		);
+		expect(() =>
+			toBulkServiceInput({ items: [{ number: 1, categoryId: null }] }, 'bulkUpdate')
+		).toThrowError(
+			expect.objectContaining({ fields: { 'items.0.categoryId': ['不明な項目です'] } })
+		);
+	});
+
 	it('toBulkServiceInput は全要素の不明キーを集める。number は更新のみ可', () => {
 		expect(() =>
 			toBulkServiceInput(

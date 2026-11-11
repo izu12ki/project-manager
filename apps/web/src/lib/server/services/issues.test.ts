@@ -17,7 +17,7 @@ import {
 	moveIssue,
 	updateIssue
 } from './issues';
-import { listIssueTypes } from './issue-fields';
+import { createCategory, listCategories, listIssueTypes } from './issue-fields';
 import { setProjectArchived } from './projects';
 
 describe('issues', () => {
@@ -314,6 +314,21 @@ describe('issues', () => {
 			{ field: 'priority', from: 'なし', to: '高' },
 			{ field: 'assignee', from: null, to: 'member' },
 			{ field: 'dueDate', from: null, to: '2026-12-31' }
+		]);
+	});
+
+	it('カテゴリーの変更は前後の全カテゴリー名で残り、並び順だけの違いは変更にならない', async () => {
+		await createCategory(as(admin), 'ACME', { name: 'A' });
+		await createCategory(as(admin), 'ACME', { name: 'B' });
+		const [a, b] = await listCategories(as(admin), 'ACME');
+		await createIssue(as(member), 'ACME', { title: 'A', categoryIds: [a.id] });
+		await updateIssue(as(member), 'ACME', 1, { categoryIds: [a.id, b.id] });
+		await updateIssue(as(member), 'ACME', 1, { categoryIds: [b.id, a.id] }); // 変化なし
+		await updateIssue(as(member), 'ACME', 1, { categoryIds: [] });
+		const changes = await listIssueChanges(as(member), 'ACME', 1);
+		expect(changes.map((c) => c.changes)).toEqual([
+			[{ field: 'category', from: 'A', to: 'A、B' }],
+			[{ field: 'category', from: 'A、B', to: null }]
 		]);
 	});
 

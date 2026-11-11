@@ -118,13 +118,17 @@
 					</select>
 				</div>
 				<div class="prop-row">
-					<label for="issue-category"><Tag style="--c: var(--c-amber)" />カテゴリー</label>
-					<select class="select" id="issue-category" name="categoryId">
-						<option value="">未設定</option>
-						{#each data.categories as c (c.id)}
-							<option value={c.id}>{c.name}</option>
-						{/each}
-					</select>
+					<span class="prop-label" id="issue-category-label"
+						><Tag style="--c: var(--c-amber)" />カテゴリー</span
+					>
+					<div class="min-w-0">
+						<MultiSelect
+							id="issue-category"
+							name="categoryIds"
+							options={data.categories.map((c) => ({ value: c.id, label: c.name }))}
+							placeholder="未設定"
+						/>
+					</div>
 				</div>
 				<div class="prop-row">
 					<label for="issue-start-date"><Calendar style="--c: var(--c-lime)" />開始日</label>

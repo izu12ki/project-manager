@@ -116,7 +116,6 @@
 		resolution: issue.resolution ?? '',
 		priority: issue.priority,
 		parentNumber: issue.parent ? String(issue.parent.number) : '',
-		categoryId: issue.categoryId ?? '',
 		milestoneId: issue.milestoneId ?? '',
 		startDate: issue.startDate ?? '',
 		dueDate: issue.dueDate ?? ''
@@ -130,6 +129,7 @@
 	const attrFormId = $derived(`issue-attributes-${variant}`);
 	// チェックボックスを送る name（リモートフォームの配列フィールド）
 	const assigneeName = $derived(save.fields.assigneeIds.as('checkbox', 'x').name);
+	const categoryName = $derived(save.fields.categoryIds.as('checkbox', 'x').name);
 	const issueHref = (n: number) => `/projects/${projectKey}/issues/${n}`;
 
 	// 送るのは表示中の値から変えた項目だけにする。全項目を送ると、開いた後にタイムラインや
@@ -139,12 +139,15 @@
 			const { name } = save.fields[field].as('text');
 			if (e.formData.get(name) === shown[field]) e.formData.delete(name);
 		}
-		const ids = e.formData.getAll(assigneeName).filter(Boolean);
-		if (
-			ids.length === issue.assigneeIds.length &&
-			ids.every((id) => issue.assigneeIds.includes(id as string))
-		) {
-			e.formData.delete(assigneeName);
+		// 複数選択は、選んだ ID の集まりが変わっていなければ送らない
+		for (const [name, current] of [
+			[assigneeName, issue.assigneeIds],
+			[categoryName, issue.categoryIds]
+		] as const) {
+			const ids = e.formData.getAll(name).filter(Boolean);
+			if (ids.length === current.length && ids.every((id) => current.includes(id as string))) {
+				e.formData.delete(name);
+			}
 		}
 	}
 
@@ -317,18 +320,21 @@
 				</div>
 			</div>
 			<div class="prop-row">
-				<label for="issue-category"><Tag style="--c: var(--c-amber)" />カテゴリー</label>
-				<select
-					class="select"
-					id="issue-category"
-					{...save.fields.categoryId.as('select', shown.categoryId)}
-					disabled={!perms.edit}
+				<span class="prop-label" id={`issue-category-${variant}-label`}
+					><Tag style="--c: var(--c-amber)" />カテゴリー</span
 				>
-					<option value="">未設定</option>
-					{#each detail.categories as c (c.id)}
-						<option value={c.id}>{c.name}</option>
-					{/each}
-				</select>
+				<div class="min-w-0">
+					<!-- 全部外したときも送るための空の値（サービス側で除く） -->
+					{#if perms.edit}<input type="hidden" name={categoryName} value="" />{/if}
+					<MultiSelect
+						id={`issue-category-${variant}`}
+						name={categoryName}
+						options={detail.categories.map((c) => ({ value: c.id, label: c.name }))}
+						selected={[...issue.categoryIds]}
+						placeholder="未設定"
+						disabled={!perms.edit}
+					/>
+				</div>
 			</div>
 			<div class="prop-row">
 				<label for="issue-milestone"><Milestone style="--c: var(--c-teal)" />マイルストーン</label>

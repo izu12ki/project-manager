@@ -132,9 +132,11 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	// 4b. カテゴリー・マイルストーンを定義
 	const addIn = (label: string) =>
 		page.locator('form', { has: page.getByLabel(label) }).getByRole('button', { name: '追加' });
-	await page.getByLabel('カテゴリー名').fill('フロントエンド');
-	await addIn('カテゴリー名').click();
-	await expect(page.getByRole('listitem').filter({ hasText: 'フロントエンド' })).toBeVisible();
+	for (const name of ['フロントエンド', 'バックエンド']) {
+		await page.getByLabel('カテゴリー名').fill(name);
+		await addIn('カテゴリー名').click();
+		await expect(page.getByRole('listitem').filter({ hasText: name })).toBeVisible();
+	}
 	await page.getByLabel('マイルストーン名').fill('v1.0');
 	await page.getByLabel('リリース日').fill('2026-11-30');
 	await addIn('マイルストーン名').click();
@@ -151,7 +153,11 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page.getByLabel('種別').locator('option:checked')).toHaveText('タスク');
 	await page.getByLabel('種別').selectOption({ label: 'バグ' });
 	await page.getByLabel('タイトル').fill('ログインできない');
-	await page.getByLabel('カテゴリー').selectOption({ label: 'フロントエンド' });
+	// カテゴリーは複数選べる
+	await page.locator('summary', { has: page.locator('#issue-category-value') }).click();
+	await page.getByRole('checkbox', { name: 'フロントエンド' }).check();
+	await page.getByRole('checkbox', { name: 'バックエンド' }).check();
+	await page.keyboard.press('Escape');
 	// 本文は見たまま編集。「Markdown ソースのまま編集」との往復で内容が二重にならない
 	const body = page.getByRole('textbox', { name: '本文' });
 	const bodySource = page.locator('textarea[name="description"]');
@@ -255,8 +261,8 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	// 6. メンバーが登録し、ゲストを担当者にする
 	await acceptInvite(page, memberUrl, '開発 花子');
 	await page.goto('/projects/ACME/issues/1');
-	await expect(page.getByLabel('カテゴリー').locator('option:checked')).toHaveText(
-		'フロントエンド'
+	await expect(page.locator('#issue-category-page-value')).toHaveText(
+		'フロントエンド、バックエンド'
 	);
 	await expect(page.getByLabel('種別').locator('option:checked')).toHaveText('バグ');
 	const assignee = page.locator('summary', { has: page.locator('#issue-assignee-page-value') });

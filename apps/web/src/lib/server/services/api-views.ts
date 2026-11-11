@@ -160,7 +160,7 @@ const CREATE_KEYS = [
 	'parentNumber',
 	'startDate',
 	'dueDate',
-	'categoryId',
+	'categoryIds',
 	'milestoneId'
 ];
 // resolution は起票では受け付けない（起票時は未完了のため）

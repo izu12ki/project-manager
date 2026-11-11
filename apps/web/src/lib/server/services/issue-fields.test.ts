@@ -73,22 +73,47 @@ describe('issue-fields', () => {
 	});
 
 	it('課題に設定でき、削除すると課題側は未設定に戻る', async () => {
-		await createCategory(as(admin), 'ACME', { name: 'C' });
 		await createMilestone(as(admin), 'ACME', { name: 'M', releaseDate: '2026-11-30' });
-		const [c] = await listCategories(as(admin), 'ACME');
 		const [m] = await listMilestones(as(admin), 'ACME');
-		await createIssue(as(member), 'ACME', { title: 't', categoryId: c.id, milestoneId: m.id });
-		expect((await getIssue(as(member), 'ACME', 1)).issue).toMatchObject({
-			categoryId: c.id,
-			milestoneId: m.id
-		});
+		await createIssue(as(member), 'ACME', { title: 't', milestoneId: m.id });
+		expect((await getIssue(as(member), 'ACME', 1)).issue).toMatchObject({ milestoneId: m.id });
 
-		await deleteCategory(as(admin), 'ACME', c.id);
 		await deleteMilestone(as(admin), 'ACME', m.id);
-		expect((await getIssue(as(member), 'ACME', 1)).issue).toMatchObject({
-			categoryId: null,
-			milestoneId: null
-		});
+		expect((await getIssue(as(member), 'ACME', 1)).issue).toMatchObject({ milestoneId: null });
+	});
+
+	it('カテゴリーは複数設定でき、削除したカテゴリーだけ課題から外れる', async () => {
+		await createCategory(as(admin), 'ACME', { name: 'A' });
+		await createCategory(as(admin), 'ACME', { name: 'B' });
+		await createCategory(as(admin), 'OTHER', { name: 'A' });
+		const [a, b] = await listCategories(as(admin), 'ACME');
+		const [otherA] = await listCategories(as(admin), 'OTHER');
+		const categoryIdsOf = async (key: string) =>
+			(await getIssue(as(member), key, 1)).issue.categoryIds;
+
+		await createIssue(as(member), 'ACME', { title: 't', categoryIds: [b.id, a.id] });
+		await createIssue(as(member), 'OTHER', { title: 't', categoryIds: [otherA.id] });
+		expect(await categoryIdsOf('ACME')).toEqual([a.id, b.id]); // プロジェクトのカテゴリー順
+
+		await deleteCategory(as(admin), 'ACME', a.id);
+		expect(await categoryIdsOf('ACME')).toEqual([b.id]);
+		expect(await categoryIdsOf('OTHER')).toEqual([otherA.id]);
+		await deleteCategory(as(admin), 'ACME', b.id);
+		expect(await categoryIdsOf('ACME')).toEqual([]);
+	});
+
+	it('categoryIds は重複を除き、[""]（画面で全部外したとき）や ""（API の null）で空にできる', async () => {
+		await createCategory(as(admin), 'ACME', { name: 'A' });
+		const [a] = await listCategories(as(admin), 'ACME');
+		const categoryIds = async () => (await getIssue(as(member), 'ACME', 1)).issue.categoryIds;
+
+		await createIssue(as(member), 'ACME', { title: 't', categoryIds: [a.id, a.id] });
+		expect(await categoryIds()).toEqual([a.id]);
+		await updateIssue(as(member), 'ACME', 1, { categoryIds: [''] });
+		expect(await categoryIds()).toEqual([]);
+		await updateIssue(as(member), 'ACME', 1, { categoryIds: [a.id] });
+		await updateIssue(as(member), 'ACME', 1, { categoryIds: '' });
+		expect(await categoryIds()).toEqual([]);
 	});
 
 	it('他プロジェクトのカテゴリー・マイルストーンは設定できない', async () => {
@@ -97,8 +122,11 @@ describe('issue-fields', () => {
 		const [c] = await listCategories(as(admin), 'OTHER');
 		const [m] = await listMilestones(as(admin), 'OTHER');
 		await expect(
-			createIssue(as(member), 'ACME', { title: 't', categoryId: c.id })
-		).rejects.toMatchObject({ code: 'validation' });
+			createIssue(as(member), 'ACME', { title: 't', categoryIds: [c.id] })
+		).rejects.toMatchObject({
+			code: 'validation',
+			fields: { categoryIds: ['カテゴリーが見つかりません'] }
+		});
 		await createIssue(as(member), 'ACME', { title: 't' });
 		await expect(updateIssue(as(member), 'ACME', 1, { milestoneId: m.id })).rejects.toMatchObject({
 			code: 'validation'
@@ -165,7 +193,7 @@ describe('issue-fields', () => {
 		await createMilestone(as(admin), 'ACME', { name: 'M' });
 		const [c] = await listCategories(as(admin), 'ACME');
 		const [m] = await listMilestones(as(admin), 'ACME');
-		await createIssue(as(member), 'ACME', { title: 'ログイン画面', categoryId: c.id });
+		await createIssue(as(member), 'ACME', { title: 'ログイン画面', categoryIds: [c.id] });
 		await createIssue(as(member), 'ACME', { title: '100%_対応', milestoneId: m.id });
 		await createIssue(as(member), 'ACME', { title: 'その他' });
 		const nums = async (f: Parameters<typeof listIssues>[2]) =>

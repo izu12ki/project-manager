@@ -1,6 +1,6 @@
 // 課題の起票・更新の入力検証と、書き込む値の組み立て。1 件の起票・更新と一括 API の両方から使う。
 // DB に触れない同期関数にしておき、問い合わせは loadFieldSets でまとめて先に済ませる。
-import { eq, inArray } from 'drizzle-orm';
+import { asc, eq, inArray } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
 import {
@@ -43,6 +43,7 @@ export type IssueRef = {
 export type FieldSets = {
 	statuses: StatusDef[];
 	typeIds: Map<string, string>;
+	/** 反復順はプロジェクトのカテゴリー順（作成順） */
 	categoryIds: Map<string, string>;
 	milestoneIds: Map<string, string>;
 	/** 完了済みのマイルストーン（新しく割り当てられない） */
@@ -66,7 +67,8 @@ export async function loadFieldSets(db: DB, projectId: string): Promise<FieldSet
 		db
 			.select({ id: category.id, name: category.name })
 			.from(category)
-			.where(eq(category.projectId, projectId)),
+			.where(eq(category.projectId, projectId))
+			.orderBy(asc(category.createdAt), asc(category.id)),
 		db
 			.select({ id: milestone.id, name: milestone.name, completedAt: milestone.completedAt })
 			.from(milestone)
@@ -120,6 +122,11 @@ const AssigneeIdsSchema = v.pipe(
 	v.transform((ids) => [...new Set(ids === '' ? [] : ids.filter(Boolean))]),
 	v.maxLength(MAX_ASSIGNEES, `担当者は${MAX_ASSIGNEES}人までです`)
 );
+/** '' はカテゴリーなし。重複と空文字は除く（並びは保存時にプロジェクトのカテゴリー順にする） */
+const CategoryIdsSchema = v.pipe(
+	v.union([v.literal(''), v.array(v.string())], 'カテゴリーは ID の配列で指定してください'),
+	v.transform((ids) => [...new Set(ids === '' ? [] : ids.filter(Boolean))])
+);
 /** '' は親課題なし。番号（12）か課題キー（ACME-12）で指定する */
 const ParentSchema = v.union(
 	[
@@ -145,7 +152,7 @@ const CreateInput = v.object({
 	dueDate: v.optional(DateOrEmpty),
 	assigneeIds: v.optional(AssigneeIdsSchema, []),
 	parentNumber: v.optional(ParentSchema),
-	categoryId: v.optional(v.string()),
+	categoryIds: v.optional(CategoryIdsSchema, []),
 	milestoneId: v.optional(v.string())
 });
 
@@ -160,7 +167,7 @@ const UpdateInput = v.object({
 	status: v.optional(StatusSchema),
 	assigneeIds: v.optional(AssigneeIdsSchema),
 	parentNumber: v.optional(ParentSchema),
-	categoryId: v.optional(v.string()),
+	categoryIds: v.optional(CategoryIdsSchema),
 	milestoneId: v.optional(v.string())
 });
 
@@ -184,9 +191,15 @@ function assertTypeIn(fields: FieldSets, id: string): void {
 	if (!fields.typeIds.has(id)) throw invalid('typeId', '課題種別が見つかりません');
 }
 
-function assertCategoryIn(fields: FieldSets, id: string): void {
-	if (!fields.categoryIds.has(id)) throw invalid('categoryId', 'カテゴリーが見つかりません');
+function assertCategoriesIn(fields: FieldSets, ids: string[]): void {
+	if (ids.some((id) => !fields.categoryIds.has(id))) {
+		throw invalid('categoryIds', 'カテゴリーが見つかりません');
+	}
 }
+
+/** プロジェクトのカテゴリー順に並べる（存在しない ID は除く。検証は assertCategoriesIn で行う） */
+const inCategoryOrder = (fields: FieldSets, ids: readonly string[]): string[] =>
+	[...fields.categoryIds.keys()].filter((id) => ids.includes(id));
 
 /** 新しく割り当てる場合に使う。完了済みのマイルストーンは割り当てられない。 */
 function assertMilestoneIn(fields: FieldSets, id: string): void {
@@ -226,6 +239,9 @@ function resolveParent(
 
 const sameIds = (a: readonly string[], b: readonly string[]) =>
 	a.length === b.length && a.every((id, i) => id === b[i]);
+/** 並び順を問わず同じ ID の集まりか（どちらも重複なし） */
+const sameIdSet = (a: readonly string[], b: readonly string[]) =>
+	a.length === b.length && a.every((id) => b.includes(id));
 
 /** 起票の検証と権限チェック。プロジェクトが書き込み可能かは呼び出し側で確かめること。 */
 export function prepareCreate(actor: Actor, fields: FieldSets, input: unknown): CreateValues {
@@ -246,8 +262,7 @@ export function prepareCreate(actor: Actor, fields: FieldSets, input: unknown): 
 	const startDate = emptyToNull(data.startDate) ?? null;
 	const dueDate = emptyToNull(data.dueDate) ?? null;
 	assertDateRange(startDate, dueDate);
-	const categoryId = emptyToNull(data.categoryId) ?? null;
-	if (categoryId) assertCategoryIn(fields, categoryId);
+	assertCategoriesIn(fields, data.categoryIds);
 	const milestoneId = emptyToNull(data.milestoneId) ?? null;
 	if (milestoneId) assertMilestoneIn(fields, milestoneId);
 	return {
@@ -261,7 +276,7 @@ export function prepareCreate(actor: Actor, fields: FieldSets, input: unknown): 
 		dueDate,
 		assigneeIds,
 		parentId,
-		categoryId,
+		categoryIds: inCategoryOrder(fields, data.categoryIds),
 		milestoneId,
 		reporterId: actor.id
 	};
@@ -284,7 +299,6 @@ export function preparePatch(
 
 	const startDate = emptyToNull(data.startDate);
 	const dueDate = emptyToNull(data.dueDate);
-	const categoryId = emptyToNull(data.categoryId);
 	const milestoneId = emptyToNull(data.milestoneId);
 	const typeId = emptyToNull(data.typeId);
 	const resolution = data.resolution === undefined ? undefined : data.resolution || null;
@@ -296,7 +310,8 @@ export function preparePatch(
 	if (data.priority !== undefined && data.priority !== cur.priority) patch.priority = data.priority;
 	if (startDate !== undefined && startDate !== cur.startDate) patch.startDate = startDate;
 	if (dueDate !== undefined && dueDate !== cur.dueDate) patch.dueDate = dueDate;
-	if (categoryId !== undefined && categoryId !== cur.categoryId) patch.categoryId = categoryId;
+	if (data.categoryIds !== undefined && !sameIdSet(data.categoryIds, cur.categoryIds))
+		patch.categoryIds = data.categoryIds;
 	if (milestoneId !== undefined && milestoneId !== cur.milestoneId) patch.milestoneId = milestoneId;
 	const parentId = resolveParent(fields, data.parentNumber, cur);
 	if (parentId !== undefined && parentId !== cur.parentId) patch.parentId = parentId;
@@ -308,7 +323,10 @@ export function preparePatch(
 		);
 	}
 	if (patch.typeId) assertTypeIn(fields, patch.typeId);
-	if (patch.categoryId) assertCategoryIn(fields, patch.categoryId);
+	if (patch.categoryIds) {
+		assertCategoriesIn(fields, patch.categoryIds);
+		patch.categoryIds = inCategoryOrder(fields, patch.categoryIds);
+	}
 	if (patch.milestoneId) assertMilestoneIn(fields, patch.milestoneId);
 
 	if (data.status !== undefined && data.status !== cur.status) {
@@ -397,6 +415,10 @@ export function describeChanges(
 		ids.length === 0
 			? null
 			: ids.map((id) => lookup(fields.assignable, id) ?? lookup(otherUsers, id) ?? '—').join('、');
+	const categoryNames = (ids: readonly string[]) =>
+		inCategoryOrder(fields, ids)
+			.map((id) => fields.categoryIds.get(id))
+			.join('、') || null;
 	const issueLabel = (id: string | null | undefined) => {
 		const r = id ? fields.issuesById.get(id) : undefined;
 		return r ? `#${r.number} ${r.title}` : null;
@@ -422,12 +444,8 @@ export function describeChanges(
 		add('assignee', userNames(cur.assigneeIds), userNames(patch.assigneeIds));
 	if (patch.parentId !== undefined)
 		add('parent', issueLabel(cur.parentId), issueLabel(patch.parentId));
-	if (patch.categoryId !== undefined)
-		add(
-			'category',
-			lookup(fields.categoryIds, cur.categoryId),
-			lookup(fields.categoryIds, patch.categoryId)
-		);
+	if (patch.categoryIds !== undefined)
+		add('category', categoryNames(cur.categoryIds), categoryNames(patch.categoryIds));
 	if (patch.milestoneId !== undefined)
 		add(
 			'milestone',

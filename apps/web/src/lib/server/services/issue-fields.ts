@@ -187,8 +187,15 @@ export async function deleteCategory(ctx: AppContext, key: string, id: string): 
 	await ctx.db.batch([
 		ctx.db
 			.update(issue)
-			.set({ categoryId: null })
-			.where(and(eq(issue.projectId, p.id), eq(issue.categoryId, id))),
+			.set({
+				categoryIds: sql`(select json_group_array(value) from json_each(${issue.categoryIds}) where value != ${id})`
+			})
+			.where(
+				and(
+					eq(issue.projectId, p.id),
+					sql`exists (select 1 from json_each(${issue.categoryIds}) where value = ${id})`
+				)
+			),
 		ctx.db.delete(category).where(and(eq(category.projectId, p.id), eq(category.id, id)))
 	]);
 }

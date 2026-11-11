@@ -80,6 +80,27 @@ describe('api issues', () => {
 		).rejects.toMatchObject({ code: 'validation', fields: { limit: expect.any(Array) } });
 	});
 
+	it('課題の応答は categoryIds を返し、categoryId で絞り込める', async () => {
+		const admin = await seedUser(db, 'admin');
+		const { id } = await seedProject(db);
+		const ctx = ctxOf(base, admin);
+		await db.insert(category).values([
+			{ id: 'c1', projectId: id, name: 'A', createdAt: new Date(1) },
+			{ id: 'c2', projectId: id, name: 'B', createdAt: new Date(2) }
+		]);
+		await createIssue(ctx, 'ACME', { title: 'a', categoryIds: ['c2', 'c1'] });
+		await createIssue(ctx, 'ACME', { title: 'b' });
+		const numbers = async (q: string) =>
+			(await listApiIssues(ctx, 'ACME', new URLSearchParams(q))).items.map((i) => i.number);
+
+		const all = await listApiIssues(ctx, 'ACME', new URLSearchParams());
+		expect(all.items.map((i) => i.categoryIds)).toEqual([[], ['c1', 'c2']]);
+		expect(all.items[0]).not.toHaveProperty('categoryId');
+		expect(await numbers('categoryId=c2')).toEqual([1]);
+		expect(await numbers('categoryId=none')).toEqual([2]);
+		expect((await getApiIssue(ctx, 'ACME', 1)).categoryIds).toEqual(['c1', 'c2']);
+	});
+
 	it('削除済み課題の取得は not_found', async () => {
 		const admin = await seedUser(db, 'admin');
 		await seedProject(db);
@@ -111,6 +132,24 @@ describe('api issues', () => {
 		expect(toServiceInput({ resolution: 'fixed' }, 'update')).toEqual({ resolution: 'fixed' });
 		expect(() => toServiceInput({ number: 1 }, 'update')).toThrowError(
 			expect.objectContaining({ fields: { number: ['不明な項目です'] } })
+		);
+	});
+
+	it('categoryIds を受け付け、旧 categoryId は不明な項目として 400 にする', () => {
+		expect(toServiceInput({ categoryIds: null }, 'update')).toEqual({ categoryIds: '' });
+		expect(toServiceInput({ categoryIds: ['c1'] }, 'create')).toEqual({ categoryIds: ['c1'] });
+		expect(() => toServiceInput({ categoryId: 'c1' }, 'create')).toThrowError(
+			expect.objectContaining({ code: 'validation', fields: { categoryId: ['不明な項目です'] } })
+		);
+		expect(() =>
+			toBulkServiceInput({ items: [{ title: 'a', categoryId: 'c1' }] }, 'create')
+		).toThrowError(
+			expect.objectContaining({ fields: { 'items.0.categoryId': ['不明な項目です'] } })
+		);
+		expect(() =>
+			toBulkServiceInput({ items: [{ number: 1, categoryId: null }] }, 'bulkUpdate')
+		).toThrowError(
+			expect.objectContaining({ fields: { 'items.0.categoryId': ['不明な項目です'] } })
 		);
 	});
 

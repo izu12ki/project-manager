@@ -147,7 +147,7 @@ export const saveIssue = form(
 		priority: opt,
 		assigneeIds: v.optional(v.array(v.string())),
 		parentNumber: opt,
-		categoryId: opt,
+		categoryIds: v.optional(v.array(v.string())),
 		milestoneId: opt,
 		startDate: opt,
 		dueDate: opt

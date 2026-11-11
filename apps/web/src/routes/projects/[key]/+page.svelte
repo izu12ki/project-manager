@@ -155,7 +155,11 @@
 							{/if}
 							{#if i.typeName}<IssueTypeTag name={i.typeName} color={i.typeColor} />{/if}
 							<a href={`${base}/issues/${i.number}`} class="title truncate">{i.title}</a>
-							{#if i.categoryName}<span class="tag">{i.categoryName}</span>{/if}
+							{#if i.categories.length > 0}
+								<span class="tags">
+									{#each i.categories as c (c.id)}<span class="tag">{c.name}</span>{/each}
+								</span>
+							{/if}
 						</span>
 						<span role="cell"><StatusPill status={i.status} /></span>
 						<span role="cell"><PriorityPill priority={i.priority} /></span>
@@ -237,8 +241,16 @@
 	.title {
 		font-weight: 500;
 	}
+	/* 行は 1 行のまま。カテゴリーは列の半分までに収め、足りなければ各タグを省略表示にする */
+	.tags {
+		display: flex;
+		flex: 0 0 auto;
+		gap: 4px;
+		max-width: 50%;
+		overflow: hidden;
+	}
 	.tag {
-		flex-shrink: 0;
+		min-width: 2.5em;
 		max-width: 10em;
 		overflow: hidden;
 		text-overflow: ellipsis;

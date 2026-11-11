@@ -101,16 +101,16 @@ curl -sS "$PM_API_URL/api/v1/me" -H "Authorization: Bearer $PM_API_KEY"
 
 課題の一覧（番号の新しい順。削除済みは含まない）。
 
-| クエリ        | 意味                                                                |
-| ------------- | ------------------------------------------------------------------- |
-| `status`      | ステータスのキー（`todo` など）                                     |
-| `assigneeId`  | 担当者の ID（その人が担当者に含まれる課題）。`none` で未担当        |
-| `typeId`      | 課題種別の ID。`none` で未設定                                      |
-| `categoryId`  | カテゴリーの ID。`none` で未設定                                    |
-| `milestoneId` | マイルストーンの ID。`none` で未設定                                |
-| `q`           | タイトルの部分一致。`PROJ-12`、`#12`、`12` は番号の一致としても扱う |
-| `limit`       | 1〜500。既定 100                                                    |
-| `offset`      | 0 以上。既定 0                                                      |
+| クエリ        | 意味                                                                       |
+| ------------- | -------------------------------------------------------------------------- |
+| `status`      | ステータスのキー（`todo` など）                                            |
+| `assigneeId`  | 担当者の ID（その人が担当者に含まれる課題）。`none` で未担当               |
+| `typeId`      | 課題種別の ID。`none` で未設定                                             |
+| `categoryId`  | カテゴリーの ID（そのカテゴリーが付いている課題）。`none` でカテゴリーなし |
+| `milestoneId` | マイルストーンの ID。`none` で未設定                                       |
+| `q`           | タイトルの部分一致。`PROJ-12`、`#12`、`12` は番号の一致としても扱う        |
+| `limit`       | 1〜500。既定 100                                                           |
+| `offset`      | 0 以上。既定 0                                                             |
 
 `limit` と `offset` が範囲外のときは 400。
 
@@ -129,7 +129,7 @@ curl -sS "$PM_API_URL/api/v1/me" -H "Authorization: Bearer $PM_API_KEY"
       "parentNumber": null,
       "startDate": "2026-11-01",
       "dueDate": "2026-11-10",
-      "categoryId": null,
+      "categoryIds": [],
       "milestoneId": null,
       "url": "https://.../projects/PROJ/issues/12",
       "updatedAt": "2026-10-25T01:23:45.000Z"
@@ -235,14 +235,14 @@ curl -sS -X PATCH "$PM_API_URL/api/v1/projects/PROJ/issues/12" \
 | `parentNumber` | number | 任意                | 任意 | 親課題の番号。子課題は 1 階層まで（子課題や、子課題を持つ課題の親子付けは 400）。`null` で親子関係を外す                                 |
 | `startDate`    | string | 任意                | 任意 | `YYYY-MM-DD`。`null` で空にする                                                                                                          |
 | `dueDate`      | string | 任意                | 任意 | `YYYY-MM-DD`。`null` で空にする                                                                                                          |
-| `categoryId`   | string | 任意                | 任意 | カテゴリーの ID。`null` で未設定                                                                                                         |
+| `categoryIds`  | array  | 任意                | 任意 | カテゴリーの ID の配列。重複は 1 つにまとめる。`null` か `[]` でカテゴリーなし。更新では配列全体を置き換える                             |
 | `milestoneId`  | string | 任意                | 任意 | マイルストーンの ID。完了済みは指定できない。`null` で未設定                                                                             |
 
 - `startDate` が `dueDate` より後なら 400（`開始日は期限日以前の日付にしてください`）。更新では、片方だけ送っても現在の値と合わせて検証する。
 - 存在しない ID やキーは 400（例: `課題種別が見つかりません`、`ステータスが見つかりません`）。
 - 一括更新の要素では、`number` 以外が変更する項目になる。
 - 一括起票では、同じリクエストで起票する課題を `parentNumber` に指定できない（番号が未確定のため）。親を先に起票してから子を起票する。
-- 応答の `assignees` は担当者の配列（未担当は `[]`）、`parentNumber` は親課題の番号（子課題でなければ `null`）。
+- 応答の `assignees` は担当者の配列（未担当は `[]`）、`categoryIds` はカテゴリーの ID の配列（なしは `[]`）、`parentNumber` は親課題の番号（子課題でなければ `null`）。
 
 ## 画面の URL
 

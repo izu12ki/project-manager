@@ -50,7 +50,10 @@ import { assertWritable, forgetProject, requireProject, type ProjectRow } from '
 
 const STALE = '並び順が古くなっています。画面を再読み込みしてください';
 
-/** assigneeId / categoryId / milestoneId は 'none' で未設定のものに絞る。q はタイトルか番号の部分一致。 */
+/**
+ * assigneeId / categoryId はその人・カテゴリーを含む課題、'none' は 1 つもない課題。
+ * typeId / milestoneId は 'none' で未設定のものに絞る。q はタイトルか番号の部分一致。
+ */
 export interface IssueFilters {
 	status?: Status;
 	typeId?: string;
@@ -81,8 +84,7 @@ const listColumns = {
 	assigneeIds: issue.assigneeIds,
 	parentId: issue.parentId,
 	parentNumber: parent.number,
-	categoryId: issue.categoryId,
-	categoryName: category.name,
+	categoryIds: issue.categoryIds,
 	milestoneId: issue.milestoneId,
 	milestoneName: milestone.name,
 	reporterId: issue.reporterId,
@@ -91,6 +93,7 @@ const listColumns = {
 
 export type IssueListItem = Awaited<ReturnType<typeof selectIssues>>[number];
 export type AssigneeRef = { id: string; name: string };
+export type CategoryRef = { id: string; name: string };
 
 /** assigneeIds の順に名前を付ける。名前が引けない人（存在しない ID）は除く */
 export async function withAssignees<T extends { assigneeIds: string[] }>(
@@ -112,28 +115,54 @@ export async function withAssignees<T extends { assigneeIds: string[] }>(
 	}));
 }
 
+/** カテゴリーの名前を付ける。プロジェクトのカテゴリー順に並べ、存在しない ID は除く */
+export async function withCategories<T extends { categoryIds: string[] }>(
+	db: DB,
+	rows: T[]
+): Promise<(T & { categories: CategoryRef[] })[]> {
+	const ids = [...new Set(rows.flatMap((r) => r.categoryIds))];
+	const categories =
+		ids.length === 0
+			? []
+			: await db
+					.select({ id: category.id, name: category.name })
+					.from(category)
+					.where(inArray(category.id, ids))
+					.orderBy(asc(category.createdAt), asc(category.id));
+	return rows.map((r) => ({
+		...r,
+		categories: categories.filter((c) => r.categoryIds.includes(c.id))
+	}));
+}
+
 async function selectIssues(db: DB, where: SQL | undefined, order: SQL[]) {
 	const rows = await db
 		.select(listColumns)
 		.from(issue)
 		.leftJoin(parent, eq(issue.parentId, parent.id))
 		.leftJoin(issueType, eq(issue.typeId, issueType.id))
-		.leftJoin(category, eq(issue.categoryId, category.id))
 		.leftJoin(milestone, eq(issue.milestoneId, milestone.id))
 		.where(where)
 		.orderBy(...order);
-	return withAssignees(db, rows);
+	const [named, categorized] = await Promise.all([
+		withAssignees(db, rows),
+		withCategories(db, rows)
+	]);
+	return named.map((r, i) => ({ ...r, categories: categorized[i].categories }));
 }
 
-/** 'none' は担当者なし、それ以外はその人が担当者に含まれる課題 */
-function assigneeCond(value: string | undefined): SQL | undefined {
+/** ID の配列の列で絞る。'none' は空配列、それ以外はその ID を含む課題 */
+function idsCond(
+	col: typeof issue.assigneeIds | typeof issue.categoryIds,
+	value: string | undefined
+): SQL | undefined {
 	if (!value) return undefined;
-	if (value === 'none') return sql`json_array_length(${issue.assigneeIds}) = 0`;
-	return sql`exists (select 1 from json_each(${issue.assigneeIds}) where value = ${value})`;
+	if (value === 'none') return sql`json_array_length(${col}) = 0`;
+	return sql`exists (select 1 from json_each(${col}) where value = ${value})`;
 }
 
 function optionCond(
-	col: typeof issue.typeId | typeof issue.categoryId | typeof issue.milestoneId,
+	col: typeof issue.typeId | typeof issue.milestoneId,
 	value: string | undefined
 ): SQL | undefined {
 	if (!value) return undefined;
@@ -156,9 +185,9 @@ function filterConds(p: ProjectRow, filters: IssueFilters): SQL | undefined {
 		isNull(issue.deletedAt),
 		filters.status ? eq(issue.status, filters.status) : undefined,
 		filters.priority ? eq(issue.priority, filters.priority) : undefined,
-		assigneeCond(filters.assigneeId),
+		idsCond(issue.assigneeIds, filters.assigneeId),
+		idsCond(issue.categoryIds, filters.categoryId),
 		optionCond(issue.typeId, filters.typeId),
-		optionCond(issue.categoryId, filters.categoryId),
 		optionCond(issue.milestoneId, filters.milestoneId),
 		keywordCond(p.key, filters.q)
 	);

@@ -73,22 +73,47 @@ describe('issue-fields', () => {
 	});
 
 	it('課題に設定でき、削除すると課題側は未設定に戻る', async () => {
-		await createCategory(as(admin), 'ACME', { name: 'C' });
 		await createMilestone(as(admin), 'ACME', { name: 'M', releaseDate: '2026-11-30' });
-		const [c] = await listCategories(as(admin), 'ACME');
 		const [m] = await listMilestones(as(admin), 'ACME');
-		await createIssue(as(member), 'ACME', { title: 't', categoryId: c.id, milestoneId: m.id });
-		expect((await getIssue(as(member), 'ACME', 1)).issue).toMatchObject({
-			categoryId: c.id,
-			milestoneId: m.id
-		});
+		await createIssue(as(member), 'ACME', { title: 't', milestoneId: m.id });
+		expect((await getIssue(as(member), 'ACME', 1)).issue).toMatchObject({ milestoneId: m.id });
 
-		await deleteCategory(as(admin), 'ACME', c.id);
 		await deleteMilestone(as(admin), 'ACME', m.id);
-		expect((await getIssue(as(member), 'ACME', 1)).issue).toMatchObject({
-			categoryId: null,
-			milestoneId: null
-		});
+		expect((await getIssue(as(member), 'ACME', 1)).issue).toMatchObject({ milestoneId: null });
+	});
+
+	it('カテゴリーは複数設定でき、削除したカテゴリーだけ課題から外れる', async () => {
+		await createCategory(as(admin), 'ACME', { name: 'A' });
+		await createCategory(as(admin), 'ACME', { name: 'B' });
+		await createCategory(as(admin), 'OTHER', { name: 'A' });
+		const [a, b] = await listCategories(as(admin), 'ACME');
+		const [otherA] = await listCategories(as(admin), 'OTHER');
+		const categoryIdsOf = async (key: string) =>
+			(await getIssue(as(member), key, 1)).issue.categoryIds;
+
+		await createIssue(as(member), 'ACME', { title: 't', categoryIds: [b.id, a.id] });
+		await createIssue(as(member), 'OTHER', { title: 't', categoryIds: [otherA.id] });
+		expect(await categoryIdsOf('ACME')).toEqual([a.id, b.id]); // プロジェクトのカテゴリー順
+
+		await deleteCategory(as(admin), 'ACME', a.id);
+		expect(await categoryIdsOf('ACME')).toEqual([b.id]);
+		expect(await categoryIdsOf('OTHER')).toEqual([otherA.id]);
+		await deleteCategory(as(admin), 'ACME', b.id);
+		expect(await categoryIdsOf('ACME')).toEqual([]);
+	});
+
+	it('categoryIds は重複を除き、[""]（画面で全部外したとき）や ""（API の null）で空にできる', async () => {
+		await createCategory(as(admin), 'ACME', { name: 'A' });
+		const [a] = await listCategories(as(admin), 'ACME');
+		const categoryIds = async () => (await getIssue(as(member), 'ACME', 1)).issue.categoryIds;
+
+		await createIssue(as(member), 'ACME', { title: 't', categoryIds: [a.id, a.id] });
+		expect(await categoryIds()).toEqual([a.id]);
+		await updateIssue(as(member), 'ACME', 1, { categoryIds: [''] });
+		expect(await categoryIds()).toEqual([]);
+		await updateIssue(as(member), 'ACME', 1, { categoryIds: [a.id] });
+		await updateIssue(as(member), 'ACME', 1, { categoryIds: '' });
+		expect(await categoryIds()).toEqual([]);
 	});
 
 	it('他プロジェクトのカテゴリー・マイルストーンは設定できない', async () => {
@@ -97,8 +122,11 @@ describe('issue-fields', () => {
 		const [c] = await listCategories(as(admin), 'OTHER');
 		const [m] = await listMilestones(as(admin), 'OTHER');
 		await expect(
-			createIssue(as(member), 'ACME', { title: 't', categoryId: c.id })
-		).rejects.toMatchObject({ code: 'validation' });
+			createIssue(as(member), 'ACME', { title: 't', categoryIds: [c.id] })
+		).rejects.toMatchObject({
+			code: 'validation',
+			fields: { categoryIds: ['カテゴリーが見つかりません'] }
+		});
 		await createIssue(as(member), 'ACME', { title: 't' });
 		await expect(updateIssue(as(member), 'ACME', 1, { milestoneId: m.id })).rejects.toMatchObject({
 			code: 'validation'
@@ -161,18 +189,24 @@ describe('issue-fields', () => {
 	});
 
 	it('一覧・ボードをカテゴリー・マイルストーン・キーワードで絞り込める', async () => {
-		await createCategory(as(admin), 'ACME', { name: 'C' });
+		await createCategory(as(admin), 'ACME', { name: 'C1' });
+		await createCategory(as(admin), 'ACME', { name: 'C2' });
 		await createMilestone(as(admin), 'ACME', { name: 'M' });
-		const [c] = await listCategories(as(admin), 'ACME');
+		const [c1, c2] = await listCategories(as(admin), 'ACME');
 		const [m] = await listMilestones(as(admin), 'ACME');
-		await createIssue(as(member), 'ACME', { title: 'ログイン画面', categoryId: c.id });
-		await createIssue(as(member), 'ACME', { title: '100%_対応', milestoneId: m.id });
+		await createIssue(as(member), 'ACME', { title: 'ログイン画面', categoryIds: [c1.id, c2.id] });
+		await createIssue(as(member), 'ACME', {
+			title: '100%_対応',
+			categoryIds: [c2.id],
+			milestoneId: m.id
+		});
 		await createIssue(as(member), 'ACME', { title: 'その他' });
 		const nums = async (f: Parameters<typeof listIssues>[2]) =>
 			(await listIssues(as(member), 'ACME', f)).map((i) => i.number);
 
-		expect(await nums({ categoryId: c.id })).toEqual([1]);
-		expect(await nums({ categoryId: 'none' })).toEqual([3, 2]);
+		expect(await nums({ categoryId: c1.id })).toEqual([1]);
+		expect(await nums({ categoryId: c2.id })).toEqual([2, 1]);
+		expect(await nums({ categoryId: 'none' })).toEqual([3]);
 		expect(await nums({ milestoneId: m.id })).toEqual([2]);
 		expect(await nums({ milestoneId: 'none', categoryId: 'none' })).toEqual([3]);
 		expect(await nums({ q: 'ログイン' })).toEqual([1]);
@@ -181,11 +215,28 @@ describe('issue-fields', () => {
 		expect(await nums({ q: 'acme-3' })).toEqual([3]);
 		expect(await nums({ q: '#1' })).toEqual([1]);
 
-		const [row] = await listIssues(as(member), 'ACME', { q: 'ACME-2' });
-		expect(row).toMatchObject({ milestoneName: 'M', categoryName: null });
+		const [row] = await listIssues(as(member), 'ACME', { q: 'ACME-1' });
+		expect(row.categories).toEqual([
+			{ id: c1.id, name: 'C1' },
+			{ id: c2.id, name: 'C2' }
+		]);
+		const [row3] = await listIssues(as(member), 'ACME', { q: 'ACME-3' });
+		expect(row3.categories).toEqual([]);
 
 		const { columns: board } = await listBoard(as(member), 'ACME', { milestoneId: m.id });
 		expect(board.todo.map((i) => i.number)).toEqual([2]);
+		const { columns: byC1 } = await listBoard(as(member), 'ACME', { categoryId: c1.id });
+		expect(byC1.todo.map((i) => i.number)).toEqual([1]);
+	});
+
+	it('カテゴリー名を変えると一覧の表示名も変わる', async () => {
+		await createCategory(as(admin), 'ACME', { name: 'C' });
+		const [c] = await listCategories(as(admin), 'ACME');
+		await createIssue(as(member), 'ACME', { title: 't', categoryIds: [c.id] });
+		await updateCategory(as(admin), 'ACME', c.id, { name: 'C2' });
+		expect((await listIssues(as(member), 'ACME'))[0].categories).toEqual([
+			{ id: c.id, name: 'C2' }
+		]);
 	});
 
 	describe('ステータス', () => {

@@ -242,7 +242,7 @@ describe('groupItems', () => {
 		startDate,
 		dueDate: null,
 		assignees: [],
-		categoryId: null,
+		categoryIds: [],
 		milestoneId: null,
 		milestoneName: null,
 		...opts
@@ -315,7 +315,7 @@ describe('filterItems', () => {
 		startDate: '2026-10-05',
 		dueDate: null,
 		assignees: [],
-		categoryId: null,
+		categoryIds: [],
 		milestoneId: null,
 		milestoneName: null,
 		...opts
@@ -324,11 +324,11 @@ describe('filterItems', () => {
 		issue(1, {
 			status: 'done',
 			assignees: [{ id: 'u1', name: 'u1' }],
-			categoryId: 'c1',
+			categoryIds: ['c1', 'c2'],
 			milestoneId: 'm1'
 		}),
 		issue(2, { status: 'in_progress', assignees: [{ id: 'u1', name: 'u1' }] }),
-		issue(3, { status: 'todo', categoryId: 'c2', milestoneId: 'm1' })
+		issue(3, { status: 'todo', categoryIds: ['c2'], milestoneId: 'm1' })
 	];
 	const all: TimelineFilters = { status: '', assignee: '', category: '', milestone: '' };
 	const numbers = (f: Partial<TimelineFilters>) =>
@@ -346,7 +346,7 @@ describe('filterItems', () => {
 	it('担当者・カテゴリー・マイルストーン。none は未設定', () => {
 		expect(numbers({ assignee: 'u1' })).toEqual([1, 2]);
 		expect(numbers({ assignee: 'none' })).toEqual([3]);
-		expect(numbers({ category: 'c2' })).toEqual([3]);
+		expect(numbers({ category: 'c2' })).toEqual([1, 3]);
 		expect(numbers({ category: 'none' })).toEqual([2]);
 		expect(numbers({ milestone: 'none' })).toEqual([2]);
 	});

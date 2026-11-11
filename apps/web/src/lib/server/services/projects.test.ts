@@ -32,6 +32,23 @@ describe('projects', () => {
 		outsider = await seedUser(db, 'member', 'outsider');
 	});
 
+	it('キーにはアンダースコアと 25 文字までの長さを使える', async () => {
+		const ctx = ctxOf(base, admin);
+		expect(await createProject(ctx, { key: 'web_app', name: 'W' })).toEqual({ key: 'WEB_APP' });
+		expect(await createProject(ctx, { key: 'A'.repeat(25), name: 'L' })).toEqual({
+			key: 'A'.repeat(25)
+		});
+		for (const key of ['A'.repeat(26), '_ABC', 'A', 'AB-C', '1AB']) {
+			await expect(createProject(ctx, { key, name: 'X' })).rejects.toMatchObject({
+				code: 'validation',
+				message: 'キーは英字で始まる2〜25文字の英数字とアンダースコア（_）で入力してください'
+			});
+		}
+		expect(await updateProject(ctx, 'WEB_APP', { key: 'long_project_key_01', name: 'W' })).toEqual({
+			key: 'LONG_PROJECT_KEY_01'
+		});
+	});
+
 	it('admin はキーを大文字にしてプロジェクトを作れる。重複キーは conflict', async () => {
 		expect(
 			await createProject(ctxOf(base, admin), { key: 'acme', name: 'Acme', description: '' })

@@ -5,6 +5,7 @@ import { authorize } from '../authz';
 import type { AppContext } from '../context';
 import type { DB } from '../db';
 import { COLORS } from '#lib/labels.ts';
+import { PROJECT_KEY_PATTERN, PROJECT_KEY_RULE } from '#lib/project-key.ts';
 import { issue, project, projectMember, user } from '../db/schema';
 import { AppError } from '../errors';
 import { parse } from '../validation';
@@ -16,7 +17,7 @@ const KeySchema = v.pipe(
 	v.string(),
 	v.trim(),
 	v.toUpperCase(),
-	v.regex(/^[A-Z][A-Z0-9]{1,9}$/, 'キーは英字で始まる2〜10文字の英数字で入力してください')
+	v.regex(new RegExp(`^${PROJECT_KEY_PATTERN}$`), `キーは${PROJECT_KEY_RULE}で入力してください`)
 );
 const ProjectNameSchema = v.pipe(
 	v.string(),

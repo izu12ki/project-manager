@@ -1,9 +1,12 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { PROJECT_KEY_PATTERN } from '#lib/project-key.ts';
 import type { AppContext } from '../context';
 import { attachment } from '../db/schema';
 
-const ATTACHMENT_REF =
-	/\/projects\/[A-Z][A-Z0-9]{1,9}\/attachments\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/g;
+const ATTACHMENT_REF = new RegExp(
+	`/projects/${PROJECT_KEY_PATTERN}/attachments/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})`,
+	'g'
+);
 
 /** 本文中の添付 URL から添付 ID を重複なく取り出す */
 export function referencedAttachmentIds(body: string): string[] {

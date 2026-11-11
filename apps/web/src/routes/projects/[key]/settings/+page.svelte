@@ -2,6 +2,11 @@
 	import type { SubmitFunction } from '$app/forms';
 	import { enhance } from '#lib/forms.ts';
 	import {
+		PROJECT_KEY_INPUT_PATTERN,
+		PROJECT_KEY_MAX,
+		PROJECT_KEY_RULE
+	} from '#lib/project-key.ts';
+	import {
 		Archive,
 		ArchiveRestore,
 		ChevronDown,
@@ -104,13 +109,14 @@
 				id="project-key"
 				name="key"
 				required
-				maxlength={10}
+				maxlength={PROJECT_KEY_MAX}
+				pattern={PROJECT_KEY_INPUT_PATTERN}
 				aria-describedby="project-key-hint"
 				bind:value={key}
 			/>
 			<p class="hint" id="project-key-hint">
-				英字で始まる2〜10文字の英数字。変更すると URL と課題キー（{key.toUpperCase() ||
-					data.project.key}-1 など）も変わります
+				{PROJECT_KEY_RULE}。変更すると URL と課題キー（{key.toUpperCase() || data.project.key}-1
+				など）も変わります
 			</p>
 		</div>
 		<div class="field">

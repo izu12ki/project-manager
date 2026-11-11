@@ -1,6 +1,11 @@
 <script lang="ts">
 	import { enhance } from '#lib/forms.ts';
 	import FormAlert from '#lib/components/FormAlert.svelte';
+	import {
+		PROJECT_KEY_INPUT_PATTERN,
+		PROJECT_KEY_MAX,
+		PROJECT_KEY_RULE
+	} from '#lib/project-key.ts';
 	import type { PageProps } from './$types';
 
 	let { form }: PageProps = $props();
@@ -21,16 +26,16 @@
 				id="key"
 				name="key"
 				required
-				pattern="[A-Za-z][A-Za-z0-9]*"
+				pattern={PROJECT_KEY_INPUT_PATTERN}
 				minlength={2}
-				maxlength={10}
+				maxlength={PROJECT_KEY_MAX}
 				placeholder="WEB"
 				aria-describedby="key-hint"
 				aria-invalid={form?.fields?.key ? true : undefined}
 			/>
 			{#if form?.fields?.key}<p class="field-error">{form.fields.key[0]}</p>{/if}
 			<p class="hint" id="key-hint">
-				英字で始まる2〜10文字。課題番号の接頭辞になり、あとから変更できません。
+				{PROJECT_KEY_RULE}。課題番号の接頭辞になります（あとから設定画面で変えられます）。
 			</p>
 		</div>
 		<div class="field">

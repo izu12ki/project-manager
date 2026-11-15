@@ -35,6 +35,7 @@ import {
 	setProjectArchived,
 	updateProject
 } from '#lib/server/services/projects.ts';
+import { removeProjectIconImage, setProjectIconImage } from '#lib/server/services/project-icons.ts';
 import { listUsers } from '#lib/server/services/users.ts';
 import { formObject } from '#lib/server/validation.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -82,6 +83,19 @@ export const actions: Actions = {
 		return handleAction(async () => {
 			const { key } = await updateProject(appContext(locals), params.key, input);
 			if (key !== params.key) redirect(303, `/projects/${key}/settings`);
+			return { saved: true };
+		});
+	},
+	setIconImage: async ({ request, locals, params }) => {
+		const file = (await request.formData()).get('image');
+		return handleAction(async () => {
+			await setProjectIconImage(appContext(locals), params.key, file);
+			return { saved: true };
+		});
+	},
+	removeIconImage: async ({ locals, params }) => {
+		return handleAction(async () => {
+			await removeProjectIconImage(appContext(locals), params.key);
 			return { saved: true };
 		});
 	},

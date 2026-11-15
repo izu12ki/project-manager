@@ -22,15 +22,9 @@
 	import ConfirmAction from '#lib/components/ConfirmAction.svelte';
 	import FormAlert from '#lib/components/FormAlert.svelte';
 	import InviteLinkBox from '#lib/components/InviteLinkBox.svelte';
+	import ProjectIcon from '#lib/components/ProjectIcon.svelte';
 	import RolePill from '#lib/components/RolePill.svelte';
-	import {
-		FIXED_STATUSES,
-		ROLE_LABEL,
-		colorFor,
-		colorVar,
-		projectColor,
-		projectIcon
-	} from '#lib/labels.ts';
+	import { FIXED_STATUSES, ROLE_LABEL, colorFor, colorVar } from '#lib/labels.ts';
 	import { toast } from '#lib/toast.svelte.ts';
 	import type { PageProps } from './$types';
 
@@ -40,6 +34,14 @@
 	let icon = $derived(data.project.icon ?? '');
 	let color = $derived(data.project.color ?? '');
 	let key = $derived(data.project.key);
+	/** 選んだアイコン画像のプレビュー（object URL） */
+	let iconPreview = $state<string | null>(null);
+
+	function pickIcon(e: Event) {
+		const file = (e.currentTarget as HTMLInputElement).files?.[0];
+		if (iconPreview) URL.revokeObjectURL(iconPreview);
+		iconPreview = file ? URL.createObjectURL(file) : null;
+	}
 
 	$effect(() => {
 		if (form?.saved) toast.success('保存しました');
@@ -70,12 +72,15 @@
 			<p class="card-desc">プロジェクト名・キー・アイコン・色・説明を変更します</p>
 		</div>
 		<div class="flex flex-wrap items-end gap-4">
-			<span
-				class="avatar avatar-square"
-				style="--size: 40px; font-size: 1.125rem"
-				style:--c={projectColor({ key: key || 'A', color: color || null })}
-				aria-hidden="true">{projectIcon({ key: key || '?', icon: icon || null })}</span
-			>
+			<ProjectIcon
+				project={{
+					key: key || '?',
+					icon: icon || null,
+					color: color || null,
+					iconImageId: data.project.iconImageId
+				}}
+				size={40}
+			/>
 			<div class="field">
 				<label class="label" for="project-icon">アイコン</label>
 				<input
@@ -89,7 +94,9 @@
 					bind:value={icon}
 				/>
 			</div>
-			<p class="hint pb-2" id="project-icon-hint">絵文字や2文字までの文字。空欄ならキーの頭文字</p>
+			<p class="hint pb-2" id="project-icon-hint">
+				絵文字や2文字までの文字。空欄ならキーの頭文字。アイコン画像を設定しているときは画像を出します
+			</p>
 		</div>
 		<div class="field">
 			<span class="label">色</span>
@@ -141,6 +148,52 @@
 		</div>
 		<div><button type="submit" class="btn btn-primary">保存</button></div>
 	</form>
+
+	<div class="card">
+		<div class="card-head">
+			<h2 class="card-title">アイコン画像</h2>
+			<p class="card-desc">
+				PNG・JPEG・GIF・WebP（1MB
+				以下）。設定すると、文字のアイコンの代わりにサイドバーやプロジェクト一覧に出します。正方形の画像がきれいに表示されます
+			</p>
+		</div>
+		<div class="flex flex-wrap items-end gap-4">
+			<ProjectIcon project={data.project} src={iconPreview} size={64} />
+			<form
+				method="POST"
+				action="?/setIconImage"
+				enctype="multipart/form-data"
+				class="flex flex-wrap items-end gap-2"
+				use:enhance={() =>
+					async ({ result, update }) => {
+						await update();
+						if (result.type === 'success') {
+							if (iconPreview) URL.revokeObjectURL(iconPreview);
+							iconPreview = null;
+						}
+					}}
+			>
+				<div class="field">
+					<label class="label" for="project-icon-image">画像</label>
+					<input
+						class="input"
+						id="project-icon-image"
+						name="image"
+						type="file"
+						accept="image/png,image/jpeg,image/gif,image/webp"
+						required
+						onchange={pickIcon}
+					/>
+				</div>
+				<button type="submit" class="btn btn-primary">設定</button>
+			</form>
+			{#if data.project.iconImageId}
+				<form method="POST" action="?/removeIconImage" use:enhance>
+					<button type="submit" class="btn btn-outline">画像を外す</button>
+				</form>
+			{/if}
+		</div>
+	</div>
 
 	<div class="card">
 		<div class="card-head">

@@ -27,6 +27,7 @@
 			key: string;
 			name: string;
 			icon: string | null;
+			iconImageId: string | null;
 			color: string | null;
 			archived: boolean;
 		}[];

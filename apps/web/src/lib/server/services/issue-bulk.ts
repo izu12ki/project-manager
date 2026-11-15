@@ -216,10 +216,7 @@ export async function bulkUpdateIssues(
 	for (const { cur, patch } of changed) {
 		if (patch.status !== undefined) patch.position = positionOf(patch.status);
 		stmts.push(
-			ctx.db
-				.update(issue)
-				.set(withCategoryGuard(p.id, patch))
-				.where(eq(issue.id, cur.id))
+			ctx.db.update(issue).set(withCategoryGuard(p.id, patch)).where(eq(issue.id, cur.id))
 		);
 		const changes = describeChanges(fields, cur, patch, otherUsers);
 		if (changes.length > 0) {

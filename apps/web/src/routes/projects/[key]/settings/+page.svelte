@@ -27,6 +27,7 @@
 	import { FIXED_STATUSES, ROLE_LABEL, colorFor, colorVar } from '#lib/labels.ts';
 	import { toast } from '#lib/toast.svelte.ts';
 	import type { PageProps } from './$types';
+	import BacklogIssueImport from './BacklogIssueImport.svelte';
 
 	let { data, form }: PageProps = $props();
 	const writable = $derived(!data.project.archivedAt);
@@ -686,6 +687,8 @@
 			</form>
 		{/if}
 	</div>
+
+	{#if writable}<BacklogIssueImport projectKey={data.project.key} />{/if}
 
 	<div
 		class="card flex-row flex-wrap items-center justify-between gap-4"

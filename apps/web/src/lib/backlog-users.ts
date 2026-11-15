@@ -95,14 +95,32 @@ export interface UserImportResult {
 	mailFailed: number;
 }
 
-export function formatImportResult(r: UserImportResult): string {
+/** 理由別の人数を SKIP_LABEL の定義順に「（参加済み 1、…）」の形にする。理由がなければ空文字 */
+function skipDetail(skipped: UserImportResult['skipped']): { total: number; detail: string } {
 	const reasons = (Object.keys(SKIP_LABEL) as UserImportSkip[])
-		.filter((k) => (r.skipped[k] ?? 0) > 0)
-		.map((k) => ({ label: SKIP_LABEL[k], count: r.skipped[k] ?? 0 }));
+		.filter((k) => (skipped[k] ?? 0) > 0)
+		.map((k) => ({ label: SKIP_LABEL[k], count: skipped[k] ?? 0 }));
 	const total = reasons.reduce((sum, x) => sum + x.count, 0);
 	const detail = reasons.length
 		? `（${reasons.map((x) => `${x.label} ${x.count}`).join('、')}）`
 		: '';
+	return { total, detail };
+}
+
+/** 確認画面で、取り込む人数と取り込まない理由の内訳を出す */
+export function formatImportPreview(p: {
+	invite: number;
+	join: number;
+	skipped: UserImportResult['skipped'];
+}): string {
+	const { total, detail } = skipDetail(p.skipped);
+	if (p.invite + p.join === 0) return `取り込む人がいません${detail}`;
+	const head = `招待 ${p.invite} 人、参加の追加 ${p.join} 人`;
+	return total > 0 ? `${head}。取り込まない人 ${total} 人${detail}` : head;
+}
+
+export function formatImportResult(r: UserImportResult): string {
+	const { total, detail } = skipDetail(r.skipped);
 	const mail =
 		r.mailFailed > 0
 			? `。招待メールを送れなかった人 ${r.mailFailed} 人（招待中の一覧の「リンクを再発行」でリンクを渡してください）`

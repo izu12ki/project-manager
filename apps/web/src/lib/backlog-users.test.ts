@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+	formatImportPreview,
 	formatImportResult,
 	inviteAllowed,
 	readBacklogUsers,
@@ -140,5 +141,27 @@ describe('formatImportResult', () => {
 		).toBe(
 			'招待 3 人、参加の追加 1 人、取り込まなかった人 1 人（Backlog で有効でない 1）。招待メールを送れなかった人 2 人（招待中の一覧の「リンクを再発行」でリンクを渡してください）'
 		);
+	});
+});
+
+describe('formatImportPreview', () => {
+	it('取り込む人数と、取り込まない理由の内訳を出す', () => {
+		expect(
+			formatImportPreview({ invite: 5, join: 1, skipped: { unselected: 1, inactive: 1 } })
+		).toBe(
+			'招待 5 人、参加の追加 1 人。取り込まない人 2 人（Backlog で有効でない 1、チェックを外した 1）'
+		);
+	});
+
+	it('取り込まない人がいなければ内訳を出さない', () => {
+		expect(formatImportPreview({ invite: 2, join: 0, skipped: {} })).toBe(
+			'招待 2 人、参加の追加 0 人'
+		);
+	});
+
+	it('取り込む人がいなければ、そう書いて理由を並べる', () => {
+		expect(
+			formatImportPreview({ invite: 0, join: 0, skipped: { no_projects: 12, already_joined: 1 } })
+		).toBe('取り込む人がいません（参加済み 1、参加できるプロジェクトがない 12）');
 	});
 });

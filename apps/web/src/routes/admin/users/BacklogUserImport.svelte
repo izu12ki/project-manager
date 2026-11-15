@@ -4,13 +4,15 @@
 	import FormAlert from '#lib/components/FormAlert.svelte';
 	import RolePill from '#lib/components/RolePill.svelte';
 	import {
+		formatImportPreview,
 		formatImportResult,
 		inviteAllowed,
 		MAX_IMPORT_USERS,
 		readBacklogUsers,
 		SKIP_LABEL,
 		type BacklogUserRow,
-		type ImportRole
+		type ImportRole,
+		type UserImportSkip
 	} from '#lib/backlog-users.ts';
 	import { decodeCsv } from '#lib/csv.ts';
 	import { ROLE_LABEL } from '#lib/labels.ts';
@@ -36,9 +38,21 @@
 	const importable = (r: PlanRow) =>
 		r.action === 'join' ||
 		(r.action === 'invite' && inviteAllowed(roleOf[r.rowNumber], r.projects.length));
-	const count = $derived(
-		preview?.plan.rows.filter((r) => importable(r) && !unchecked[r.rowNumber]).length ?? 0
-	);
+	/** 取り込まない行はその理由、取り込む行は null */
+	const skipOf = (r: PlanRow): UserImportSkip | null =>
+		r.reason ?? (!importable(r) ? 'no_projects' : unchecked[r.rowNumber] ? 'unselected' : null);
+	/** 確認画面の内訳。実行ボタンの人数と、取り込めない理由の説明に使う */
+	const tally = $derived.by(() => {
+		const t = { invite: 0, join: 0, skipped: {} as Partial<Record<UserImportSkip, number>> };
+		for (const r of preview?.plan.rows ?? []) {
+			const skip = skipOf(r);
+			if (skip) t.skipped[skip] = (t.skipped[skip] ?? 0) + 1;
+			else if (r.action === 'invite') t.invite += 1;
+			else t.join += 1;
+		}
+		return t;
+	});
+	const count = $derived(tally.invite + tally.join);
 
 	/** 400・409 はサーバーの文言を出し、それ以外は fallback を出す */
 	const failure = (err: unknown, fallback: string) => {
@@ -149,6 +163,10 @@
 						<p class="mono m-0 text-[0.8125rem]" data-testid="missing-keys">
 							{plan.missingKeys.join('、')}
 						</p>
+						<p class="m-0 text-[0.8125rem] text-muted-foreground">
+							Backlog と同じキーで<a class="link" href="/admin/projects/new">プロジェクトを作って</a
+							>から CSV を読み込み直すと、そのプロジェクトにも参加させられます。
+						</p>
 					</div>
 				</div>
 			{/if}
@@ -238,10 +256,20 @@
 					message={`一度に取り込めるのは${MAX_IMPORT_USERS}人までです。チェックを外して分けて取り込んでください（招待した人は次回の確認画面で「招待中」として除かれます）`}
 				/>
 			{/if}
+			<div class="grid gap-1" id="backlog-import-summary" data-testid="import-summary">
+				<p class="m-0">{formatImportPreview(tally)}</p>
+				{#if tally.skipped.no_projects}
+					<p class="m-0 text-[0.8125rem] text-muted-foreground">
+						「参加できるプロジェクトがない」は、CSV と同じキーのプロジェクトがこのツールに 1
+						つもない（またはアーカイブ済みの）人です。招待ロールが管理者でなければ招待できません。
+					</p>
+				{/if}
+			</div>
 			<div class="flex gap-2">
 				<button
 					type="button"
 					class="btn btn-primary"
+					aria-describedby="backlog-import-summary"
 					disabled={pending || count === 0 || count > MAX_IMPORT_USERS}
 					onclick={run}>取り込む（{count} 人）</button
 				>

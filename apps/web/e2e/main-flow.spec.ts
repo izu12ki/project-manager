@@ -937,6 +937,12 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.getByLabel('佐藤 次郎 さんの招待ロール').selectOption('guest');
 	await expect(page.getByRole('button', { name: '取り込む（7 人）' })).toBeVisible();
 	await page.getByRole('checkbox', { name: '架空商事 小林 を取り込む' }).uncheck();
+	// 実行ボタンの上に、取り込まない理由の内訳と「参加できるプロジェクトがない」の説明が出る
+	const summary = page.getByTestId('import-summary');
+	await expect(summary).toContainText(
+		'招待 5 人、参加の追加 1 人。取り込まない人 4 人（Backlog で有効でない 1、CSV 内でメールアドレスが重複 1、参加できるプロジェクトがない 1、チェックを外した 1）'
+	);
+	await expect(summary).toContainText('招待ロールが管理者でなければ招待できません');
 	await page.getByRole('button', { name: '取り込む（6 人）' }).click();
 	await expect(
 		page.getByText(

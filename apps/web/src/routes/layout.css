@@ -372,6 +372,10 @@
 			border-color 0.15s ease,
 			box-shadow 0.15s ease;
 	}
+	/* ファイル選択は、ブラウザ標準のボタンと「選択されていません」の文字が上に寄るので、行の高さで縦の中央にそろえる */
+	.input[type='file'] {
+		line-height: calc(2rem - 2px);
+	}
 	.textarea {
 		height: auto;
 		padding: 8px 12px;

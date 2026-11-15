@@ -1025,6 +1025,11 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(imported).toContainText(
 		'課題 6 件（#1〜#6）とコメント 5 件を取り込みました。取り込まなかった行 1 件'
 	);
+	// 同じ画面のステータス・カテゴリーの一覧にも、作ったものがすぐ出る
+	const settingsCard = (title: string) =>
+		page.locator('.card').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
+	await expect(settingsCard('ステータス')).toContainText('保留');
+	await expect(settingsCard('カテゴリー')).toContainText('確定度 60%');
 	await imported.getByRole('link', { name: '課題一覧を見る' }).click();
 	await expect(page).toHaveURL(/\/projects\/DEMO$/);
 	await expect(page.getByRole('link', { name: 'ログイン API', exact: true })).toBeVisible();

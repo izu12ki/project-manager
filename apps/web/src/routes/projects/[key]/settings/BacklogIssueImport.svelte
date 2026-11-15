@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { invalidateAll } from '$app/navigation';
 	import { CircleCheck, TriangleAlert } from '@lucide/svelte';
 	import FormAlert from '#lib/components/FormAlert.svelte';
 	import {
@@ -115,6 +116,8 @@
 			});
 			close();
 			result = formatIssueImportResult(r);
+			// 作ったステータス・カテゴリーや参加者を、同じ画面の一覧に出す
+			await invalidateAll();
 		} catch (err) {
 			message = failure(err, '取り込めませんでした。何も書き込んでいません');
 		} finally {

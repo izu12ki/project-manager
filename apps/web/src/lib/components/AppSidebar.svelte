@@ -11,8 +11,9 @@
 		Smile,
 		Users
 	} from '@lucide/svelte';
-	import { ROLE_LABEL, colorFor, projectColor, projectIcon } from '#lib/labels.ts';
+	import { ROLE_LABEL, colorFor } from '#lib/labels.ts';
 	import { getUnreadCount } from '#lib/notifications.remote.ts';
+	import ProjectIcon from './ProjectIcon.svelte';
 	import ThemeToggle from './ThemeToggle.svelte';
 
 	let {
@@ -102,11 +103,14 @@
 			{#each active as p (p.key)}
 				<a
 					href={`/projects/${p.key}`}
-					class="item row"
+					class="item row proj"
 					aria-current={isCurrent(p.key) ? 'page' : undefined}
 				>
-					<span class="proj-icon" style:--c={projectColor(p)}>{projectIcon(p)}</span>
-					<span class="truncate">{p.name}</span>
+					<ProjectIcon project={p} size={32} />
+					<span class="stack" style="min-width: 0">
+						<span class="proj-name truncate">{p.name}</span>
+						<span class="sub truncate">{p.key}</span>
+					</span>
 				</a>
 			{/each}
 		</div>
@@ -284,17 +288,19 @@
 	.item[aria-current='page'] :global(.muted-icon) {
 		color: inherit;
 	}
-	.proj-icon {
-		width: 22px;
-		height: 22px;
-		flex-shrink: 0;
-		border-radius: var(--radius-md);
-		background: color-mix(in oklch, var(--c) 24%, var(--card));
-		color: color-mix(in oklch, var(--c) 60%, var(--foreground));
-		display: grid;
-		place-items: center;
-		font-size: 0.6875rem;
+	/* プロジェクトは名前（太字）の下にキーを薄く出す 2 行 */
+	.proj {
+		height: auto;
+		min-height: 3.25rem;
+		padding-block: 8px;
+		gap: 10px;
+	}
+	.proj-name {
 		font-weight: 700;
+	}
+	.item[aria-current='page'] .sub {
+		color: inherit;
+		opacity: 0.75;
 	}
 	.footer {
 		padding: 8px;

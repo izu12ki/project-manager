@@ -1,31 +1,37 @@
 // Backlog の課題 CSV の取り込み。ブラウザで読んだ行を受け取り、確認画面の「計画」を作る（planIssueImport）。
 // 実行（importIssues）は送られた行と人の対応表から計画を作り直し、1 回の db.batch で全件成功か全件失敗にする。
 // 通知・編集履歴は作らない。DB への問い合わせ回数は件数によらず一定にする。
-import { and, asc, eq, gte, inArray, isNotNull, isNull, ne } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
 import {
 	MAX_IMPORT_COMMENTS,
 	MAX_IMPORT_ISSUES,
 	personKey,
-	type BacklogIssueRow
+	type BacklogIssueRow,
+	type IssueImportResult
 } from '#lib/backlog-issues.ts';
 import { INITIAL_STATUS, RESOLUTION_LABEL, type Resolution } from '#lib/labels.ts';
 import { authorize, type Role } from '../authz';
 import type { AppContext } from '../context';
 import {
 	category,
+	comment,
 	invitation,
 	issue,
 	issueStatus,
 	issueType,
 	milestone,
+	project,
 	projectMember,
 	user
 } from '../db/schema';
+import { AppError } from '../errors';
 import { DateOrEmptySchema, parse } from '../validation';
-import { assertWritable, requireProject, type ProjectRow } from './projects';
-import { UNKNOWN_USER_ID } from './users';
+import { tailPositions } from './issue-bulk';
+import { categoryIdsValue } from './issue-input';
+import { assertWritable, forgetProject, requireProject, type ProjectRow } from './projects';
+import { UNKNOWN_USER_ID, unknownUserInsert } from './users';
 
 export interface IssueImportPerson {
 	/** CSV の表記（キー ID 順で最初に出たもの） */
@@ -122,6 +128,19 @@ const Rows = v.pipe(
 	)
 );
 const PlanInput = v.object({ rows: Rows });
+const ImportInput = v.object({
+	rows: Rows,
+	people: v.pipe(
+		v.array(v.object({ name: Short, userId: v.nullable(Short) })),
+		v.maxLength(MAX_IMPORT_ISSUES * 2 + MAX_IMPORT_COMMENTS)
+	)
+});
+
+/** 1 文のパラメーターが 999 を超えないように、複数行の insert を分ける */
+const ISSUE_CHUNK = 30;
+const COMMENT_CHUNK = 100;
+const chunks = <T>(xs: T[], size: number): T[][] =>
+	Array.from({ length: Math.ceil(xs.length / size) }, (_, i) => xs.slice(i * size, (i + 1) * size));
 
 const KEY = /^[A-Z][A-Z0-9_]*-\d+$/;
 
@@ -442,4 +461,208 @@ export async function planIssueImport(
 	authorize(ctx.actor, 'project:manage');
 	const { rows } = parse(PlanInput, input);
 	return (await buildImport(ctx, key, rows)).plan;
+}
+
+/** 二重取り込みを防ぐ一意インデックス（issue_project_backlog_key_uq）に当たったか */
+function isBacklogKeyConflict(e: unknown): boolean {
+	for (let x = e; x; x = (x as { cause?: unknown }).cause) {
+		const message = x instanceof Error ? x.message : String(x);
+		if (message.includes('backlog_key')) return true;
+	}
+	return false;
+}
+
+export async function importIssues(
+	ctx: AppContext,
+	key: string,
+	input: unknown
+): Promise<IssueImportResult> {
+	authorize(ctx.actor, 'project:manage');
+	const { rows, people } = parse(ImportInput, input);
+	const built = await buildImport(ctx, key, rows);
+	const { plan, project: p, issues } = built;
+	if (plan.alreadyImported.length > 0) {
+		const shown = plan.alreadyImported.slice(0, 10).join('、');
+		const more =
+			plan.alreadyImported.length > 10 ? ` ほか ${plan.alreadyImported.length - 10} 件` : '';
+		throw new AppError(
+			'conflict',
+			`既に取り込んだ課題があります: ${shown}${more}。取り込み済みの課題を除いた CSV を使ってください`
+		);
+	}
+	if (issues.length === 0) throw new AppError('validation', '取り込める課題がありません');
+
+	const users = new Map(plan.users.map((u) => [u.id, u]));
+	const mapping = new Map<string, string | null>();
+	for (const x of people) {
+		if (x.userId && !users.has(x.userId)) {
+			throw new AppError('validation', `対応先のユーザーが見つかりません（${x.name}）`);
+		}
+		mapping.set(personKey(x.name), x.userId);
+	}
+	let needsUnknown = false;
+	const joins = new Set<string>();
+	/** 対応付けた人の id。いなければ null（参加者でない人はプロジェクトに足す） */
+	const userOf = (name: string): string | null => {
+		const id = name ? (mapping.get(personKey(name)) ?? null) : null;
+		if (id && !users.get(id)!.member) joins.add(id);
+		return id;
+	};
+
+	const positionOf = await tailPositions(
+		ctx.db,
+		p.id,
+		issues.map((it) => it.statusKey)
+	);
+	const csvIds = new Set(issues.map((it) => it.id));
+	const issueValues = issues.map((it, i) => {
+		const r = it.row;
+		const reporter = userOf(r.reporter);
+		const assignee = userOf(r.assignee);
+		if (!reporter) needsUnknown = true;
+		return {
+			id: it.id,
+			projectId: p.id,
+			// 番号はキー ID 順。挿入の順（親が先）とは別に、プロジェクトの続きから振る
+			number: sql`(select ${project.nextIssueNumber} from ${project} where ${project.id} = ${p.id}) + ${i}`,
+			title: r.title,
+			description: composeDescription(r, {
+				reporterName: reporter ? null : r.reporter || null,
+				assigneeName: assignee ? null : r.assignee || null,
+				parentKey: it.parentNote
+			}),
+			typeId: it.typeId,
+			status: it.statusKey,
+			resolution: it.resolution,
+			priority: it.priority,
+			assigneeIds: assignee ? [assignee] : [],
+			parentId: it.parentId,
+			reporterId: reporter ?? UNKNOWN_USER_ID,
+			startDate: r.startDate || null,
+			dueDate: r.dueDate || null,
+			categoryIds: categoryIdsValue(p.id, it.categoryIds),
+			milestoneId: it.milestoneId,
+			backlogKey: r.key,
+			position: positionOf(it.statusKey),
+			createdAt: new Date(r.createdAt!),
+			updatedAt: new Date(r.updatedAt ?? r.createdAt!)
+		};
+	});
+	const commentValues = issues.flatMap((it) =>
+		it.row.comments.map((c) => {
+			const author = userOf(c.author);
+			if (!author) needsUnknown = true;
+			const at = new Date(c.at ?? it.row.createdAt!);
+			return {
+				id: uuidv7(),
+				issueId: it.id,
+				authorId: author ?? UNKNOWN_USER_ID,
+				body: composeComment(c.body, author ? null : c.author || null),
+				createdAt: at,
+				updatedAt: at
+			};
+		})
+	);
+
+	const stmts = [];
+	if (needsUnknown) stmts.push(unknownUserInsert(ctx.db));
+	if (built.newStatuses.length > 0) {
+		stmts.push(
+			ctx.db
+				.update(issueStatus)
+				.set({ position: sql`${issueStatus.position} + ${built.newStatuses.length}` })
+				.where(
+					and(eq(issueStatus.projectId, p.id), gte(issueStatus.position, built.statusInsertAt))
+				),
+			ctx.db.insert(issueStatus).values(
+				built.newStatuses.map((st, i) => ({
+					projectId: p.id,
+					key: st.key,
+					name: st.name,
+					color: 'gray' as const,
+					position: built.statusInsertAt + i
+				}))
+			)
+		);
+	}
+	if (built.newTypes.length > 0) {
+		stmts.push(
+			ctx.db.insert(issueType).values(
+				built.newTypes.map((t, i) => ({
+					id: t.id,
+					projectId: p.id,
+					name: t.name,
+					color: 'gray' as const,
+					position: built.typeNextPosition + i
+				}))
+			)
+		);
+	}
+	if (built.newCategories.length > 0) {
+		stmts.push(
+			ctx.db
+				.insert(category)
+				.values(built.newCategories.map((c) => ({ id: c.id, projectId: p.id, name: c.name })))
+		);
+	}
+	if (built.newMilestones.length > 0) {
+		stmts.push(
+			ctx.db
+				.insert(milestone)
+				.values(built.newMilestones.map((m) => ({ id: m.id, projectId: p.id, name: m.name })))
+		);
+	}
+	if (joins.size > 0) {
+		stmts.push(
+			ctx.db
+				.insert(projectMember)
+				.values([...joins].map((userId) => ({ projectId: p.id, userId })))
+				.onConflictDoNothing()
+		);
+	}
+	// 親課題を先に入れる（parent_id の外部キーのため）
+	const parents = issueValues.filter((x) => !x.parentId || !csvIds.has(x.parentId));
+	const children = issueValues.filter((x) => x.parentId && csvIds.has(x.parentId));
+	for (const part of [...chunks(parents, ISSUE_CHUNK), ...chunks(children, ISSUE_CHUNK)]) {
+		stmts.push(ctx.db.insert(issue).values(part));
+	}
+	for (const part of chunks(commentValues, COMMENT_CHUNK)) {
+		stmts.push(ctx.db.insert(comment).values(part));
+	}
+	stmts.push(
+		ctx.db
+			.update(project)
+			.set({ nextIssueNumber: sql`${project.nextIssueNumber} + ${issues.length}` })
+			.where(eq(project.id, p.id))
+	);
+	const range = ctx.db
+		.select({ first: sql<number>`min(${issue.number})`, last: sql<number>`max(${issue.number})` })
+		.from(issue)
+		.where(inArray(issue.id, [...csvIds]));
+
+	let results;
+	try {
+		const [first, ...rest] = stmts;
+		results = await ctx.db.batch([first, ...rest, range]);
+	} catch (e) {
+		if (isBacklogKeyConflict(e)) {
+			throw new AppError('conflict', '既に取り込んだ課題があります。CSV を読み込み直してください');
+		}
+		throw e;
+	}
+	forgetProject(ctx, key); // nextIssueNumber が変わった
+	const [{ first, last }] = results[results.length - 1] as { first: number; last: number }[];
+	return {
+		issues: issues.length,
+		comments: commentValues.length,
+		firstNumber: first,
+		lastNumber: last,
+		skipped: plan.rowErrors.length,
+		created: {
+			statuses: built.newStatuses.length,
+			types: built.newTypes.length,
+			categories: built.newCategories.length,
+			milestones: built.newMilestones.length
+		}
+	};
 }

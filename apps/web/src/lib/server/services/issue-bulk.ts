@@ -68,7 +68,7 @@ function collectItems<T>(items: unknown[], fn: (item: unknown, i: number) => T):
 }
 
 /** ステータスごとに、既存の末尾に続く position を要素の順に振る */
-async function tailPositions(
+export async function tailPositions(
 	db: DB,
 	projectId: string,
 	statuses: string[]

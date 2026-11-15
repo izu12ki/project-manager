@@ -1,13 +1,27 @@
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { readBacklogIssues, type BacklogIssueRow } from '#lib/backlog-issues.ts';
 import { decodeCsv } from '#lib/csv.ts';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
-import { invitation, issue, issueStatus, user } from '../db/schema';
+import {
+	category,
+	comment,
+	invitation,
+	issue,
+	issueChange,
+	issueStatus,
+	milestone,
+	notification,
+	project,
+	projectMember,
+	user
+} from '../db/schema';
 import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
-import { planIssueImport } from './issue-import';
+import { importIssues, planIssueImport, type IssueImportPlan } from './issue-import';
+import { listCategories } from './issue-fields';
+import { createIssue } from './issues';
 import { unknownUserInsert } from './users';
 
 function fixture(name: string): BacklogIssueRow[] {
@@ -226,5 +240,255 @@ describe('issue-import: plan', () => {
 			message:
 				'一度に取り込めるコメントは5,000件までです。Backlog で絞り込んで CSV を分けてください'
 		});
+	});
+});
+
+const autoPeople = (plan: IssueImportPlan) =>
+	plan.people.map((x) => ({ name: x.name, userId: x.userId }));
+
+describe('issue-import: run', () => {
+	let db: DB;
+	let base: ReturnType<typeof createTestBase>;
+	let admin: Actor;
+	let suzuki: Actor;
+	let dev: Actor;
+	let projectId: string;
+
+	beforeEach(async () => {
+		n = 0;
+		db = await createTestDb();
+		base = createTestBase(db);
+		admin = await seedUser(db, 'admin', '管理者');
+		suzuki = await seedUser(db, 'member', '鈴木 花子');
+		dev = await seedUser(db, 'member', '開発 花子');
+		({ id: projectId } = await seedProject(db, { key: 'DEMO', members: [suzuki] }));
+	});
+
+	const ctx = () => ctxOf(base, admin);
+	async function run(rows: BacklogIssueRow[], people?: { name: string; userId: string | null }[]) {
+		const plan = await planIssueImport(ctx(), 'DEMO', { rows });
+		return importIssues(ctx(), 'DEMO', { rows, people: people ?? autoPeople(plan) });
+	}
+	async function issuesByKey() {
+		const rows = await db.select().from(issue).where(eq(issue.projectId, projectId));
+		return new Map(rows.map((r) => [r.backlogKey ?? r.title, r]));
+	}
+	const count = async (table: typeof category | typeof issueStatus | typeof issue) =>
+		(await db.select().from(table)).length;
+
+	it('固定の CSV を取り込むと、項目・人・親子・本文が対応付けられる', async () => {
+		const result = await run(fixture('issues.csv'));
+		expect(result).toEqual({
+			issues: 6,
+			comments: 5,
+			firstNumber: 1,
+			lastNumber: 6,
+			skipped: 1,
+			created: { statuses: 1, types: 1, categories: 3, milestones: 1 }
+		});
+		const byKey = await issuesByKey();
+		const get = (k: string) => byKey.get(k)!;
+		expect(
+			['DEMO-1', 'DEMO-2', 'DEMO-3', 'DEMO-4', 'DEMO-5', 'DEMO-6'].map((k) => get(k).number)
+		).toEqual([1, 2, 3, 4, 5, 6]);
+		const categories = new Map((await db.select().from(category)).map((c) => [c.id, c.name]));
+		const milestones = new Map((await db.select().from(milestone)).map((m) => [m.id, m.name]));
+		const statuses = await db
+			.select()
+			.from(issueStatus)
+			.where(eq(issueStatus.projectId, projectId))
+			.orderBy(asc(issueStatus.position));
+
+		const d1 = get('DEMO-1');
+		expect(d1.categoryIds.map((id) => categories.get(id))).toEqual(['機能A', '確定度 60%']);
+		expect(milestones.get(d1.milestoneId!)).toBe('v1.0');
+		expect(d1).toMatchObject({
+			status: 'todo',
+			priority: 'medium',
+			assigneeIds: [suzuki.id],
+			reporterId: 'unknown-user',
+			startDate: '2024-01-15',
+			dueDate: '2024-01-31',
+			parentId: null
+		});
+		expect(d1.description).toBe(
+			'（Backlog: 山田 太郎）\n\n画面の要件:\n- メールアドレス\n- パスワード\n\n"引用符"とカンマ, を含む\n\n---\n\n- Backlog から移行: DEMO-1\n- マイルストーン（Backlog）: v1.1'
+		);
+		expect(d1.createdAt).toEqual(new Date(2024, 0, 10, 9, 15));
+		expect(d1.updatedAt).toEqual(new Date(2024, 1, 1, 18, 0));
+
+		const d2 = get('DEMO-2');
+		expect(d2).toMatchObject({ parentId: d1.id, assigneeIds: [], status: 'in_progress' });
+		expect(d2.description).toBe(
+			'（Backlog: 架空商事 小林）\n\n---\n\n- Backlog から移行: DEMO-2\n- 担当者（Backlog）: 山田 太郎'
+		);
+
+		expect(get('DEMO-4')).toMatchObject({
+			parentId: get('DEMO-5').id,
+			status: 'in_review',
+			priority: 'low',
+			reporterId: dev.id
+		});
+		expect(get('DEMO-5')).toMatchObject({
+			status: 'done',
+			resolution: 'fixed',
+			priority: 'high',
+			assigneeIds: [dev.id],
+			reporterId: suzuki.id
+		});
+
+		const d3 = get('DEMO-3');
+		expect(d3.parentId).toBeNull();
+		expect(d3.description).toBe(
+			[
+				'---',
+				[
+					'- Backlog から移行: DEMO-3',
+					'- 担当者（Backlog）: 髙田 一郎①',
+					'- 親課題（Backlog）: DEMO-99',
+					'- 発生バージョン: 1.0',
+					'- 予定時間: 3',
+					'- 実績時間: 2.5',
+					'- 添付ファイル: 2 件（移行していません）'
+				].join('\n')
+			].join('\n\n')
+		);
+		expect(statuses.map((st) => st.name)).toEqual(['未着手', '進行中', 'レビュー', '保留', '完了']);
+		expect(statuses.find((st) => st.name === '保留')!.key).toBe(d3.status);
+		const comments3 = await db
+			.select()
+			.from(comment)
+			.where(eq(comment.issueId, d3.id))
+			.orderBy(asc(comment.createdAt), asc(comment.id));
+		expect(comments3.map((c) => [c.authorId, c.body])).toEqual([
+			[suzuki.id, 'よろしくお願いします'],
+			['unknown-user', '（Backlog: 髙田 一郎①）\n\n調査が終わりました']
+		]);
+		expect(comments3[0].createdAt).toEqual(new Date(2024, 2, 1, 13, 20));
+
+		expect(get('DEMO-6')).toMatchObject({ parentId: null });
+		expect(get('DEMO-6').description).toContain('- 親課題（Backlog）: DEMO-2');
+
+		const joined = await db
+			.select()
+			.from(projectMember)
+			.where(eq(projectMember.projectId, projectId));
+		expect(joined.map((m) => m.userId).sort()).toEqual([suzuki.id, dev.id].sort());
+		expect(await db.select().from(notification)).toEqual([]);
+		expect(await db.select().from(issueChange)).toEqual([]);
+		expect(base.sent).toEqual([]);
+		const [unknown] = await db.select().from(user).where(eq(user.id, 'unknown-user'));
+		expect(unknown.name).toBe('不明なユーザー');
+	});
+
+	it('課題がある既存のプロジェクトでは、番号と並びの続きから入る', async () => {
+		await createIssue(ctx(), 'DEMO', { title: '既存 1' });
+		await createIssue(ctx(), 'DEMO', { title: '既存 2' });
+		const result = await run([row(), row()]);
+		expect([result.firstNumber, result.lastNumber]).toEqual([3, 4]);
+		const byKey = await issuesByKey();
+		expect(byKey.get('DEMO-1')!.number).toBe(3);
+		expect(byKey.get('DEMO-2')!.number).toBe(4);
+		expect(byKey.get('DEMO-1')!.position > byKey.get('既存 2')!.position).toBe(true);
+		expect(byKey.get('DEMO-2')!.position > byKey.get('DEMO-1')!.position).toBe(true);
+		const [{ nextIssueNumber }] = await db.select().from(project);
+		expect(nextIssueNumber).toBe(5);
+	});
+
+	it('分けて取り込むと、前回の課題を親にし、子課題の子にはしない', async () => {
+		await run(fixture('issues.csv'));
+		const result = await run(fixture('issues-2.csv'));
+		expect([result.firstNumber, result.lastNumber]).toEqual([7, 8]);
+		const byKey = await issuesByKey();
+		expect(byKey.get('DEMO-8')!.parentId).toBe(byKey.get('DEMO-1')!.id);
+		expect(byKey.get('DEMO-9')!.parentId).toBeNull();
+		expect(byKey.get('DEMO-9')!.description).toContain('- 親課題（Backlog）: DEMO-2');
+	});
+
+	it('取り込み済みのキーがあれば何も書かない', async () => {
+		await run(fixture('issues.csv'));
+		const before = [await count(issue), await count(category)];
+		await expect(run(fixture('issues.csv'))).rejects.toMatchObject({
+			code: 'conflict',
+			message: expect.stringContaining('既に取り込んだ課題があります: DEMO-1、DEMO-2')
+		});
+		expect([await count(issue), await count(category)]).toEqual(before);
+	});
+
+	it('検査の後に別の取り込みが済んだら、一意インデックスで止めて何も残さない', async () => {
+		const rows = fixture('issues.csv');
+		const plan = await planIssueImport(ctx(), 'DEMO', { rows });
+		const racing = new Proxy(db, {
+			get(target, prop, receiver) {
+				if (prop === 'batch') {
+					return async (stmts: Parameters<DB['batch']>[0]) => {
+						await target.insert(issue).values({
+							id: 'racer',
+							projectId,
+							number: 99,
+							title: 'racer',
+							reporterId: admin.id,
+							position: 'z0',
+							backlogKey: 'DEMO-3'
+						});
+						return target.batch(stmts);
+					};
+				}
+				const value = Reflect.get(target, prop, receiver);
+				return typeof value === 'function' ? value.bind(target) : value;
+			}
+		});
+		const statusesBefore = await count(issueStatus);
+		await expect(
+			importIssues({ ...ctx(), db: racing }, 'DEMO', { rows, people: autoPeople(plan) })
+		).rejects.toMatchObject({
+			code: 'conflict',
+			message: '既に取り込んだ課題があります。CSV を読み込み直してください'
+		});
+		expect(await count(issue)).toBe(1);
+		expect(await count(category)).toBe(0);
+		expect(await count(issueStatus)).toBe(statusesBefore);
+		expect(await db.select().from(user).where(eq(user.id, 'unknown-user'))).toEqual([]);
+		const joined = await db.select().from(projectMember).where(eq(projectMember.userId, dev.id));
+		expect(joined).toEqual([]);
+	});
+
+	it('対応先を手で選べ、候補にない人は validation', async () => {
+		const rows = fixture('issues.csv');
+		const plan = await planIssueImport(ctx(), 'DEMO', { rows });
+		const people = autoPeople(plan).map((x) =>
+			x.name === '架空商事 小林' ? { ...x, userId: admin.id } : x
+		);
+		const disabled = await seedUser(db, 'member', '無効');
+		await db.update(user).set({ disabledAt: new Date() }).where(eq(user.id, disabled.id));
+		await expect(
+			importIssues(ctx(), 'DEMO', {
+				rows,
+				people: people.map((x) => (x.name === '山田 太郎' ? { ...x, userId: disabled.id } : x))
+			})
+		).rejects.toMatchObject({
+			code: 'validation',
+			message: '対応先のユーザーが見つかりません（山田 太郎）'
+		});
+		await importIssues(ctx(), 'DEMO', { rows, people });
+		const d2 = (await issuesByKey()).get('DEMO-2')!;
+		expect(d2.reporterId).toBe(admin.id);
+		expect(d2.description).not.toContain('（Backlog:');
+	});
+
+	it('取り込める課題がなければ validation', async () => {
+		await expect(run([row({ title: '' })])).rejects.toMatchObject({
+			code: 'validation',
+			message: '取り込める課題がありません'
+		});
+	});
+
+	it('同じミリ秒に作ったカテゴリーも、作った順に並ぶ', async () => {
+		await run(fixture('issues.csv'));
+		expect((await listCategories(ctx(), 'DEMO')).map((c) => c.name)).toEqual([
+			'機能A',
+			'確定度 60%',
+			'機能B'
+		]);
 	});
 });

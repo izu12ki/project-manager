@@ -106,10 +106,17 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 
 	// 2. プロジェクト作成
 	await page.getByRole('link', { name: '新規プロジェクト' }).click();
-	await page.getByLabel('キー').fill('ACME');
+	// 名前だけを入れる。キーの形式に合わない名前は弾かれ、そのまま（大文字にして）キーになる
 	await page.getByLabel('プロジェクト名').fill('ACME サイト改修');
+	expect(
+		await page
+			.getByLabel('プロジェクト名')
+			.evaluate((el: HTMLInputElement) => el.validity.patternMismatch)
+	).toBe(true);
+	await page.getByLabel('プロジェクト名').fill('acme');
 	await page.getByRole('button', { name: '作成' }).click();
-	await expect(page.getByRole('heading', { name: 'ACME サイト改修' })).toBeVisible();
+	await expect(page).toHaveURL(/\/projects\/ACME$/);
+	await expect(page.getByRole('heading', { name: 'ACME', exact: true })).toBeVisible();
 
 	// 3. メンバー招待
 	await page.goto('/admin/users');
@@ -117,8 +124,8 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.getByLabel('メールアドレス').fill('member@example.com');
 	await page.getByLabel('ロール', { exact: true }).selectOption('member');
 	await page.locator('#invite-project').click();
-	await page.getByRole('checkbox', { name: 'ACME サイト改修' }).check();
-	await expect(page.locator('#invite-project')).toHaveText('ACME サイト改修');
+	await page.getByRole('checkbox', { name: 'ACME', exact: true }).check();
+	await expect(page.locator('#invite-project')).toHaveText('ACME');
 	await page.getByRole('button', { name: '招待する' }).click();
 	const memberUrl = await page.getByLabel('招待リンク').inputValue();
 	expect(memberUrl).toContain('/invite/');
@@ -145,10 +152,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 
 	// 5. ゲストが登録して起票
 	await acceptInvite(page, guestUrl, '顧客 太郎');
-	await page
-		.getByRole('main')
-		.getByRole('link', { name: /ACME サイト改修/ })
-		.click();
+	await page.getByRole('main').getByRole('link', { name: /ACME/ }).click();
 	await page.getByRole('link', { name: '新規課題' }).click();
 	await expect(page.getByLabel('種別').locator('option:checked')).toHaveText('タスク');
 	await page.getByLabel('種別').selectOption({ label: 'バグ' });
@@ -880,7 +884,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.getByLabel('メールアドレス').fill('admin2@example.com');
 	await page.getByLabel('ロール', { exact: true }).selectOption({ label: '管理者' });
 	await page.locator('#invite-project').click();
-	await page.getByRole('checkbox', { name: 'ACME サイト改修' }).check();
+	await page.getByRole('checkbox', { name: 'ACME', exact: true }).check();
 	await page.getByRole('button', { name: '招待する' }).click();
 	const admin2Url = await page.getByLabel('招待リンク').inputValue();
 	await logout(page);
@@ -911,14 +915,9 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(roleSelect.locator('option:checked')).toHaveText('メンバー');
 
 	// 16. Backlog のユーザー CSV からまとめて招待（アンダースコア入り・長いキーのプロジェクトへ）
-	for (const [key, name] of [
-		['DEMO', 'デモ'],
-		['WEB_APP', 'ウェブアプリ'],
-		['LONG_PROJECT_KEY_01', '長いキーのプロジェクト']
-	]) {
+	for (const key of ['DEMO', 'WEB_APP', 'LONG_PROJECT_KEY_01']) {
 		await page.goto('/admin/projects/new');
-		await page.getByLabel('キー').fill(key.toLowerCase());
-		await page.getByLabel('プロジェクト名').fill(name);
+		await page.getByLabel('プロジェクト名').fill(key.toLowerCase());
 		await page.getByRole('button', { name: '作成' }).click();
 		await expect(page).toHaveURL(new RegExp(`/projects/${key}$`));
 	}
@@ -930,7 +929,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	// hasText の文字列は大文字小文字を区別しない。別名の行も同じアドレス（小文字化後）なので名前で絞る
 	const rowOf = (text: string) =>
 		preview.getByRole('row').filter({ hasText: text, hasNotText: '別名' });
-	await expect(rowOf('鈴木 花子')).toContainText('デモ、長いキーのプロジェクト');
+	await expect(rowOf('鈴木 花子')).toContainText('DEMO、LONG_PROJECT_KEY_01');
 	await expect(rowOf('渡辺 直子')).toContainText('Backlog で有効でない');
 	await expect(rowOf('開発 花子')).toContainText('参加を追加');
 	await expect(rowOf('伊藤 健')).toContainText('参加できるプロジェクトがない');
@@ -965,10 +964,12 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page).toHaveURL(HOME);
 	// サイドバーにも同じリンクがあるので、ホームの一覧に絞る
 	await expect(
-		page.getByRole('main').getByRole('link', { name: '長いキーのプロジェクト' })
+		page.getByRole('main').getByRole('link', { name: /LONG_PROJECT_KEY_01/ })
 	).toBeVisible();
 	await page.goto('/projects/LONG_PROJECT_KEY_01');
-	await expect(page.getByRole('heading', { name: '長いキーのプロジェクト' })).toBeVisible();
+	await expect(
+		page.getByRole('heading', { name: 'LONG_PROJECT_KEY_01', exact: true })
+	).toBeVisible();
 	await logout(page);
 	await login(page, 'admin@example.com');
 

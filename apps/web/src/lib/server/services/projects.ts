@@ -13,12 +13,18 @@ import { defaultFieldInserts } from './issue-fields';
 
 export type ProjectRow = typeof project.$inferSelect;
 
-const KeySchema = v.pipe(
-	v.string(),
-	v.trim(),
-	v.toUpperCase(),
-	v.regex(new RegExp(`^${PROJECT_KEY_PATTERN}$`), `キーは${PROJECT_KEY_RULE}で入力してください`)
-);
+const keyFormat = (label: string) => {
+	const message = `${label}は${PROJECT_KEY_RULE}で入力してください`;
+	return v.pipe(
+		v.string(message),
+		v.trim(),
+		v.toUpperCase(),
+		v.regex(new RegExp(`^${PROJECT_KEY_PATTERN}$`), message)
+	);
+};
+const KeySchema = keyFormat('キー');
+/** 作成時のプロジェクト名。そのままキーにするのでキーと同じ形式に限る */
+const NewProjectNameSchema = keyFormat('プロジェクト名');
 const ProjectNameSchema = v.pipe(
 	v.string(),
 	v.trim(),
@@ -97,28 +103,23 @@ export function assertWritable(p: ProjectRow): void {
 	if (p.archivedAt) throw new AppError('conflict', 'アーカイブ済みのプロジェクトは変更できません');
 }
 
+/** プロジェクト名だけを受け取り、そのままキーにする（名前とキーはあとから設定画面で別々に変えられる） */
 export async function createProject(ctx: AppContext, input: unknown): Promise<{ key: string }> {
 	authorize(ctx.actor, 'project:manage');
-	const data = parse(
-		v.object({ key: KeySchema, name: ProjectNameSchema, description: DescriptionSchema }),
-		input
-	);
-	const [dup] = await ctx.db
-		.select({ id: project.id })
-		.from(project)
-		.where(eq(project.key, data.key));
-	if (dup) throw keyTaken();
+	const { name } = parse(v.object({ name: NewProjectNameSchema }), input);
+	const [dup] = await ctx.db.select({ id: project.id }).from(project).where(eq(project.key, name));
+	if (dup) throw taken('name', 'このプロジェクト名');
 	const id = uuidv7();
 	await ctx.db.batch([
-		ctx.db.insert(project).values({ id, ...data }),
+		ctx.db.insert(project).values({ id, key: name, name }),
 		...defaultFieldInserts(ctx.db, id)
 	]);
-	return { key: data.key };
+	return { key: name };
 }
 
-const keyTaken = () =>
-	new AppError('conflict', 'このキーは既に使われています', {
-		key: ['このキーは既に使われています']
+const taken = (field: string, label: string) =>
+	new AppError('conflict', `${label}は既に使われています`, {
+		[field]: [`${label}は既に使われています`]
 	});
 
 /** キーを変えると URL と課題キー（ACME-12 など）が変わる。変更後のキーを返す */
@@ -145,7 +146,7 @@ export async function updateProject(
 			.select({ id: project.id })
 			.from(project)
 			.where(eq(project.key, newKey));
-		if (dup) throw keyTaken();
+		if (dup) throw taken('key', 'このキー');
 	}
 	await ctx.db
 		.update(project)

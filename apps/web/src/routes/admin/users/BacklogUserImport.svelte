@@ -164,7 +164,8 @@
 							{plan.missingKeys.join('、')}
 						</p>
 						<p class="m-0 text-[0.8125rem] text-muted-foreground">
-							Backlog と同じキーで<a class="link" href="/admin/projects/new">プロジェクトを作って</a
+							Backlog のキーをプロジェクト名にして<a class="link" href="/admin/projects/new"
+								>プロジェクトを作って</a
 							>から CSV を読み込み直すと、そのプロジェクトにも参加させられます。
 						</p>
 					</div>

@@ -305,6 +305,8 @@ export const issue = sqliteTable(
 		 */
 		legacyCategoryId: text('category_id').references(() => category.id, { onDelete: 'set null' }),
 		milestoneId: text('milestone_id').references(() => milestone.id, { onDelete: 'set null' }),
+		/** Backlog から取り込んだ課題の元のキー（PROJ-531）。二重取り込みの防止と、分けて取り込んだときの親子に使う */
+		backlogKey: text('backlog_key'),
 		position: text().notNull(),
 		/** 削除した日時。削除した課題は一覧から外し、削除履歴として閲覧だけできる */
 		deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
@@ -315,7 +317,8 @@ export const issue = sqliteTable(
 	(t) => [
 		uniqueIndex('issue_project_number_uq').on(t.projectId, t.number),
 		index('issue_board_idx').on(t.projectId, t.status, t.position),
-		index('issue_parent_idx').on(t.parentId)
+		index('issue_parent_idx').on(t.parentId),
+		uniqueIndex('issue_project_backlog_key_uq').on(t.projectId, t.backlogKey)
 	]
 );
 

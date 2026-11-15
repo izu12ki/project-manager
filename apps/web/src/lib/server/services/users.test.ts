@@ -1,10 +1,33 @@
 import { describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { session, user } from '../db/schema';
-import { createTestBase, createTestDb, ctxOf, seedUser } from '../test-utils';
-import { changeUserRole, disableUser, enableUser, isDisabledEmail, listUsers } from './users';
+import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
+import { listAssignableUsers } from './projects';
+import {
+	changeUserRole,
+	disableUser,
+	enableUser,
+	isDisabledEmail,
+	listUsers,
+	UNKNOWN_USER_ID,
+	unknownUserInsert
+} from './users';
 
 describe('users', () => {
+	it('不明なユーザーは一覧に出ず、担当者にもできない', async () => {
+		const db = await createTestDb();
+		const base = createTestBase(db);
+		const admin = await seedUser(db, 'admin');
+		const p = await seedProject(db);
+		await db.batch([unknownUserInsert(db), unknownUserInsert(db)]);
+		const rows = await db.select().from(user).where(eq(user.id, UNKNOWN_USER_ID));
+		expect(rows).toHaveLength(1);
+		expect(rows[0]).toMatchObject({ id: 'unknown-user', name: '不明なユーザー', role: 'guest' });
+		expect(rows[0].disabledAt).not.toBeNull();
+		expect((await listUsers(ctxOf(base, admin))).map((u) => u.id)).toEqual([admin.id]);
+		expect((await listAssignableUsers(db, p.id)).map((u) => u.id)).toEqual([admin.id]);
+	});
+
 	it('無効化するとセッションが消え、ログイン拒否の判定が true になる', async () => {
 		const db = await createTestDb();
 		const base = createTestBase(db);

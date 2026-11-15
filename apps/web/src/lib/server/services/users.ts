@@ -7,6 +7,28 @@ import { session, user } from '../db/schema';
 import { AppError } from '../errors';
 import { parse } from '../validation';
 
+/**
+ * Backlog の取り込みで、登録者・コメントの投稿者に対応する人がいないときに使う専用のユーザー。
+ * account 行がないのでログインできず、無効化済みなので担当者・メンション・通知の対象にもならない。
+ * ユーザーの一覧には出さない。最初に必要になった取り込みの batch で作る
+ */
+export const UNKNOWN_USER_ID = 'unknown-user';
+export const UNKNOWN_USER_NAME = '不明なユーザー';
+
+/** 不明なユーザーを作る文（既にあれば何もしない）。取り込みの batch に入れる */
+export function unknownUserInsert(db: DB) {
+	return db
+		.insert(user)
+		.values({
+			id: UNKNOWN_USER_ID,
+			name: UNKNOWN_USER_NAME,
+			email: 'unknown-user@invalid',
+			role: 'guest',
+			disabledAt: new Date()
+		})
+		.onConflictDoNothing();
+}
+
 export async function listUsers(ctx: AppContext) {
 	authorize(ctx.actor, 'user:manage');
 	return ctx.db
@@ -19,6 +41,7 @@ export async function listUsers(ctx: AppContext) {
 			createdAt: user.createdAt
 		})
 		.from(user)
+		.where(ne(user.id, UNKNOWN_USER_ID))
 		.orderBy(asc(user.createdAt));
 }
 

@@ -32,23 +32,16 @@ describe('projects', () => {
 		outsider = await seedUser(db, 'member', 'outsider');
 	});
 
-	it('プロジェクト名をそのままキーにして作る。名前もキーと同じく大文字にそろえる', async () => {
+	it('キーにはアンダースコアと 25 文字までの長さを使える', async () => {
 		const ctx = ctxOf(base, admin);
-		expect(await createProject(ctx, { name: 'web_app' })).toEqual({ key: 'WEB_APP' });
-		expect(await requireProject(ctx, 'WEB_APP')).toMatchObject({
-			key: 'WEB_APP',
-			name: 'WEB_APP',
-			description: ''
-		});
-		expect(await createProject(ctx, { name: ' ' + 'A'.repeat(25) + ' ' })).toEqual({
+		expect(await createProject(ctx, { key: 'web_app', name: 'W' })).toEqual({ key: 'WEB_APP' });
+		expect(await createProject(ctx, { key: 'A'.repeat(25), name: 'L' })).toEqual({
 			key: 'A'.repeat(25)
 		});
-		for (const name of ['A'.repeat(26), '_ABC', 'A', 'AB-C', '1AB', 'デモ', 'MY APP', '']) {
-			await expect(createProject(ctx, { name })).rejects.toMatchObject({
+		for (const key of ['A'.repeat(26), '_ABC', 'A', 'AB-C', '1AB']) {
+			await expect(createProject(ctx, { key, name: 'X' })).rejects.toMatchObject({
 				code: 'validation',
-				message:
-					'プロジェクト名は英字で始まる2〜25文字の英数字とアンダースコア（_）で入力してください',
-				fields: { name: expect.any(Array) }
+				message: 'キーは英字で始まる2〜25文字の英数字とアンダースコア（_）で入力してください'
 			});
 		}
 		expect(await updateProject(ctx, 'WEB_APP', { key: 'long_project_key_01', name: 'W' })).toEqual({
@@ -56,16 +49,19 @@ describe('projects', () => {
 		});
 	});
 
-	it('admin だけが作れる。使われているキーと同じ名前は conflict', async () => {
-		expect(await createProject(ctxOf(base, admin), { name: 'acme' })).toEqual({ key: 'ACME' });
-		await expect(createProject(ctxOf(base, admin), { name: 'ACME' })).rejects.toMatchObject({
-			code: 'conflict',
-			message: 'このプロジェクト名は既に使われています',
-			fields: { name: ['このプロジェクト名は既に使われています'] }
-		});
-		await expect(createProject(ctxOf(base, member), { name: 'NEW' })).rejects.toMatchObject({
-			code: 'forbidden'
-		});
+	it('admin はキーを大文字にしてプロジェクトを作れる。重複キーは conflict', async () => {
+		expect(
+			await createProject(ctxOf(base, admin), { key: 'acme', name: 'Acme', description: '' })
+		).toEqual({ key: 'ACME' });
+		await expect(
+			createProject(ctxOf(base, admin), { key: 'ACME', name: 'X', description: '' })
+		).rejects.toMatchObject({ code: 'conflict' });
+		await expect(
+			createProject(ctxOf(base, admin), { key: '1BAD', name: 'X', description: '' })
+		).rejects.toMatchObject({ code: 'validation' });
+		await expect(
+			createProject(ctxOf(base, member), { key: 'NEW', name: 'X', description: '' })
+		).rejects.toMatchObject({ code: 'forbidden' });
 	});
 
 	it('参加していないプロジェクトは一覧に出ず、開くと not_found', async () => {
@@ -116,7 +112,7 @@ describe('projects', () => {
 	});
 
 	it('作成すると既定のステータスと課題種別が用意される', async () => {
-		await createProject(ctxOf(base, admin), { name: 'NEW' });
+		await createProject(ctxOf(base, admin), { key: 'NEW', name: 'New' });
 		const ctx = ctxOf(base, admin);
 		expect((await listStatuses(ctx, 'NEW')).map((s) => s.name)).toEqual([
 			'未着手',

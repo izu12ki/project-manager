@@ -20,22 +20,26 @@
 		{#if form?.message}<FormAlert message={form.message} />{/if}
 		<div class="field">
 			<label class="label" for="name">プロジェクト名</label>
+			<input class="input" id="name" name="name" required maxlength={100} />
+		</div>
+		<div class="field">
+			<label class="label" for="key">キー</label>
 			<input
 				class="input mono uppercase"
-				style="max-width: 280px"
-				id="name"
-				name="name"
+				style="max-width: 200px"
+				id="key"
+				name="key"
 				required
 				pattern={PROJECT_KEY_INPUT_PATTERN}
 				minlength={2}
 				maxlength={PROJECT_KEY_MAX}
-				placeholder="WEB_APP"
-				aria-describedby="name-hint"
-				aria-invalid={form?.fields?.name ? true : undefined}
+				placeholder="WEB"
+				aria-describedby="key-hint"
+				aria-invalid={form?.fields?.key ? true : undefined}
 			/>
-			{#if form?.fields?.name}<p class="field-error">{form.fields.name[0]}</p>{/if}
-			<p class="hint" id="name-hint">
-				{PROJECT_KEY_RULE}。そのままキー（課題番号の接頭辞）になります。名前とキーはあとから設定画面で別々に変えられます。
+			{#if form?.fields?.key}<p class="field-error">{form.fields.key[0]}</p>{/if}
+			<p class="hint" id="key-hint">
+				{PROJECT_KEY_RULE}。課題番号の接頭辞になります（あとから設定画面で変えられます）。
 			</p>
 		</div>
 		<div class="flex justify-end gap-2">

@@ -36,6 +36,7 @@ import { listStatusesOf } from './issue-fields';
 import {
 	StatusSchema,
 	assertStatusIn,
+	categoryIdsValue,
 	createEventsOf,
 	describeChanges,
 	loadFieldSets,
@@ -44,7 +45,8 @@ import {
 	preparePatch,
 	type IssuePatch,
 	type IssueRow,
-	updateEventsOf
+	updateEventsOf,
+	withCategoryGuard
 } from './issue-input';
 import { assertWritable, forgetProject, requireProject, type ProjectRow } from './projects';
 
@@ -347,6 +349,7 @@ export async function createIssue(
 			.where(eq(project.id, p.id)),
 		ctx.db.insert(issue).values({
 			...values,
+			categoryIds: categoryIdsValue(p.id, values.categoryIds ?? []),
 			projectId: p.id,
 			number: sql`(select ${project.nextIssueNumber} - 1 from ${project} where ${project.id} = ${p.id})`,
 			position
@@ -371,7 +374,10 @@ async function applyPatch(
 	patch: IssuePatch,
 	changes: IssueChangeItem[]
 ): Promise<void> {
-	const update = ctx.db.update(issue).set(patch).where(eq(issue.id, cur.id));
+	const update = ctx.db
+		.update(issue)
+		.set(withCategoryGuard(cur.projectId, patch))
+		.where(eq(issue.id, cur.id));
 	if (changes.length === 0) {
 		await update;
 		return;

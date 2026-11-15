@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
-import { eq } from 'drizzle-orm';
-import { issue as issueTable, user as userTable } from '../db/schema';
+import { eq, sql } from 'drizzle-orm';
+import { readdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { project as projectTable, issue as issueTable, user as userTable } from '../db/schema';
 import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
 import {
 	createIssue,
@@ -18,6 +20,7 @@ import {
 	updateIssue
 } from './issues';
 import { createCategory, listCategories, listIssueTypes } from './issue-fields';
+import { categoryIdsValue } from './issue-input';
 import { setProjectArchived } from './projects';
 
 describe('issues', () => {
@@ -450,6 +453,67 @@ describe('issues', () => {
 		expect(changes.map((c) => c.changes)).toEqual([
 			[{ field: 'status', from: '未着手', to: '完了' }]
 		]);
+	});
+
+	describe('削除済みのカテゴリー ID', () => {
+		async function setup() {
+			await createCategory(as(admin), 'ACME', { name: 'c1' });
+			await createCategory(as(admin), 'ACME', { name: 'c2' });
+			await seedProject(db, { key: 'OTHER' });
+			await createCategory(as(admin), 'OTHER', { name: 'o1' });
+			const [c1, c2] = (await listCategories(as(admin), 'ACME')).map((c) => c.id);
+			const [o1] = (await listCategories(as(admin), 'OTHER')).map((c) => c.id);
+			const [p] = await db
+				.select({ id: projectTable.id })
+				.from(projectTable)
+				.where(eq(projectTable.key, 'ACME'));
+			return { c1, c2, o1, projectId: p.id };
+		}
+		const categoriesOf = async (id: string) =>
+			(
+				await db
+					.select({ categoryIds: issueTable.categoryIds })
+					.from(issueTable)
+					.where(eq(issueTable.id, id))
+			)[0].categoryIds;
+		const insertIssue = (projectId: string, id: string, number: number, categoryIds: unknown) =>
+			db.insert(issueTable).values({
+				id,
+				projectId,
+				number,
+				title: id,
+				reporterId: admin.id,
+				position: `a${number}`,
+				categoryIds: categoryIds as string[]
+			});
+
+		it('書き込む時点でないカテゴリーは課題に残さない', async () => {
+			const { c1, c2, o1, projectId } = await setup();
+			await insertIssue(projectId, 'i1', 1, categoryIdsValue(projectId, [c1, 'gone', o1, c2]));
+			await insertIssue(projectId, 'i2', 2, categoryIdsValue(projectId, ['gone']));
+			await insertIssue(projectId, 'i3', 3, categoryIdsValue(projectId, []));
+			expect(await categoriesOf('i1')).toEqual([c1, c2]);
+			expect(await categoriesOf('i2')).toEqual([]);
+			expect(await categoriesOf('i3')).toEqual([]);
+		});
+
+		it('マイグレーションで、存在しないカテゴリー ID を課題から外す', async () => {
+			const { c1, c2, o1, projectId } = await setup();
+			const updatedAt = new Date('2026-01-01T00:00:00Z');
+			await insertIssue(projectId, 'i1', 1, [c1, 'gone', o1]);
+			await insertIssue(projectId, 'i2', 2, [c2, c1]);
+			await insertIssue(projectId, 'i3', 3, []);
+			await db.update(issueTable).set({ updatedAt });
+			const dir = fileURLToPath(new URL('../../../../drizzle', import.meta.url));
+			const name = readdirSync(dir).find((d) => d.endsWith('_issue_category_ids_cleanup'));
+			expect(name).toBeDefined();
+			await db.run(sql.raw(readFileSync(`${dir}/${name}/migration.sql`, 'utf8')));
+			expect(await categoriesOf('i1')).toEqual([c1]);
+			expect(await categoriesOf('i2')).toEqual([c2, c1]);
+			expect(await categoriesOf('i3')).toEqual([]);
+			const rows = await db.select({ updatedAt: issueTable.updatedAt }).from(issueTable);
+			expect(rows.every((r) => r.updatedAt.getTime() === updatedAt.getTime())).toBe(true);
+		});
 	});
 
 	it('アンダースコアを含むキーでも課題キー（web_app-2）で検索できる', async () => {

@@ -1,6 +1,6 @@
 // 課題の起票・更新の入力検証と、書き込む値の組み立て。1 件の起票・更新と一括 API の両方から使う。
 // DB に触れない同期関数にしておき、問い合わせは loadFieldSets でまとめて先に済ませる。
-import { asc, eq, inArray } from 'drizzle-orm';
+import { asc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
 import {
@@ -200,6 +200,22 @@ function assertCategoriesIn(fields: FieldSets, ids: string[]): void {
 /** プロジェクトのカテゴリー順に並べる（存在しない ID は除く。検証は assertCategoriesIn で行う） */
 const inCategoryOrder = (fields: FieldSets, ids: readonly string[]): string[] =>
 	[...fields.categoryIds.keys()].filter((id) => ids.includes(id));
+
+/**
+ * categoryIds 列に書き込む値。書き込む時点でプロジェクトにあるカテゴリーだけを、渡した順で残す。
+ * 検証（loadFieldSets）と書き込みの間にカテゴリーが削除されても、JSON 列には外部キーがないので ID が残ってしまうため
+ */
+export function categoryIdsValue(projectId: string, ids: readonly string[]): string[] | SQL {
+	if (ids.length === 0) return [];
+	return sql`(select json_group_array(value) from json_each(${JSON.stringify(ids)}) where value in (select ${category.id} from ${category} where ${category.projectId} = ${projectId}))`;
+}
+
+/** 更新の値。categoryIds を変えるときは categoryIdsValue で書く */
+export function withCategoryGuard(projectId: string, patch: IssuePatch) {
+	return patch.categoryIds === undefined
+		? patch
+		: { ...patch, categoryIds: categoryIdsValue(projectId, patch.categoryIds) };
+}
 
 /** 新しく割り当てる場合に使う。完了済みのマイルストーンは割り当てられない。 */
 function assertMilestoneIn(fields: FieldSets, id: string): void {

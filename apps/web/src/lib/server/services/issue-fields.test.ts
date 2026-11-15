@@ -24,6 +24,8 @@ import {
 	updateMilestone
 } from './issue-fields';
 import { createIssue, getIssue, listBoard, listIssues, updateIssue } from './issues';
+import { eq } from 'drizzle-orm';
+import { category, project } from '../db/schema';
 
 describe('issue-fields', () => {
 	let db: DB;
@@ -50,6 +52,17 @@ describe('issue-fields', () => {
 		});
 		expect((await listCategories(as(member), 'ACME')).map((c) => c.name)).toEqual([
 			'フロントエンド'
+		]);
+	});
+
+	it('作成日時が同じカテゴリーは ID 順に並ぶ', async () => {
+		const [p] = await db.select({ id: project.id }).from(project).where(eq(project.key, 'ACME'));
+		const createdAt = new Date('2026-01-01T00:00:00Z');
+		await db.insert(category).values({ id: '0192-b', projectId: p.id, name: 'A', createdAt });
+		await db.insert(category).values({ id: '0192-a', projectId: p.id, name: 'B', createdAt });
+		expect((await listCategories(as(member), 'ACME')).map((c) => c.id)).toEqual([
+			'0192-a',
+			'0192-b'
 		]);
 	});
 

@@ -408,7 +408,8 @@
 	.input[aria-invalid='true'] {
 		border-color: var(--destructive);
 	}
-	.input:read-only:not([type='date']),
+	/* ファイル選択はいつも :read-only に当たるので除く（無効なときは :disabled で灰色になる） */
+	.input:read-only:not([type='date'], [type='file']),
 	.input:disabled,
 	.select:disabled,
 	.textarea:disabled {

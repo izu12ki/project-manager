@@ -54,7 +54,8 @@ describe('invitations', () => {
 		expect(await getInvitationByToken(db, tokenOf(url))).toEqual({
 			email: 'guest@example.com',
 			role: 'guest',
-			projectNames: ['Acme']
+			projectNames: ['Acme'],
+			name: null
 		});
 	});
 
@@ -64,6 +65,60 @@ describe('invitations', () => {
 				createInvitation(ctxOf(base, admin), { email: 'g@example.com', role, projectIds: [] })
 			).rejects.toMatchObject({ code: 'validation' });
 		}
+	});
+
+	it('管理者のロールなら参加プロジェクトなしで招待できる', async () => {
+		const { url } = await createInvitation(ctxOf(base, admin), {
+			email: 'a2@example.com',
+			role: 'admin',
+			projectIds: []
+		});
+		expect(base.sent[0].subject).toContain('Project Manager');
+		await acceptInvitation(base, { token: tokenOf(url), name: 'A2', password: 'password-1234' });
+		const [u] = await db.select().from(user).where(eq(user.email, 'a2@example.com'));
+		expect(
+			await db.select().from(projectMember).where(eq(projectMember.userId, u.id))
+		).toHaveLength(0);
+	});
+
+	it('招待に名前を持たせると、招待を受ける画面に出る', async () => {
+		const { url } = await createInvitation(ctxOf(base, admin), {
+			email: 'n@example.com',
+			role: 'member',
+			projectIds: [projectId],
+			name: ' 鈴木 花子 '
+		});
+		expect((await getInvitationByToken(db, tokenOf(url)))?.name).toBe('鈴木 花子');
+	});
+
+	it('名前なしで招待し直すと前の招待の名前を引き継ぎ、再発行でも残る', async () => {
+		const ctx = ctxOf(base, admin);
+		await createInvitation(ctx, {
+			email: 'n@example.com',
+			role: 'member',
+			projectIds: [projectId],
+			name: '鈴木 花子'
+		});
+		const { url } = await createInvitation(ctx, {
+			email: 'n@example.com',
+			role: 'member',
+			projectIds: [projectId]
+		});
+		expect((await getInvitationByToken(db, tokenOf(url)))?.name).toBe('鈴木 花子');
+		const [row] = await db.select().from(invitation);
+		const { url: again } = await reissueInvitation(ctx, row.id);
+		expect((await getInvitationByToken(db, tokenOf(again)))?.name).toBe('鈴木 花子');
+	});
+
+	it('名前が 51 文字なら validation', async () => {
+		await expect(
+			createInvitation(ctxOf(base, admin), {
+				email: 'n@example.com',
+				role: 'member',
+				projectIds: [projectId],
+				name: 'あ'.repeat(51)
+			})
+		).rejects.toMatchObject({ code: 'validation' });
 	});
 
 	it('複数のプロジェクトに招待でき、受諾するとすべてに参加する', async () => {

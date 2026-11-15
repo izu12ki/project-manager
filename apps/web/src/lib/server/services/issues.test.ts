@@ -452,6 +452,14 @@ describe('issues', () => {
 		]);
 	});
 
+	it('アンダースコアを含むキーでも課題キー（web_app-2）で検索できる', async () => {
+		await seedProject(db, { key: 'WEB_APP', members: [member] });
+		await createIssue(as(member), 'WEB_APP', { title: 'one' });
+		await createIssue(as(member), 'WEB_APP', { title: 'two' });
+		const found = await listIssues(as(member), 'WEB_APP', { q: 'web_app-2' });
+		expect(found.map((i) => i.number)).toEqual([2]);
+	});
+
 	it('別プロジェクトの課題は番号を推測しても見えない', async () => {
 		await seedProject(db, { key: 'OTHER' });
 		await createIssue(as(admin), 'OTHER', { title: 'secret' });

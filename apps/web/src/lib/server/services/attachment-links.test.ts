@@ -21,6 +21,19 @@ describe('referencedAttachmentIds', () => {
 	});
 });
 
+describe('referencedAttachmentIds のキー形式', () => {
+	const a = '0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b';
+	it('アンダースコアを含む長いキーの添付 URL も取り出す', () => {
+		expect(referencedAttachmentIds(`![a](/projects/LONG_PROJECT_KEY_01/attachments/${a})`)).toEqual(
+			[a]
+		);
+	});
+	it('1 文字や 26 文字のキーは取り出さない', () => {
+		expect(referencedAttachmentIds(`/projects/A/attachments/${a}`)).toEqual([]);
+		expect(referencedAttachmentIds(`/projects/${'A'.repeat(26)}/attachments/${a}`)).toEqual([]);
+	});
+});
+
 describe('attachment links', () => {
 	let db: DB;
 	let base: ReturnType<typeof createTestBase>;

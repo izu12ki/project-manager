@@ -372,6 +372,10 @@
 			border-color 0.15s ease,
 			box-shadow 0.15s ease;
 	}
+	/* ファイル選択は、ブラウザ標準のボタンと「選択されていません」の文字が上に寄るので、行の高さで縦の中央にそろえる */
+	.input[type='file'] {
+		line-height: calc(2rem - 2px);
+	}
 	.textarea {
 		height: auto;
 		padding: 8px 12px;
@@ -404,7 +408,8 @@
 	.input[aria-invalid='true'] {
 		border-color: var(--destructive);
 	}
-	.input:read-only:not([type='date']),
+	/* ファイル選択はいつも :read-only に当たるので除く（無効なときは :disabled で灰色になる） */
+	.input:read-only:not([type='date'], [type='file']),
 	.input:disabled,
 	.select:disabled,
 	.textarea:disabled {

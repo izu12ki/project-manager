@@ -910,6 +910,68 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(roleSelect).toHaveValue('member');
 	await expect(roleSelect.locator('option:checked')).toHaveText('メンバー');
 
+	// 16. Backlog のユーザー CSV からまとめて招待（アンダースコア入り・長いキーのプロジェクトへ）
+	for (const [key, name] of [
+		['DEMO', 'デモ'],
+		['WEB_APP', 'ウェブアプリ'],
+		['LONG_PROJECT_KEY_01', '長いキーのプロジェクト']
+	]) {
+		await page.goto('/admin/projects/new');
+		await page.getByLabel('キー').fill(key.toLowerCase());
+		await page.getByLabel('プロジェクト名').fill(name);
+		await page.getByRole('button', { name: '作成' }).click();
+		await expect(page).toHaveURL(new RegExp(`/projects/${key}$`));
+	}
+	await page.goto('/admin/users');
+	await page.getByLabel('ユーザー CSV').setInputFiles('src/lib/testdata/backlog/users.csv');
+	await expect(page.getByText('まだ存在しないプロジェクトがあります')).toBeVisible();
+	await expect(page.getByTestId('missing-keys')).toHaveText('MISSING_KEY');
+	const preview = page.getByRole('table', { name: '取り込む内容' });
+	// hasText の文字列は大文字小文字を区別しない。別名の行も同じアドレス（小文字化後）なので名前で絞る
+	const rowOf = (text: string) =>
+		preview.getByRole('row').filter({ hasText: text, hasNotText: '別名' });
+	await expect(rowOf('鈴木 花子')).toContainText('デモ、長いキーのプロジェクト');
+	await expect(rowOf('渡辺 直子')).toContainText('Backlog で有効でない');
+	await expect(rowOf('開発 花子')).toContainText('参加を追加');
+	await expect(rowOf('伊藤 健')).toContainText('参加できるプロジェクトがない');
+	await page.getByLabel('佐藤 次郎 さんの招待ロール').selectOption('guest');
+	await expect(page.getByRole('button', { name: '取り込む（7 人）' })).toBeVisible();
+	await page.getByRole('checkbox', { name: '架空商事 小林 を取り込む' }).uncheck();
+	// 実行ボタンの上に、取り込まない理由の内訳と「参加できるプロジェクトがない」の説明が出る
+	const summary = page.getByTestId('import-summary');
+	await expect(summary).toContainText(
+		'招待 5 人、参加の追加 1 人。取り込まない人 4 人（Backlog で有効でない 1、CSV 内でメールアドレスが重複 1、参加できるプロジェクトがない 1、チェックを外した 1）'
+	);
+	await expect(summary).toContainText('招待ロールが管理者でなければ招待できません');
+	await page.getByRole('button', { name: '取り込む（6 人）' }).click();
+	await expect(
+		page.getByText(
+			'招待 5 人、参加の追加 1 人、取り込まなかった人 4 人（Backlog で有効でない 1、CSV 内でメールアドレスが重複 1、参加できるプロジェクトがない 1、チェックを外した 1）'
+		)
+	).toBeVisible();
+	// 選んだロールで招待され、チェックを外した人は招待されていない
+	const invites = page.locator('.invite');
+	await expect(invites.filter({ hasText: 'jiro.sato@example.com' })).toContainText('ゲスト');
+	await expect(invites.filter({ hasText: 'kobayashi@example.com' })).toHaveCount(0);
+	// 招待を受ける画面に Backlog のハンドルネームが入っている
+	const suzuki = page.locator('.invite', { hasText: 'hanako.suzuki@example.com' });
+	await suzuki.getByRole('button', { name: 'リンクを再発行' }).click();
+	const suzukiUrl = await page.getByLabel('招待リンク').inputValue();
+	await logout(page);
+	await page.goto(suzukiUrl);
+	await expect(page.getByLabel('名前')).toHaveValue('鈴木 花子');
+	await page.getByLabel('パスワード').fill(PW);
+	await page.getByRole('button', { name: '登録する' }).click();
+	await expect(page).toHaveURL(HOME);
+	// サイドバーにも同じリンクがあるので、ホームの一覧に絞る
+	await expect(
+		page.getByRole('main').getByRole('link', { name: '長いキーのプロジェクト' })
+	).toBeVisible();
+	await page.goto('/projects/LONG_PROJECT_KEY_01');
+	await expect(page.getByRole('heading', { name: '長いキーのプロジェクト' })).toBeVisible();
+	await logout(page);
+	await login(page, 'admin@example.com');
+
 	// 9. 管理者は /account で API キーを作成・無効化できる。メンバーには欄が出ない
 	await page.goto('/account');
 	const apiKeyCard = page.locator('.card', {

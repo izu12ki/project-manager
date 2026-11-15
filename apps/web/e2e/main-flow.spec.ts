@@ -125,6 +125,23 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 
 	// 4. ゲスト招待（プロジェクト設定から）
 	await page.goto('/projects/ACME/settings');
+	// アイコン画像を設定すると、サイドバーで文字の代わりに出る。外すと文字に戻る
+	const sidebarProject = page.locator('aside').getByRole('link', { name: /ACME サイト改修/ });
+	await expect(sidebarProject).toContainText('ACME');
+	const setIconImage = async () => {
+		await page
+			.getByLabel('画像', { exact: true })
+			.setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: PNG });
+		await page.getByRole('button', { name: '設定', exact: true }).click();
+		await expect(sidebarProject.getByTestId('project-icon-image')).toBeVisible();
+	};
+	await setIconImage();
+	const iconSrc = await sidebarProject.getByTestId('project-icon-image').getAttribute('src');
+	expect((await page.request.get(iconSrc!)).headers()['content-type']).toBe('image/png');
+	await page.getByRole('button', { name: '画像を外す' }).click();
+	await expect(sidebarProject.getByTestId('project-icon-image')).toBeHidden();
+	expect((await page.request.get(iconSrc!)).status()).toBe(404);
+	await setIconImage();
 	await page.getByLabel('ゲストのメールアドレス').fill('guest@example.com');
 	await page.getByRole('button', { name: 'ゲストを招待' }).click();
 	const guestUrl = await page.getByLabel('招待リンク').inputValue();
@@ -145,6 +162,13 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 
 	// 5. ゲストが登録して起票
 	await acceptInvite(page, guestUrl, '顧客 太郎');
+	// 参加者（ゲスト）にもアイコン画像が出る
+	const homeIcon = page
+		.getByRole('main')
+		.getByRole('link', { name: /ACME サイト改修/ })
+		.getByTestId('project-icon-image');
+	await expect(homeIcon).toBeVisible();
+	expect(await homeIcon.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
 	await page
 		.getByRole('main')
 		.getByRole('link', { name: /ACME サイト改修/ })

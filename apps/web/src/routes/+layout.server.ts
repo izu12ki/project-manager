@@ -11,6 +11,7 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			key: p.key,
 			name: p.name,
 			icon: p.icon,
+			iconImageId: p.iconImageId,
 			color: p.color,
 			archived: !!p.archivedAt
 		}))

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { Archive, ChartGantt, List, Plus, Settings, SquareKanban } from '@lucide/svelte';
-	import { projectColor, projectIcon } from '#lib/labels.ts';
+	import ProjectIcon from '#lib/components/ProjectIcon.svelte';
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();
@@ -25,11 +25,7 @@
 		<div class="flex flex-wrap items-end justify-between gap-4">
 			<div class="grid min-w-0 gap-1">
 				<div class="flex flex-wrap items-center gap-3">
-					<span
-						class="avatar avatar-square"
-						style="--size: 32px"
-						style:--c={projectColor(data.project)}>{projectIcon(data.project)}</span
-					>
+					<ProjectIcon project={data.project} />
 					<h1 class="page-title">{data.project.name}</h1>
 					<span class="mono text-xs font-medium text-muted-foreground">{data.project.key}</span>
 				</div>

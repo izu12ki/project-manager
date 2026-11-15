@@ -112,6 +112,9 @@ export const project = sqliteTable(
 		description: text().notNull().default(''),
 		/** アイコンに出す文字（絵文字など）。null はキーの頭文字 */
 		icon: text(),
+		/** アイコン画像。設定すると文字の代わりに出す。R2 のキーは project-icon/{id} */
+		iconImageId: text('icon_image_id'),
+		iconImageType: text('icon_image_type'),
 		/** null はキーから自動で選ぶ */
 		color: text({ enum: COLORS }),
 		nextIssueNumber: integer('next_issue_number').notNull().default(1),

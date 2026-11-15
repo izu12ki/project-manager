@@ -19,6 +19,10 @@
 	<form method="POST" use:enhance class="card">
 		{#if form?.message}<FormAlert message={form.message} />{/if}
 		<div class="field">
+			<label class="label" for="name">プロジェクト名</label>
+			<input class="input" id="name" name="name" required maxlength={100} />
+		</div>
+		<div class="field">
 			<label class="label" for="key">キー</label>
 			<input
 				class="input mono uppercase"
@@ -37,14 +41,6 @@
 			<p class="hint" id="key-hint">
 				{PROJECT_KEY_RULE}。課題番号の接頭辞になります（あとから設定画面で変えられます）。
 			</p>
-		</div>
-		<div class="field">
-			<label class="label" for="name">プロジェクト名</label>
-			<input class="input" id="name" name="name" required maxlength={100} />
-		</div>
-		<div class="field">
-			<label class="label" for="description">説明</label>
-			<textarea class="textarea" id="description" name="description" rows="3"></textarea>
 		</div>
 		<div class="flex justify-end gap-2">
 			<a href="/" class="btn btn-outline">キャンセル</a>

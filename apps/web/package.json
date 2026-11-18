@@ -56,7 +56,7 @@
 		"#lib/*": "./src/lib/*"
 	},
 	"dependencies": {
-		"@better-auth/drizzle-adapter": "1.7.23",
+		"@better-auth/drizzle-adapter": "1.7.25",
 		"@lexical/clipboard": "0.53.0",
 		"@lexical/code-core": "0.53.0",
 		"@lexical/extension": "0.53.0",
@@ -70,7 +70,7 @@
 		"@lexical/utils": "0.53.0",
 		"@libsql/client": "0.18.0",
 		"@lucide/svelte": "^1.69.0",
-		"better-auth": "1.7.23",
+		"better-auth": "1.7.25",
 		"diff": "9.0.0",
 		"drizzle-orm": "1.0.0-rc.5",
 		"fractional-indexing": "4.0.0",

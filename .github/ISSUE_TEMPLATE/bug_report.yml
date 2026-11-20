@@ -1,0 +1,71 @@
+name: 不具合の報告
+description: 期待どおりに動かない点を報告する
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        報告ありがとうございます。**脆弱性は、この Issue ではなく [SECURITY.md](https://github.com/izu12ki/project-manager/blob/main/SECURITY.md) の手順で非公開で報告してください。**
+
+        ログやスクリーンショットに、API キー・シークレット・メールアドレスなどの個人情報が含まれていないか確かめてから送ってください。
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 起きたこと
+      description: 何をしたときに、何が起きたか
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順
+      description: ログインしているユーザーのロール（管理者・メンバー・ゲスト）も書いてください
+      placeholder: |
+        1. メンバーでログインする
+        2. 課題一覧で ... を押す
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待した動作
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: バージョン
+      description: リリースタグ（`web@x.y.z`）か、コミットのハッシュ
+      placeholder: web@0.2.0
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: 動かしている環境
+      options:
+        - 自分でデプロイした Cloudflare Workers
+        - ローカルの開発環境（pnpm dev）
+        - その他
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: ブラウザと OS
+      placeholder: Chrome 140 / macOS 26
+  - type: textarea
+    id: logs
+    attributes:
+      label: ログ・スクリーンショット
+      description: ブラウザのコンソールや `wrangler tail` の出力があれば貼ってください
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 確認
+      options:
+        - label: 同じ内容の Issue がないことを検索して確かめた
+          required: true
+        - label: シークレットや個人情報を含めていない
+          required: true

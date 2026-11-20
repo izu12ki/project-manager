@@ -1001,6 +1001,25 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	).toBeVisible();
 	await page.goto('/projects/LONG_PROJECT_KEY_01');
 	await expect(page.getByRole('heading', { name: '長いキーのプロジェクト' })).toBeVisible();
+	// キーが長くても、課題一覧のキーは 1 行に収まり、隣のタイトルの列に重ならない
+	await page.goto('/projects/LONG_PROJECT_KEY_01/issues/new');
+	await page.getByLabel('タイトル').fill('長いキーの課題');
+	await page.getByRole('button', { name: '起票する' }).first().click();
+	await expect(page).toHaveURL(/\/projects\/LONG_PROJECT_KEY_01\/issues\/1$/);
+	await page.goto('/projects/LONG_PROJECT_KEY_01');
+	const longKeyCells = page.getByRole('row', { name: /長いキーの課題/ }).getByRole('cell');
+	await expect(longKeyCells.first()).toHaveText('LONG_PROJECT_KEY_01-1');
+	const keyLayout = await longKeyCells.evaluateAll(([key, title]) => {
+		const text = document.createRange();
+		text.selectNodeContents(key);
+		return {
+			lines: text.getClientRects().length,
+			right: text.getBoundingClientRect().right,
+			titleLeft: title.getBoundingClientRect().left
+		};
+	});
+	expect(keyLayout.lines).toBe(1);
+	expect(keyLayout.right).toBeLessThanOrEqual(keyLayout.titleLeft);
 	await logout(page);
 	await login(page, 'admin@example.com');
 

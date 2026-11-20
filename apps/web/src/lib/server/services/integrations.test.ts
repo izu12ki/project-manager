@@ -99,4 +99,11 @@ describe('integrations (slack)', () => {
 			{ userId: other.id }
 		]);
 	});
+
+	it('閲覧者はオン・オフできない（Slack を引きに行かない）', async () => {
+		me = await seedUser(db, 'viewer');
+		await expect(enableSlack(ctx())).rejects.toMatchObject({ code: 'forbidden' });
+		await expect(disableSlack(ctx())).rejects.toMatchObject({ code: 'forbidden' });
+		expect(urls).toEqual([]);
+	});
 });

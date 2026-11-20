@@ -67,6 +67,20 @@ export function can(actor: Actor, action: Action, res: Resource = {}): boolean {
 	}
 }
 
+/** 閲覧者でも呼べる better-auth の書き込み（ログイン・ログアウト） */
+const AUTH_API_ALWAYS = new Set(['/api/auth/sign-in/email', '/api/auth/sign-out']);
+
+/**
+ * better-auth の API（/api/auth/*）を呼んでよいか。
+ * パスワード変更・セッション失効などは can() を通らないので、閲覧者はここで止める
+ * （公開デモの共用アカウントで、パスワードを変えて他の人を締め出せないようにする）
+ */
+export function canCallAuthApi(actor: Actor | null, method: string, pathname: string): boolean {
+	if (!actor || !pathname.startsWith('/api/auth/')) return true;
+	if (method === 'GET' || method === 'HEAD' || AUTH_API_ALWAYS.has(pathname)) return true;
+	return can(actor, 'account:modify');
+}
+
 export function authorize(actor: Actor, action: Action, res?: Resource): void {
 	if (!can(actor, action, res)) throw new AppError('forbidden', 'この操作を行う権限がありません');
 }

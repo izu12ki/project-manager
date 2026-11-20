@@ -1,4 +1,5 @@
 import { and, eq } from 'drizzle-orm';
+import { authorize } from '../authz';
 import type { AppContext } from '../context';
 import { userIntegration } from '../db/schema';
 import { AppError } from '../errors';
@@ -19,6 +20,7 @@ export async function getSlackStatus(
 
 /** ログイン用メールアドレスで Slack のユーザーを探して保存し、確認 DM を送る */
 export async function enableSlack(ctx: AppContext): Promise<void> {
+	authorize(ctx.actor, 'account:modify');
 	const cfg = channelConfig(ctx, 'slack');
 	if (!cfg) throw new AppError('validation', 'Slack 連携は未設定です（管理者に連絡してください）');
 	const email = ctx.actor.email;
@@ -47,5 +49,6 @@ export async function enableSlack(ctx: AppContext): Promise<void> {
 }
 
 export async function disableSlack(ctx: AppContext): Promise<void> {
+	authorize(ctx.actor, 'account:modify');
 	await ctx.db.delete(userIntegration).where(mine(ctx));
 }

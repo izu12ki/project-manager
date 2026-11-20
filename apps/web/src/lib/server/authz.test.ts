@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { can, type Action, type Actor } from './authz';
+import { can, canCallAuthApi, type Action, type Actor } from './authz';
 
 const admin: Actor = { id: 'a', name: 'A', email: 'a@x', role: 'admin' };
 const member: Actor = { id: 'm', name: 'M', email: 'm@x', role: 'member' };
@@ -38,5 +38,36 @@ describe('can', () => {
 		expect(can(member, action, res)).toBe(m);
 		expect(can(guest, action, res)).toBe(g);
 		expect(can(viewer, action, res)).toBe(v);
+	});
+});
+
+describe('canCallAuthApi', () => {
+	it.each([
+		['POST', '/api/auth/change-password'],
+		['POST', '/api/auth/update-user'],
+		['POST', '/api/auth/revoke-sessions'],
+		['POST', '/api/auth/revoke-other-sessions'],
+		['POST', '/api/auth/change-email']
+	])('閲覧者は %s %s を呼べない', (method, path) => {
+		expect(canCallAuthApi(viewer, method, path)).toBe(false);
+	});
+
+	it.each([
+		['POST', '/api/auth/sign-in/email'],
+		['POST', '/api/auth/sign-out'],
+		['GET', '/api/auth/get-session'],
+		['HEAD', '/api/auth/get-session']
+	])('閲覧者もログイン・ログアウト・読み取り（%s %s）はできる', (method, path) => {
+		expect(canCallAuthApi(viewer, method, path)).toBe(true);
+	});
+
+	it('ほかのロールと未ログインは制限しない', () => {
+		expect(canCallAuthApi(member, 'POST', '/api/auth/change-password')).toBe(true);
+		expect(canCallAuthApi(guest, 'POST', '/api/auth/revoke-sessions')).toBe(true);
+		expect(canCallAuthApi(null, 'POST', '/api/auth/sign-in/email')).toBe(true);
+	});
+
+	it('/api/auth/ 以外のパスは対象外', () => {
+		expect(canCallAuthApi(viewer, 'POST', '/projects/ACME/attachments')).toBe(true);
 	});
 });

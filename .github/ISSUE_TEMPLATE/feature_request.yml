@@ -1,0 +1,40 @@
+name: 機能の提案
+description: 新しい機能や、今の機能の改善を提案する
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 困っていること
+      description: どんな場面で、何に困っているか。解決策より先に、課題を書いてください
+      placeholder: 顧客（ゲスト）に課題の期限を伝えたいが、...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 提案する解決策
+      description: こう動けば解決する、という案
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 検討した別の方法
+      description: 今のやり方で回避している方法や、他の案があれば
+  - type: dropdown
+    id: contribute
+    attributes:
+      label: 実装
+      options:
+        - 自分で Pull Request を送りたい
+        - 実装はお任せしたい
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 確認
+      options:
+        - label: 同じ内容の Issue がないことを検索して確かめた
+          required: true

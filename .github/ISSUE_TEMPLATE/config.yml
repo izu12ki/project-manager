@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 脆弱性の報告
+    url: https://github.com/izu12ki/project-manager/security/advisories/new
+    about: 脆弱性は公開の Issue にせず、こちらから非公開で報告してください
+  - name: ドキュメント
+    url: https://project-manager-docs.hirano-i.workers.dev
+    about: デプロイ・アップデート・設定の手順

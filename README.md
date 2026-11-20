@@ -20,6 +20,8 @@ pnpm docs:dev   # ドキュメント
 pnpm dev        # アプリ（事前に apps/web で .dev.vars と pnpm db:local が必要）
 ```
 
+Issue や Pull Request の送り方は [CONTRIBUTING.md](CONTRIBUTING.md) を参照してください。脆弱性は公開の Issue にせず、[SECURITY.md](SECURITY.md) の手順で報告してください。
+
 ## 外部 API と AI エージェント
 
 REST API（`/api/v1`）で、課題の一括起票やスケジュール作成、一括修正ができます。Claude Code 用の Skill も同梱しています。エンドポイントと項目は [`skills/project-manager/reference.md`](skills/project-manager/reference.md) を参照してください。

@@ -201,6 +201,16 @@
 				</div>
 			{/if}
 
+			{#if plan.longTitles.length > 0}
+				<div class="alert" data-testid="issue-import-long-titles">
+					<TriangleAlert color="var(--c-amber)" />
+					<p class="m-0">
+						次の課題は件名が200文字を超えるため、200文字に切り詰めて取り込みます。元の件名は本文の末尾に残します:
+						<span class="mono">{plan.longTitles.join('、')}</span>
+					</p>
+				</div>
+			{/if}
+
 			{#if plan.people.length > 0}
 				{#if unmatched.length > 0}
 					<div class="alert">

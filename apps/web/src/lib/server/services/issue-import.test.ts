@@ -203,7 +203,6 @@ describe('issue-import: plan', () => {
 		expect(p.rowErrors.map((e) => [e.rowNumber, e.key, e.reason])).toEqual([
 			[2, 'DEMO', 'キーの形式が正しくありません'],
 			[4, 'DEMO-100', 'CSV 内でキーが重複しています'],
-			[5, 'DEMO-4', '件名が200文字を超えています'],
 			[6, 'DEMO-5', '登録日の形式が正しくありません'],
 			[7, 'DEMO-6', '開始日の形式が正しくありません'],
 			[8, 'DEMO-7', '期限日の形式が正しくありません'],
@@ -212,7 +211,9 @@ describe('issue-import: plan', () => {
 			[11, 'DEMO-10', '詳細が50,000文字を超えています'],
 			[12, 'DEMO-11', 'コメントが20,000文字を超えています']
 		]);
-		expect(p.issues).toBe(2);
+		// 件名が 200 文字を超える行は、切り詰めて取り込む
+		expect(p.issues).toBe(3);
+		expect(p.longTitles).toEqual(['DEMO-4']);
 	});
 
 	it('取り込み済みのキーを返す（削除済みを含む）', async () => {
@@ -394,6 +395,18 @@ describe('issue-import: run', () => {
 		expect(byKey.get('DEMO-2')!.position > byKey.get('DEMO-1')!.position).toBe(true);
 		const [{ nextIssueNumber }] = await db.select().from(project);
 		expect(nextIssueNumber).toBe(5);
+	});
+
+	it('件名が 200 文字を超える課題は、切り詰めて取り込み、元の件名を本文の末尾に残す', async () => {
+		const long = 'あ'.repeat(198) + '😀😀'; // 202 文字（UTF-16）。199 文字目が絵文字の途中
+		await run([row({ title: long }), row({ title: 'い'.repeat(200) })]);
+		const byKey = await issuesByKey();
+		const cut = byKey.get('DEMO-1')!;
+		expect(cut.title).toBe('あ'.repeat(198) + '…');
+		expect(cut.description).toContain(`- 件名（Backlog）: ${long}`);
+		const kept = byKey.get('DEMO-2')!;
+		expect(kept.title).toBe('い'.repeat(200));
+		expect(kept.description).not.toContain('件名（Backlog）');
 	});
 
 	it('分けて取り込むと、前回の課題を親にし、子課題の子にはしない', async () => {

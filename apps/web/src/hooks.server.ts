@@ -5,7 +5,7 @@ import { sequence, type Handle, type HandleServerError } from '@sveltejs/kit/hoo
 import { svelteKitHandler, sveltekitCookies } from 'better-auth/svelte-kit';
 import { env, waitUntil } from 'cloudflare:workers';
 import { createAuth } from '#lib/server/auth.ts';
-import { canCallAuthApi, type Role } from '#lib/server/authz.ts';
+import { isAllowedAuthRequest, type Role } from '#lib/server/authz.ts';
 import { createDb } from '#lib/server/db/index.ts';
 import { readEnv } from '#lib/server/env.ts';
 import { createMailer } from '#lib/server/mailer/index.ts';
@@ -72,9 +72,7 @@ const app: Handle = async ({ event, resolve }) => {
 	if (!event.locals.user && !PUBLIC_PATHS.some((r) => r.test(path))) {
 		redirect(303, `/login?redirectTo=${encodeURIComponent(path + event.url.search)}`);
 	}
-	if (!canCallAuthApi(event.locals.user, event.request.method, path)) {
-		error(403, 'この操作を行う権限がありません');
-	}
+	if (!isAllowedAuthRequest(event.request.method, path)) error(404, 'Not found');
 
 	return svelteKitHandler({ auth, event, resolve, building });
 };

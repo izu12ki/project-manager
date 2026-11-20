@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { can, canCallAuthApi, type Action, type Actor } from './authz';
+import { can, isAllowedAuthRequest, type Action, type Actor } from './authz';
 
 const admin: Actor = { id: 'a', name: 'A', email: 'a@x', role: 'admin' };
 const member: Actor = { id: 'm', name: 'M', email: 'm@x', role: 'member' };
@@ -42,33 +42,38 @@ describe('can', () => {
 	});
 });
 
-describe('canCallAuthApi', () => {
+describe('isAllowedAuthRequest', () => {
+	// アプリは better-auth をサーバー側（auth.api.*）からだけ呼ぶ。HTTP で通すのは再設定メールのリンクだけ
 	it.each([
-		['POST', '/api/auth/change-password'],
+		['GET', '/api/auth/reset-password/abc123'],
+		['HEAD', '/api/auth/reset-password/abc123']
+	])('%s %s（パスワード再設定メールのリンク）は通す', (method, path) => {
+		expect(isAllowedAuthRequest(method, path)).toBe(true);
+	});
+
+	it.each([
+		// ログアウト後の古い Cookie（5 分のキャッシュ）でも表示名を変えられないこと
 		['POST', '/api/auth/update-user'],
+		['POST', '/api/auth/change-password'],
+		['POST', '/api/auth/change-email'],
 		['POST', '/api/auth/revoke-sessions'],
 		['POST', '/api/auth/revoke-other-sessions'],
-		['POST', '/api/auth/change-email']
-	])('閲覧者は %s %s を呼べない', (method, path) => {
-		expect(canCallAuthApi(viewer, method, path)).toBe(false);
-	});
-
-	it.each([
 		['POST', '/api/auth/sign-in/email'],
 		['POST', '/api/auth/sign-out'],
+		['POST', '/api/auth/reset-password'],
+		['POST', '/api/auth/request-password-reset'],
+		// 共用アカウントのセッション一覧（他の利用者の IP）を見せない
+		['GET', '/api/auth/list-sessions'],
 		['GET', '/api/auth/get-session'],
-		['HEAD', '/api/auth/get-session']
-	])('閲覧者もログイン・ログアウト・読み取り（%s %s）はできる', (method, path) => {
-		expect(canCallAuthApi(viewer, method, path)).toBe(true);
-	});
-
-	it('ほかのロールと未ログインは制限しない', () => {
-		expect(canCallAuthApi(member, 'POST', '/api/auth/change-password')).toBe(true);
-		expect(canCallAuthApi(guest, 'POST', '/api/auth/revoke-sessions')).toBe(true);
-		expect(canCallAuthApi(null, 'POST', '/api/auth/sign-in/email')).toBe(true);
+		['GET', '/api/auth/reset-password/abc/extra'],
+		['GET', '/api/auth/reset-password/'],
+		['OPTIONS', '/api/auth/update-user']
+	])('%s %s は拒否する', (method, path) => {
+		expect(isAllowedAuthRequest(method, path)).toBe(false);
 	});
 
 	it('/api/auth/ 以外のパスは対象外', () => {
-		expect(canCallAuthApi(viewer, 'POST', '/projects/ACME/attachments')).toBe(true);
+		expect(isAllowedAuthRequest('POST', '/projects/ACME/attachments')).toBe(true);
+		expect(isAllowedAuthRequest('POST', '/api/v1/projects/ACME/issues')).toBe(true);
 	});
 });

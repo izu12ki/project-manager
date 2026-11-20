@@ -70,18 +70,20 @@ export function can(actor: Actor, action: Action, res: Resource = {}): boolean {
 	}
 }
 
-/** 閲覧者でも呼べる better-auth の書き込み（ログイン・ログアウト） */
-const AUTH_API_ALWAYS = new Set(['/api/auth/sign-in/email', '/api/auth/sign-out']);
+/** パスワード再設定メールのリンク（better-auth が検証して /reset-password へ転送する） */
+const RESET_PASSWORD_LINK = /^\/api\/auth\/reset-password\/[^/]+$/;
 
 /**
- * better-auth の API（/api/auth/*）を呼んでよいか。
- * パスワード変更・セッション失効などは can() を通らないので、閲覧者はここで止める
- * （公開デモの共用アカウントで、パスワードを変えて他の人を締め出せないようにする）
+ * better-auth の HTTP API（/api/auth/*）へのリクエストを通すか。
+ * ログイン・ログアウト・パスワード変更などは、すべてアプリのフォームからサーバー側（auth.api.*）で呼ぶ。
+ * HTTP で受け付けるのはパスワード再設定メールのリンクだけにする。
+ * better-auth の一部の API は Cookie のキャッシュ（5 分）だけでセッションを認めるので、
+ * 閲覧者の共用アカウントでログアウト後の古い Cookie を使い、表示名を変えたり、
+ * セッション一覧（他の利用者の IP）を見たりできてしまう。それを入口で止める
  */
-export function canCallAuthApi(actor: Actor | null, method: string, pathname: string): boolean {
-	if (!actor || !pathname.startsWith('/api/auth/')) return true;
-	if (method === 'GET' || method === 'HEAD' || AUTH_API_ALWAYS.has(pathname)) return true;
-	return can(actor, 'account:modify');
+export function isAllowedAuthRequest(method: string, pathname: string): boolean {
+	if (!pathname.startsWith('/api/auth/')) return true;
+	return (method === 'GET' || method === 'HEAD') && RESET_PASSWORD_LINK.test(pathname);
 }
 
 export function authorize(actor: Actor, action: Action, res?: Resource): void {

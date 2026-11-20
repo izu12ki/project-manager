@@ -856,26 +856,55 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await viewerPage.goto('/account');
 	await expect(viewerPage.getByText('このアカウントは閲覧専用のため')).toBeVisible();
 	await expect(viewerPage.getByRole('heading', { name: 'パスワード変更' })).toHaveCount(0);
+	// 通知は見られるが既読にはできないので、「すべて既読にする」は出さない
+	await viewerPage.goto('/notifications');
+	await expect(viewerPage.getByRole('heading', { name: '通知' })).toBeVisible();
+	await expect(viewerPage.getByRole('button', { name: 'すべて既読にする' })).toHaveCount(0);
 	const origin = { Origin: 'http://localhost:4173' };
 	const viaAction = await viewerPage.request.post('/account?/changePassword', {
 		headers: origin,
 		form: { currentPassword: PW, newPassword: 'changed-password-1' }
 	});
 	expect(viaAction.status()).toBe(404);
-	for (const path of ['/api/auth/change-password', '/api/auth/revoke-sessions']) {
+	// better-auth の HTTP API は、パスワード再設定メールのリンク以外を受け付けない
+	for (const path of [
+		'/api/auth/change-password',
+		'/api/auth/revoke-sessions',
+		'/api/auth/update-user'
+	]) {
 		const r = await viewerPage.request.post(path, {
 			headers: origin,
-			data: { currentPassword: PW, newPassword: 'changed-password-1' }
+			data: { currentPassword: PW, newPassword: 'changed-password-1', name: '書き換え' }
 		});
-		expect(r.status(), path).toBe(403);
+		expect(r.status(), path).toBe(404);
 	}
+	// 共用アカウントのセッション一覧（他の利用者の IP）も見せない
+	expect((await viewerPage.request.get('/api/auth/list-sessions')).status()).toBe(404);
 	// 画面に出ない書き込みを直接送っても拒否する
 	const viewerUpload = await viewerPage.request.post('/projects/ACME/attachments', {
 		headers: { ...origin, Accept: 'application/json' },
 		multipart: { file: { name: 'a.png', mimeType: 'image/png', buffer: PNG } }
 	});
 	expect(viewerUpload.ok()).toBe(false);
+	// ログアウト後に古い Cookie（5 分のキャッシュ）を使い回しても、表示名を変えられない
+	const staleCookies = await viewerPage.context().cookies();
+	await logout(viewerPage);
 	await viewerPage.close();
+	const stale = await browser.newContext({ baseURL });
+	await stale.addCookies(staleCookies);
+	const renamed = await stale.request.post('/api/auth/update-user', {
+		headers: origin,
+		data: { name: '書き換え' }
+	});
+	expect(renamed.status()).toBe(404);
+	await stale.close();
+	// パスワード再設定メールのリンクは better-auth に届く（不正なトークンはエラー付きで転送される）
+	const resetLink = await page.request.get(
+		'/api/auth/reset-password/invalid-token?callbackURL=%2Freset-password',
+		{ maxRedirects: 0 }
+	);
+	expect(resetLink.status()).toBe(302);
+	expect(resetLink.headers()['location']).toContain('INVALID_TOKEN');
 	// パスワードは変わっていない
 	const viewerAgain = await browser.newPage({ baseURL });
 	await login(viewerAgain, 'viewer@example.com');

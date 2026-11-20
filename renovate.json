@@ -9,6 +9,11 @@
 	"lockFileMaintenance": { "enabled": true, "automerge": true },
 	"packageRules": [
 		{
+			"description": "末尾がコミットハッシュの版（drizzle の 1.0.0-rc.5-ab785fc など）は開発中のビルドで正式なリリースではないので上げない。semver では同じ rc より新しく見えてしまう",
+			"matchDatasources": ["npm"],
+			"allowedVersions": "!/-[0-9a-f]{7,40}$/"
+		},
+		{
 			"description": "1.0 以上の minor / patch は CI が通れば自動マージする",
 			"matchUpdateTypes": ["minor", "patch", "pin", "digest"],
 			"matchCurrentVersion": "!/^v?0\\./",

@@ -42,7 +42,7 @@ export async function listCategories(ctx: AppContext, key: string): Promise<Cate
 		.select()
 		.from(category)
 		.where(eq(category.projectId, p.id))
-		.orderBy(asc(category.createdAt));
+		.orderBy(asc(category.createdAt), asc(category.id));
 }
 
 /** リリース日の早い順。日付未設定（バックログ等）は最後。 */

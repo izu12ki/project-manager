@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { columnIndex, decodeCsv, parseCsv } from '#lib/csv.ts';
+import { columnIndex, decodeCsv, parseCsv, restoreNewlines } from '#lib/csv.ts';
 
 const fixture = readFileSync(new URL('./testdata/backlog/users.csv', import.meta.url));
 
@@ -52,5 +52,12 @@ describe('columnIndex', () => {
 
 	it('ないと null', () => {
 		expect(columnIndex(['ID'], ['名前'])).toBeNull();
+	});
+});
+
+describe('restoreNewlines', () => {
+	it('2 文字の \\n を改行に戻す', () => {
+		expect(restoreNewlines('a\\nb\\n\\nc')).toBe('a\nb\n\nc');
+		expect(restoreNewlines('改行なし')).toBe('改行なし');
 	});
 });

@@ -1,0 +1,2 @@
+-- 削除済みのカテゴリー ID が課題に残っていれば外す（category_ids は JSON 列で外部キーがない）
+UPDATE `issue` SET `category_ids` = (SELECT json_group_array(value) FROM json_each(`issue`.`category_ids`) WHERE value IN (SELECT `id` FROM `category` WHERE `category`.`project_id` = `issue`.`project_id`)) WHERE EXISTS (SELECT 1 FROM json_each(`issue`.`category_ids`) WHERE value NOT IN (SELECT `id` FROM `category` WHERE `category`.`project_id` = `issue`.`project_id`));

@@ -13,10 +13,12 @@ import { parse } from '../validation';
 import { linkAttachmentsQuery } from './attachment-links';
 import {
 	assertOneLevel,
+	categoryIdsValue,
 	createEventsOf,
 	describeChanges,
 	loadFieldSets,
 	updateEventsOf,
+	withCategoryGuard,
 	loadFormerAssigneeNames,
 	prepareCreate,
 	preparePatch
@@ -66,7 +68,7 @@ function collectItems<T>(items: unknown[], fn: (item: unknown, i: number) => T):
 }
 
 /** ステータスごとに、既存の末尾に続く position を要素の順に振る */
-async function tailPositions(
+export async function tailPositions(
 	db: DB,
 	projectId: string,
 	statuses: string[]
@@ -121,6 +123,7 @@ export async function bulkCreateIssues(
 		stmts.push(
 			ctx.db.insert(issue).values({
 				...val,
+				categoryIds: categoryIdsValue(p.id, val.categoryIds ?? []),
 				projectId: p.id,
 				number: sql`(select ${project.nextIssueNumber} from ${project} where ${project.id} = ${p.id})`,
 				position: positionOf(val.status)
@@ -212,7 +215,9 @@ export async function bulkUpdateIssues(
 	const stmts = [];
 	for (const { cur, patch } of changed) {
 		if (patch.status !== undefined) patch.position = positionOf(patch.status);
-		stmts.push(ctx.db.update(issue).set(patch).where(eq(issue.id, cur.id)));
+		stmts.push(
+			ctx.db.update(issue).set(withCategoryGuard(p.id, patch)).where(eq(issue.id, cur.id))
+		);
 		const changes = describeChanges(fields, cur, patch, otherUsers);
 		if (changes.length > 0) {
 			stmts.push(

@@ -60,3 +60,8 @@ export function columnIndex<N extends string>(
 	}
 	return result;
 }
+
+// Backlog の CSV はセル内の改行を 2 文字の「\n」で書くので、改行に戻す
+export function restoreNewlines(cell: string): string {
+	return cell.replaceAll('\\n', '\n');
+}

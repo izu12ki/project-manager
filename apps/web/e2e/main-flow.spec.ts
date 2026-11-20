@@ -996,6 +996,57 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await logout(page);
 	await login(page, 'admin@example.com');
 
+	// 17. Backlog の課題 CSV を取り込む（通知なし。人の対応付け・親子・新しいステータスなど）
+	// この時点で DEMO には鈴木 花子・開発 花子が参加し、山田 太郎・髙田 一郎①は招待中、架空商事 小林はいない
+	await page.goto('/projects/DEMO/settings');
+	await page.getByLabel('課題 CSV').setInputFiles('src/lib/testdata/backlog/issues.csv');
+	await expect(page.getByTestId('issue-import-summary')).toHaveText(
+		'課題 6 件（#1〜#6）とコメント 5 件を取り込みます'
+	);
+	await expect(page.getByTestId('issue-import-created')).toContainText('ステータス: 保留');
+	await expect(page.getByTestId('issue-import-created')).toContainText(
+		'カテゴリー: 機能A、確定度 60%、機能B'
+	);
+	await expect(page.getByTestId('issue-import-row-errors')).toContainText(
+		'8 行目（DEMO-7）: 件名がありません'
+	);
+	const people = page.getByRole('table', { name: '人の対応付け' });
+	// 各行の選択肢に全ユーザーの名前が入るので、1 列目の名前で行を探す
+	const personRow = (name: string) =>
+		people.getByRole('row').filter({ has: page.getByRole('cell', { name, exact: true }) });
+	// 全角空白の違いは無視して、開発 花子を自動で選ぶ
+	await expect(page.getByLabel('開発\u3000花子 の対応先')).toHaveValue(/.+/);
+	await expect(personRow('開発\u3000花子')).toContainText('名前が一致');
+	await expect(personRow('山田 太郎')).toContainText('招待中（未承諾）');
+	await expect(personRow('架空商事 小林')).toContainText('該当なし');
+	await expect(page.getByText('未承諾の招待がある人がいます')).toBeVisible();
+	await page.getByRole('button', { name: '取り込む（6 件）' }).click();
+	const imported = page.getByTestId('issue-import-result');
+	await expect(imported).toContainText(
+		'課題 6 件（#1〜#6）とコメント 5 件を取り込みました。取り込まなかった行 1 件'
+	);
+	// 同じ画面のステータス・カテゴリーの一覧にも、作ったものがすぐ出る
+	const settingsCard = (title: string) =>
+		page.locator('.card').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
+	await expect(settingsCard('ステータス')).toContainText('保留');
+	await expect(settingsCard('カテゴリー')).toContainText('確定度 60%');
+	await imported.getByRole('link', { name: '課題一覧を見る' }).click();
+	await expect(page).toHaveURL(/\/projects\/DEMO$/);
+	await expect(page.getByRole('link', { name: 'ログイン API', exact: true })).toBeVisible();
+	await page.goto('/projects/DEMO/issues/2');
+	await expect(page.getByText('Backlog から移行: DEMO-2')).toBeVisible();
+	await expect(page.getByText('担当者（Backlog）: 山田 太郎')).toBeVisible();
+	await expect(page.getByText('（Backlog: 架空商事 小林）')).toBeVisible();
+	// 不明なユーザーはユーザー一覧に出ない
+	await page.goto('/admin/users');
+	await expect(page.getByRole('heading', { name: 'ユーザー一覧' })).toBeVisible();
+	await expect(page.getByText('不明なユーザー')).toHaveCount(0);
+	// 同じ CSV は二重に取り込めない
+	await page.goto('/projects/DEMO/settings');
+	await page.getByLabel('課題 CSV').setInputFiles('src/lib/testdata/backlog/issues.csv');
+	await expect(page.getByText('既に取り込んだ課題があります')).toBeVisible();
+	await expect(page.getByRole('button', { name: '取り込む（6 件）' })).toBeDisabled();
+
 	// 9. 管理者は /account で API キーを作成・無効化できる。メンバーには欄が出ない
 	await page.goto('/account');
 	const apiKeyCard = page.locator('.card', {

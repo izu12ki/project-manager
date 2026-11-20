@@ -87,7 +87,7 @@ export async function disableUser(ctx: AppContext, userId: string): Promise<void
 	await ctx.db.delete(session).where(eq(session.userId, userId));
 }
 
-const RoleInput = v.picklist(['admin', 'member', 'guest'], 'ロールを選択してください');
+const RoleInput = v.picklist(['admin', 'member', 'guest', 'viewer'], 'ロールを選択してください');
 
 export async function changeUserRole(
 	ctx: AppContext,

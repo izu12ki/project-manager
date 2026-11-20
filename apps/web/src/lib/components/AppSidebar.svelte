@@ -22,7 +22,7 @@
 		inert = false,
 		mobileOpen = false
 	}: {
-		user: { name: string; email: string; role: 'admin' | 'member' | 'guest' };
+		user: { name: string; email: string; role: 'admin' | 'member' | 'guest' | 'viewer' };
 		projects: {
 			key: string;
 			name: string;

@@ -28,7 +28,7 @@ export const user = sqliteTable(
 		email: text().notNull(),
 		emailVerified: integer('email_verified', { mode: 'boolean' }).notNull().default(false),
 		image: text(),
-		role: text({ enum: ['admin', 'member', 'guest'] })
+		role: text({ enum: ['admin', 'member', 'guest', 'viewer'] })
 			.notNull()
 			.default('member'),
 		disabledAt: integer('disabled_at', { mode: 'timestamp_ms' }),
@@ -147,7 +147,7 @@ export const invitation = sqliteTable(
 	{
 		id: text().primaryKey(),
 		email: text().notNull(),
-		role: text({ enum: ['admin', 'member', 'guest'] }).notNull(),
+		role: text({ enum: ['admin', 'member', 'guest', 'viewer'] }).notNull(),
 		/** 招待を受ける画面の名前欄に最初から入れる名前（Backlog のハンドルネームなど） */
 		name: text(),
 		tokenHash: text('token_hash').notNull(),

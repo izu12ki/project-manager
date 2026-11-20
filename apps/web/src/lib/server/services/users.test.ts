@@ -148,6 +148,18 @@ describe('users', () => {
 			expect(await db.select().from(session)).toHaveLength(0);
 		});
 
+		it('閲覧者に変更できる', async () => {
+			const db = await createTestDb();
+			const base = createTestBase(db);
+			const admin = await seedUser(db, 'admin');
+			const member = await seedUser(db, 'member');
+
+			await changeUserRole(ctxOf(base, admin), member.id, 'viewer');
+
+			const users = await listUsers(ctxOf(base, admin));
+			expect(users.find((u) => u.id === member.id)?.role).toBe('viewer');
+		});
+
 		it('自分自身のロールは変更できない', async () => {
 			const db = await createTestDb();
 			const base = createTestBase(db);

@@ -1,6 +1,6 @@
 import { AppError } from './errors';
 
-export type Role = 'admin' | 'member' | 'guest';
+export type Role = 'admin' | 'member' | 'guest' | 'viewer';
 
 export interface Actor {
 	id: string;
@@ -23,7 +23,8 @@ export type Action =
 	| 'attachment:create'
 	| 'attachment:delete'
 	| 'emoji:create'
-	| 'emoji:delete';
+	| 'emoji:delete'
+	| 'account:modify';
 
 export interface Resource {
 	reporterId?: string;
@@ -34,6 +35,8 @@ export interface Resource {
 
 export function can(actor: Actor, action: Action, res: Resource = {}): boolean {
 	if (actor.role === 'admin') return true;
+	// 閲覧者（公開デモなど）は何も書き込めない。自分のアカウント設定も変えられない
+	if (actor.role === 'viewer') return false;
 	const isMember = actor.role === 'member';
 	switch (action) {
 		case 'user:manage':
@@ -58,6 +61,9 @@ export function can(actor: Actor, action: Action, res: Resource = {}): boolean {
 			return res.uploaderId === actor.id;
 		case 'emoji:delete':
 			return res.creatorId === actor.id;
+		// 表示名・パスワード・Slack 通知などの自分の設定
+		case 'account:modify':
+			return true;
 	}
 }
 

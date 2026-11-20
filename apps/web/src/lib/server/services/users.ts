@@ -60,6 +60,11 @@ const keepsActiveAdmin = (db: DB, userId: string) =>
 		)
 	);
 
+/** 不明なユーザーは一覧に出さないので、操作もできない（有効にすると担当者などの候補に出てしまう） */
+function rejectUnknownUser(userId: string): void {
+	if (userId === UNKNOWN_USER_ID) throw new AppError('not_found', 'ユーザーが見つかりません');
+}
+
 /** 条件付きの更新が 0 件だったときの理由（対象がいないのか、管理者が残らないのか） */
 async function rejectUpdate(db: DB, userId: string, message: string): Promise<never> {
 	const [target] = await db.select({ id: user.id }).from(user).where(eq(user.id, userId));
@@ -69,6 +74,7 @@ async function rejectUpdate(db: DB, userId: string, message: string): Promise<ne
 
 export async function disableUser(ctx: AppContext, userId: string): Promise<void> {
 	authorize(ctx.actor, 'user:manage');
+	rejectUnknownUser(userId);
 	if (userId === ctx.actor.id) throw new AppError('validation', '自分自身は無効化できません');
 	const updated = await ctx.db
 		.update(user)
@@ -89,6 +95,7 @@ export async function changeUserRole(
 	role: unknown
 ): Promise<void> {
 	authorize(ctx.actor, 'user:manage');
+	rejectUnknownUser(userId);
 	const newRole = parse(RoleInput, role);
 	if (userId === ctx.actor.id) throw new AppError('validation', '自分自身のロールは変更できません');
 	const updated = await ctx.db
@@ -107,6 +114,7 @@ export async function changeUserRole(
 
 export async function enableUser(ctx: AppContext, userId: string): Promise<void> {
 	authorize(ctx.actor, 'user:manage');
+	rejectUnknownUser(userId);
 	// 無効化された管理者が、反映前のセッションで自分を戻せないようにする
 	if (userId === ctx.actor.id) throw new AppError('validation', '自分自身は有効化できません');
 	const updated = await ctx.db

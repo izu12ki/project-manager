@@ -152,7 +152,7 @@
 						items: columns[status],
 						flipDurationMs: 150,
 						type: 'issue',
-						dragDisabled: !!data.project.archivedAt || pending,
+						dragDisabled: !!data.project.archivedAt || !data.canChangeStatus || pending,
 						dropTargetStyle: { outline: '2px dashed var(--ring)', outlineOffset: '2px' }
 					}}
 					onconsider={(e) => consider(status, e)}

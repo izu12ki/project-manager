@@ -13,7 +13,7 @@
 
 	let { data, form }: PageProps = $props();
 
-	const roles = ['admin', 'member', 'guest'] as const;
+	const roles = ['admin', 'member', 'guest', 'viewer'] as const;
 
 	// 変更確認中の行（select で選んだ値を保持する）
 	let pendingChange = $state<{ id: string; name: string; role: (typeof roles)[number] } | null>(
@@ -62,6 +62,7 @@
 					<select class="select" id="invite-role" name="role">
 						<option value="member">メンバー</option>
 						<option value="guest">ゲスト</option>
+						<option value="viewer">{ROLE_LABEL.viewer}</option>
 						<option value="admin">{ROLE_LABEL.admin}</option>
 					</select>
 				</div>

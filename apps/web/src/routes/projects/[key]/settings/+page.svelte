@@ -247,9 +247,9 @@
 
 	<div class="card">
 		<div class="card-head">
-			<h2 class="card-title">ゲスト</h2>
+			<h2 class="card-title">ゲスト・閲覧者</h2>
 			<p class="card-desc">
-				ゲストはこのプロジェクトの課題の閲覧・作成・編集とコメントができます（課題の削除はできません）
+				ゲストはこのプロジェクトの課題の閲覧・作成・編集とコメントができます（課題の削除はできません）。閲覧者は閲覧だけで、起票・編集・コメント・添付はできません
 			</p>
 		</div>
 		<form
@@ -257,13 +257,20 @@
 			action="?/inviteGuest"
 			use:enhance
 			class="grid items-end gap-3"
-			style="grid-template-columns: minmax(0, 1fr) auto"
+			style="grid-template-columns: minmax(0, 1fr) auto auto"
 		>
 			<div class="field">
-				<label class="label" for="guest-email">ゲストのメールアドレス</label>
+				<label class="label" for="guest-email">メールアドレス</label>
 				<input class="input" id="guest-email" name="email" type="email" required />
 			</div>
-			<button type="submit" class="btn btn-outline">ゲストを招待</button>
+			<div class="field">
+				<label class="label" for="guest-role">ロール</label>
+				<select class="select" id="guest-role" name="role">
+					<option value="guest">{ROLE_LABEL.guest}</option>
+					<option value="viewer">{ROLE_LABEL.viewer}</option>
+				</select>
+			</div>
+			<button type="submit" class="btn btn-outline">招待する</button>
 		</form>
 		{#if form?.inviteUrl}<InviteLinkBox url={form.inviteUrl} />{/if}
 		{#if data.invitations.length > 0}

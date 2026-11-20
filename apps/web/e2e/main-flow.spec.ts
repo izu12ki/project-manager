@@ -142,8 +142,8 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(sidebarProject.getByTestId('project-icon-image')).toBeHidden();
 	expect((await page.request.get(iconSrc!)).status()).toBe(404);
 	await setIconImage();
-	await page.getByLabel('ゲストのメールアドレス').fill('guest@example.com');
-	await page.getByRole('button', { name: 'ゲストを招待' }).click();
+	await page.getByLabel('メールアドレス', { exact: true }).fill('guest@example.com');
+	await page.getByRole('button', { name: '招待する' }).click();
 	const guestUrl = await page.getByLabel('招待リンク').inputValue();
 
 	// 4b. カテゴリー・マイルストーンを定義

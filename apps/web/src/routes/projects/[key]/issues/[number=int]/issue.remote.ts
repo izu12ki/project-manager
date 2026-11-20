@@ -85,6 +85,8 @@ export const getIssueDetail = query(IssueRef, ({ key, number }) => {
 							.map((i) => ({ number: i.number, title: i.title })),
 			perms: {
 				writable,
+				create: writable && can(ctx.actor, 'issue:create'),
+				comment: writable && can(ctx.actor, 'comment:create'),
 				edit: writable && can(ctx.actor, 'issue:edit', res),
 				changeStatus: writable && can(ctx.actor, 'issue:changeStatus', res),
 				assign: writable && can(ctx.actor, 'issue:assign', res),

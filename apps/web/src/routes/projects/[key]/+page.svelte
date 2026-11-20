@@ -16,6 +16,14 @@
 	let { data }: PageProps = $props();
 	const base = $derived(`/projects/${data.project.key}`);
 	const filtering = $derived(Object.values(data.filters).some(Boolean));
+	// キーは 0.8125rem の等幅フォント（JetBrains Mono は 1 文字 0.6em）で出す。
+	// プロジェクトのキーは 25 文字まであるので、いちばん長い課題キーが 1 行に収まる幅をキー列に取る。
+	// 16px はセルの左右の余白、2px は丸めの誤差の分
+	const keyColumnWidth = $derived.by(() => {
+		const maxNumber = data.issues.reduce((max, i) => Math.max(max, i.number), 0);
+		const chars = `${data.project.key}-${maxNumber}`.length;
+		return `max(96px, calc(${chars} * 0.6 * 0.8125rem + 18px))`;
+	});
 </script>
 
 <section class="grid gap-4">
@@ -129,8 +137,13 @@
 			{#if filtering}<a href={base} class="btn btn-outline">絞り込みを解除</a>{/if}
 		</div>
 	{:else}
-		<div class="grid-table" style="--cols: 96px minmax(240px, 1fr) 120px 80px 140px 140px 88px">
-			<div role="table" aria-label="課題一覧" style="min-width: 900px">
+		<div
+			class="grid-table"
+			style:--key-col={keyColumnWidth}
+			style="--cols: var(--key-col) minmax(240px, 1fr) 120px 80px 140px 140px 88px"
+		>
+			<!-- キー列が 96px より広がった分だけ、表の最小幅も広げる -->
+			<div role="table" aria-label="課題一覧" style="min-width: calc(var(--key-col) + 804px)">
 				<div role="row" class="grid-table-head">
 					<span role="columnheader">キー</span>
 					<span role="columnheader">タイトル</span>
@@ -142,7 +155,7 @@
 				</div>
 				{#each data.issues as i (i.id)}
 					<div role="row" class="row">
-						<span role="cell" class="mono text-[0.8125rem] text-muted-foreground"
+						<span role="cell" class="mono text-[0.8125rem] whitespace-nowrap text-muted-foreground"
 							>{data.project.key}-{i.number}</span
 						>
 						<span role="cell" class="flex min-w-0 items-center gap-2">
@@ -196,7 +209,7 @@
 			<ul>
 				{#each data.deletedIssues as d (d.number)}
 					<li>
-						<span class="mono text-[0.8125rem] text-muted-foreground"
+						<span class="mono shrink-0 text-[0.8125rem] whitespace-nowrap text-muted-foreground"
 							>{data.project.key}-{d.number}</span
 						>
 						<a href={`${base}/issues/${d.number}`} class="min-w-0 truncate">{d.title}</a>

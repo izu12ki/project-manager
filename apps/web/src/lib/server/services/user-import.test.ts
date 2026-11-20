@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { BacklogUserRow, ImportRole } from '#lib/backlog-users.ts';
 import type { Actor } from '../authz';
@@ -152,7 +152,8 @@ describe('user-import', () => {
 			invited: 2,
 			joined: 1,
 			skipped: { unselected: 1, inactive: 1 },
-			mailFailed: 0
+			inviteFailed: [],
+			mailFailed: []
 		});
 		await Promise.all(base.pending);
 		expect(base.sent).toHaveLength(2);
@@ -168,7 +169,13 @@ describe('user-import', () => {
 		const p = await plan([r]);
 		expect(p.rows[0]).toMatchObject({ action: 'invite', role: 'admin', projects: [] });
 		const down = await importUsers(ctxOf(base, admin), { rows: [send(r, { role: 'member' })] });
-		expect(down).toEqual({ invited: 0, joined: 0, skipped: { no_projects: 1 }, mailFailed: 0 });
+		expect(down).toEqual({
+			invited: 0,
+			joined: 0,
+			skipped: { no_projects: 1 },
+			inviteFailed: [],
+			mailFailed: []
+		});
 		await Promise.all(base.pending);
 		expect(base.sent).toHaveLength(0);
 		const up = await importUsers(ctxOf(base, admin), { rows: [send(r, { role: 'admin' })] });
@@ -189,7 +196,8 @@ describe('user-import', () => {
 			invited: 0,
 			joined: 0,
 			skipped: { pending_invitation: 1 },
-			mailFailed: 0
+			inviteFailed: [],
+			mailFailed: []
 		});
 		await Promise.all(base.pending);
 		expect(await db.select().from(invitation)).toHaveLength(1);
@@ -257,10 +265,16 @@ describe('user-import', () => {
 			send(row({ email }))
 		);
 		const result = await importUsers(ctxOf(flaky, admin), { rows });
-		expect(result).toEqual({ invited: 3, joined: 0, skipped: {}, mailFailed: 1 });
-		// 後回しにせず、リクエストの中で送り終えている
-		expect(flaky.pending).toHaveLength(0);
+		expect(result).toEqual({
+			invited: 3,
+			joined: 0,
+			skipped: {},
+			inviteFailed: [],
+			mailFailed: [{ name: rows[1].name, email: 'fail@example.com' }]
+		});
+		// 後回しにせず、リクエストの中で送り終えている。画面を閉じられても続くよう waitUntil にも渡す
 		expect(delivered.map((d) => d.to)).toEqual(['a@example.com', 'c@example.com']);
+		expect(flaky.pending).toHaveLength(1);
 		// a →（120ms）→ fail →（120ms）→ c
 		expect(delivered[1].at - delivered[0].at).toBeGreaterThanOrEqual(200);
 		const invs = await db.select({ email: invitation.email }).from(invitation);
@@ -270,5 +284,30 @@ describe('user-import', () => {
 			'fail@example.com'
 		]);
 		expect(err).toHaveBeenCalledWith('invitation mail failed', expect.any(Error));
+	});
+
+	it('途中の人の招待に失敗しても、残りの人を招待し、作れた招待のメールを送る', async () => {
+		const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+		onTestFinished(() => err.mockRestore());
+		// この人の招待だけ DB への書き込みで失敗させる
+		await db.run(
+			sql.raw(`CREATE TRIGGER fail_invite BEFORE INSERT ON invitation
+				WHEN NEW.email = 'boom@example.com' BEGIN SELECT RAISE(ABORT, 'boom'); END`)
+		);
+		const rows = ['a@example.com', 'boom@example.com', 'c@example.com'].map((email) =>
+			send(row({ email }))
+		);
+		const result = await importUsers(ctxOf(base, admin), { rows });
+		expect(result).toEqual({
+			invited: 2,
+			joined: 0,
+			skipped: {},
+			inviteFailed: [{ name: rows[1].name, email: 'boom@example.com' }],
+			mailFailed: []
+		});
+		expect(base.sent.map((m) => m.to)).toEqual(['a@example.com', 'c@example.com']);
+		const invs = await db.select({ email: invitation.email }).from(invitation);
+		expect(invs.map((i) => i.email).sort()).toEqual(['a@example.com', 'c@example.com']);
+		expect(err).toHaveBeenCalledWith('invitation failed', expect.any(Error));
 	});
 });

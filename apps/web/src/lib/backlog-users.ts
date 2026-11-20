@@ -87,13 +87,24 @@ export const SKIP_LABEL: Record<UserImportSkip, string> = {
 	unselected: 'チェックを外した'
 };
 
+/** 結果に名前を出す人。name は CSV のハンドルネーム（空のことがある） */
+export interface ImportPerson {
+	name: string;
+	email: string;
+}
+
 export interface UserImportResult {
 	invited: number;
 	joined: number;
 	skipped: Partial<Record<UserImportSkip, number>>;
-	/** 招待はできたが、招待メールを送れなかった人数 */
-	mailFailed: number;
+	/** 招待を作れなかった人（確認画面の後に登録された人など）。CSV を読み込み直すと今の扱いがわかる */
+	inviteFailed: ImportPerson[];
+	/** 招待はできたが、招待メールを送れなかった人 */
+	mailFailed: ImportPerson[];
 }
+
+const people = (xs: ImportPerson[]) =>
+	xs.map((p) => (p.name ? `${p.name}（${p.email}）` : p.email)).join('、');
 
 /** 理由別の人数を SKIP_LABEL の定義順に「（参加済み 1、…）」の形にする。理由がなければ空文字 */
 function skipDetail(skipped: UserImportResult['skipped']): { total: number; detail: string } {
@@ -121,9 +132,13 @@ export function formatImportPreview(p: {
 
 export function formatImportResult(r: UserImportResult): string {
 	const { total, detail } = skipDetail(r.skipped);
-	const mail =
-		r.mailFailed > 0
-			? `。招待メールを送れなかった人 ${r.mailFailed} 人（招待中の一覧の「リンクを再発行」でリンクを渡してください）`
+	const invite =
+		r.inviteFailed.length > 0
+			? `。招待できなかった人 ${r.inviteFailed.length} 人: ${people(r.inviteFailed)}。CSV を読み込み直して確認してください`
 			: '';
-	return `招待 ${r.invited} 人、参加の追加 ${r.joined} 人、取り込まなかった人 ${total} 人${detail}${mail}`;
+	const mail =
+		r.mailFailed.length > 0
+			? `。招待メールを送れなかった人 ${r.mailFailed.length} 人: ${people(r.mailFailed)}。招待中の一覧の「リンクを再発行」でリンクを渡してください`
+			: '';
+	return `招待 ${r.invited} 人、参加の追加 ${r.joined} 人、取り込まなかった人 ${total} 人${detail}${invite}${mail}`;
 }

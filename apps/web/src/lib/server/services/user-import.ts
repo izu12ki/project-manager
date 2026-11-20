@@ -6,6 +6,7 @@ import {
 	MAX_IMPORT_USERS,
 	roleFromBacklog,
 	type BacklogUserRow,
+	type ImportPerson,
 	type ImportRole,
 	type UserImportResult,
 	type UserImportSkip
@@ -227,6 +228,18 @@ export async function importUsers(ctx: AppContext, input: unknown): Promise<User
 		);
 	}
 
+	const work = write(ctx, joins, invites);
+	// 画面を閉じるなどで接続が切れると、リクエストの処理は打ち切られることがある。招待だけ作られて
+	// メールが届かない人を出さないよう、waitUntil にも渡して続けさせる（接続が切れてから 30 秒まで）
+	ctx.waitUntil(work.catch(() => {}));
+	return { ...(await work), skipped };
+}
+
+async function write(
+	ctx: AppContext,
+	joins: UserImportPlanRow[],
+	invites: { row: UserImportPlanRow; role: ImportRole }[]
+): Promise<Omit<UserImportResult, 'skipped'>> {
 	if (joins.length > 0) {
 		const userRows = await ctx.db
 			.select({ id: user.id, email: user.email })
@@ -244,33 +257,41 @@ export async function importUsers(ctx: AppContext, input: unknown): Promise<User
 		await ctx.db.insert(projectMember).values(values).onConflictDoNothing();
 	}
 
-	const mails: MailMessage[] = [];
+	const created: { person: ImportPerson; mail: MailMessage }[] = [];
+	const inviteFailed: ImportPerson[] = [];
 	for (const { row, role } of invites) {
+		const person = { name: row.name, email: row.email };
 		const name = v.safeParse(NameSchema, row.name);
-		const { mail } = await createInvitation(
-			ctx,
-			{
-				email: row.email,
-				role,
-				projectIds: row.projects.map((p) => p.id),
-				name: name.success ? name.output : ''
-			},
-			{ sendMail: false }
-		);
-		mails.push(mail);
+		try {
+			const { mail } = await createInvitation(
+				ctx,
+				{
+					email: row.email,
+					role,
+					projectIds: row.projects.map((p) => p.id),
+					name: name.success ? name.output : ''
+				},
+				{ sendMail: false }
+			);
+			created.push({ person, mail });
+		} catch (e) {
+			// 確認画面の後に登録された人などは飛ばし、ほかの人の招待と、作れた招待のメールは続ける
+			console.error('invitation failed', e);
+			inviteFailed.push(person);
+		}
 	}
 
-	// 一度に送るとメール送信サービスに断られるので、リクエストの中で 1 通ずつ間隔を空けて送る。
-	// 送れなかった人も招待はできているので、数を返して「リンクを再発行」で渡してもらう
-	let mailFailed = 0;
-	for (const [i, mail] of mails.entries()) {
+	// 一度に送るとメール送信サービスに断られるので、1 通ずつ間隔を空けて送る。
+	// 送れなかった人も招待はできているので、名前を返して「リンクを再発行」で渡してもらう
+	const mailFailed: ImportPerson[] = [];
+	for (const [i, { person, mail }] of created.entries()) {
 		if (i > 0) await new Promise((resolve) => setTimeout(resolve, MAIL_INTERVAL_MS));
 		try {
 			await ctx.mailer.send(mail);
 		} catch (e) {
 			console.error('invitation mail failed', e);
-			mailFailed += 1;
+			mailFailed.push(person);
 		}
 	}
-	return { invited: invites.length, joined: joins.length, skipped, mailFailed };
+	return { invited: created.length, joined: joins.length, inviteFailed, mailFailed };
 }

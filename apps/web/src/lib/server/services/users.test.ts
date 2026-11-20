@@ -28,6 +28,20 @@ describe('users', () => {
 		expect((await listAssignableUsers(db, p.id)).map((u) => u.id)).toEqual([admin.id]);
 	});
 
+	it('不明なユーザーは一覧にいないので、有効化・ロール変更・無効化も not_found にする', async () => {
+		const db = await createTestDb();
+		const ctx = ctxOf(createTestBase(db), await seedUser(db, 'admin'));
+		await db.batch([unknownUserInsert(db)]);
+		const [before] = await db.select().from(user).where(eq(user.id, UNKNOWN_USER_ID));
+		await expect(enableUser(ctx, UNKNOWN_USER_ID)).rejects.toMatchObject({ code: 'not_found' });
+		await expect(changeUserRole(ctx, UNKNOWN_USER_ID, 'admin')).rejects.toMatchObject({
+			code: 'not_found'
+		});
+		await expect(disableUser(ctx, UNKNOWN_USER_ID)).rejects.toMatchObject({ code: 'not_found' });
+		const [after] = await db.select().from(user).where(eq(user.id, UNKNOWN_USER_ID));
+		expect(after).toEqual(before);
+	});
+
 	it('無効化するとセッションが消え、ログイン拒否の判定が true になる', async () => {
 		const db = await createTestDb();
 		const base = createTestBase(db);

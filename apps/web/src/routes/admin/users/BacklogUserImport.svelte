@@ -53,6 +53,16 @@
 		return t;
 	});
 	const count = $derived(tally.invite + tally.join);
+	/** チェックを付けられる行のうち、付いている数 */
+	const selectable = $derived((preview?.plan.rows ?? []).filter(importable));
+	const checkedCount = $derived(selectable.filter((r) => !unchecked[r.rowNumber]).length);
+
+	/** すべて選ぶ／すべて外す。外すときは今選べない行も外し、ロールを変えて選べるようになっても付かないようにする */
+	function checkAll(on: boolean) {
+		unchecked = on
+			? {}
+			: Object.fromEntries((preview?.plan.rows ?? []).map((r) => [r.rowNumber, true]));
+	}
 
 	/** 400・409 はサーバーの文言を出し、それ以外は fallback を出す */
 	const failure = (err: unknown, fallback: string) => {
@@ -183,11 +193,23 @@
 
 			<div
 				class="grid-table preview"
-				style="--cols: 72px minmax(104px, 0.9fr) minmax(176px, 1.2fr) 232px minmax(144px, 1fr) 152px"
+				style="--cols: 96px minmax(104px, 0.9fr) minmax(176px, 1.2fr) 232px minmax(144px, 1fr) 152px"
 			>
-				<div role="table" aria-label="取り込む内容" style="min-width: 896px">
+				<div role="table" aria-label="取り込む内容" style="min-width: 920px">
 					<div role="row" class="grid-table-head">
-						<span role="columnheader">取り込む</span>
+						<span role="columnheader">
+							<label class="flex items-center gap-2">
+								<input
+									type="checkbox"
+									aria-label="取り込める人をすべて選ぶ"
+									checked={selectable.length > 0 && checkedCount === selectable.length}
+									indeterminate={checkedCount > 0 && checkedCount < selectable.length}
+									disabled={selectable.length === 0 || pending}
+									onchange={(e) => checkAll(e.currentTarget.checked)}
+								/>
+								取り込む
+							</label>
+						</span>
 						<span role="columnheader">名前</span>
 						<span role="columnheader">メールアドレス</span>
 						<span role="columnheader">ロール</span>
@@ -297,7 +319,7 @@
 		min-height: 52px;
 		padding-block: 8px;
 	}
-	.row input {
+	.preview input[type='checkbox'] {
 		accent-color: var(--primary);
 	}
 </style>

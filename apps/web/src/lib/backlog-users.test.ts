@@ -122,7 +122,8 @@ describe('formatImportResult', () => {
 				invited: 6,
 				joined: 1,
 				skipped: { no_projects: 1, inactive: 1, duplicate: 1 },
-				mailFailed: 0
+				inviteFailed: [],
+				mailFailed: []
 			})
 		).toBe(
 			'招待 6 人、参加の追加 1 人、取り込まなかった人 3 人（Backlog で有効でない 1、CSV 内でメールアドレスが重複 1、参加できるプロジェクトがない 1）'
@@ -130,16 +131,39 @@ describe('formatImportResult', () => {
 	});
 
 	it('skipped が空なら括弧なし', () => {
-		expect(formatImportResult({ invited: 2, joined: 0, skipped: {}, mailFailed: 0 })).toBe(
-			'招待 2 人、参加の追加 0 人、取り込まなかった人 0 人'
+		expect(
+			formatImportResult({ invited: 2, joined: 0, skipped: {}, inviteFailed: [], mailFailed: [] })
+		).toBe('招待 2 人、参加の追加 0 人、取り込まなかった人 0 人');
+	});
+
+	it('招待メールを送れなかった人がいれば、名前（なければメールアドレス）を最後に足す', () => {
+		expect(
+			formatImportResult({
+				invited: 3,
+				joined: 1,
+				skipped: { inactive: 1 },
+				inviteFailed: [],
+				mailFailed: [
+					{ name: '佐藤 花子', email: 'hanako@example.com' },
+					{ name: '', email: 'c@example.com' }
+				]
+			})
+		).toBe(
+			'招待 3 人、参加の追加 1 人、取り込まなかった人 1 人（Backlog で有効でない 1）。招待メールを送れなかった人 2 人: 佐藤 花子（hanako@example.com）、c@example.com。招待中の一覧の「リンクを再発行」でリンクを渡してください'
 		);
 	});
 
-	it('招待メールを送れなかった人がいれば最後に足す', () => {
+	it('招待できなかった人がいれば、メールを送れなかった人より前に足す', () => {
 		expect(
-			formatImportResult({ invited: 3, joined: 1, skipped: { inactive: 1 }, mailFailed: 2 })
+			formatImportResult({
+				invited: 1,
+				joined: 0,
+				skipped: {},
+				inviteFailed: [{ name: '山田 太郎', email: 'taro@example.com' }],
+				mailFailed: [{ name: '', email: 'c@example.com' }]
+			})
 		).toBe(
-			'招待 3 人、参加の追加 1 人、取り込まなかった人 1 人（Backlog で有効でない 1）。招待メールを送れなかった人 2 人（招待中の一覧の「リンクを再発行」でリンクを渡してください）'
+			'招待 1 人、参加の追加 0 人、取り込まなかった人 0 人。招待できなかった人 1 人: 山田 太郎（taro@example.com）。CSV を読み込み直して確認してください。招待メールを送れなかった人 1 人: c@example.com。招待中の一覧の「リンクを再発行」でリンクを渡してください'
 		);
 	});
 });

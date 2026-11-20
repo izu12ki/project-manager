@@ -12,6 +12,7 @@ import {
 	issue,
 	issueChange,
 	issueStatus,
+	issueType,
 	milestone,
 	notification,
 	project,
@@ -202,7 +203,6 @@ describe('issue-import: plan', () => {
 		expect(p.rowErrors.map((e) => [e.rowNumber, e.key, e.reason])).toEqual([
 			[2, 'DEMO', 'キーの形式が正しくありません'],
 			[4, 'DEMO-100', 'CSV 内でキーが重複しています'],
-			[5, 'DEMO-4', '件名が200文字を超えています'],
 			[6, 'DEMO-5', '登録日の形式が正しくありません'],
 			[7, 'DEMO-6', '開始日の形式が正しくありません'],
 			[8, 'DEMO-7', '期限日の形式が正しくありません'],
@@ -211,7 +211,9 @@ describe('issue-import: plan', () => {
 			[11, 'DEMO-10', '詳細が50,000文字を超えています'],
 			[12, 'DEMO-11', 'コメントが20,000文字を超えています']
 		]);
-		expect(p.issues).toBe(2);
+		// 件名が 200 文字を超える行は、切り詰めて取り込む
+		expect(p.issues).toBe(3);
+		expect(p.longTitles).toEqual(['DEMO-4']);
 	});
 
 	it('取り込み済みのキーを返す（削除済みを含む）', async () => {
@@ -395,6 +397,18 @@ describe('issue-import: run', () => {
 		expect(nextIssueNumber).toBe(5);
 	});
 
+	it('件名が 200 文字を超える課題は、切り詰めて取り込み、元の件名を本文の末尾に残す', async () => {
+		const long = 'あ'.repeat(198) + '😀😀'; // 202 文字（UTF-16）。199 文字目が絵文字の途中
+		await run([row({ title: long }), row({ title: 'い'.repeat(200) })]);
+		const byKey = await issuesByKey();
+		const cut = byKey.get('DEMO-1')!;
+		expect(cut.title).toBe('あ'.repeat(198) + '…');
+		expect(cut.description).toContain(`- 件名（Backlog）: ${long}`);
+		const kept = byKey.get('DEMO-2')!;
+		expect(kept.title).toBe('い'.repeat(200));
+		expect(kept.description).not.toContain('件名（Backlog）');
+	});
+
 	it('分けて取り込むと、前回の課題を親にし、子課題の子にはしない', async () => {
 		await run(fixture('issues.csv'));
 		const result = await run(fixture('issues-2.csv'));
@@ -415,22 +429,13 @@ describe('issue-import: run', () => {
 		expect([await count(issue), await count(category)]).toEqual(before);
 	});
 
-	it('検査の後に別の取り込みが済んだら、一意インデックスで止めて何も残さない', async () => {
-		const rows = fixture('issues.csv');
-		const plan = await planIssueImport(ctx(), 'DEMO', { rows });
-		const racing = new Proxy(db, {
+	/** batch の直前に race を走らせる db（確認の後に別の操作が済んだ状況を作る） */
+	const racingDb = (race: () => Promise<unknown>) =>
+		new Proxy(db, {
 			get(target, prop, receiver) {
 				if (prop === 'batch') {
 					return async (stmts: Parameters<DB['batch']>[0]) => {
-						await target.insert(issue).values({
-							id: 'racer',
-							projectId,
-							number: 99,
-							title: 'racer',
-							reporterId: admin.id,
-							position: 'z0',
-							backlogKey: 'DEMO-3'
-						});
+						await race();
 						return target.batch(stmts);
 					};
 				}
@@ -438,6 +443,21 @@ describe('issue-import: run', () => {
 				return typeof value === 'function' ? value.bind(target) : value;
 			}
 		});
+
+	it('検査の後に別の取り込みが済んだら、一意インデックスで止めて何も残さない', async () => {
+		const rows = fixture('issues.csv');
+		const plan = await planIssueImport(ctx(), 'DEMO', { rows });
+		const racing = racingDb(() =>
+			db.insert(issue).values({
+				id: 'racer',
+				projectId,
+				number: 99,
+				title: 'racer',
+				reporterId: admin.id,
+				position: 'z0',
+				backlogKey: 'DEMO-3'
+			})
+		);
 		const statusesBefore = await count(issueStatus);
 		await expect(
 			importIssues({ ...ctx(), db: racing }, 'DEMO', { rows, people: autoPeople(plan) })
@@ -452,6 +472,39 @@ describe('issue-import: run', () => {
 		const joined = await db.select().from(projectMember).where(eq(projectMember.userId, dev.id));
 		expect(joined).toEqual([]);
 	});
+
+	it.each([
+		{
+			label: '種別',
+			add: (name: string) =>
+				db.insert(issueType).values({ id: 'racer', projectId, name, position: 99 }),
+			name: (p: IssueImportPlan) => p.created.types[0]
+		},
+		{
+			label: 'カテゴリー',
+			add: (name: string) => db.insert(category).values({ id: 'racer', projectId, name }),
+			name: (p: IssueImportPlan) => p.created.categories[0]
+		},
+		{
+			label: 'マイルストーン',
+			add: (name: string) => db.insert(milestone).values({ id: 'racer', projectId, name }),
+			name: (p: IssueImportPlan) => p.created.milestones[0]
+		}
+	])(
+		'確認の後に同じ名前の $label が追加されたら、何も書かずにそう伝える',
+		async ({ label, add, name }) => {
+			const rows = fixture('issues.csv');
+			const plan = await planIssueImport(ctx(), 'DEMO', { rows });
+			const racing = racingDb(() => add(name(plan)));
+			await expect(
+				importIssues({ ...ctx(), db: racing }, 'DEMO', { rows, people: autoPeople(plan) })
+			).rejects.toMatchObject({
+				code: 'conflict',
+				message: `取り込み中に同じ名前の${label}が追加されたため、何も書き込んでいません。CSV を読み込み直してください`
+			});
+			expect(await count(issue)).toBe(0);
+		}
+	);
 
 	it('対応先を手で選べ、候補にない人は validation', async () => {
 		const rows = fixture('issues.csv');

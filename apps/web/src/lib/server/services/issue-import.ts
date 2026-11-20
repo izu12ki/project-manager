@@ -62,6 +62,8 @@ export interface IssueImportPlan {
 	/** 対応先の候補。名前順 */
 	users: IssueImportUser[];
 	rowErrors: { rowNumber: number; key: string; reason: string }[];
+	/** 件名が長いので切り詰めて取り込む課題のキー（元の件名は本文の末尾に残す） */
+	longTitles: string[];
 	/** このプロジェクトに取り込み済みのキー（削除済みを含む）。1 つでもあれば取り込めない */
 	alreadyImported: string[];
 }
@@ -144,6 +146,18 @@ const chunks = <T>(xs: T[], size: number): T[][] =>
 
 const KEY = /^[A-Z][A-Z0-9_]*-\d+$/;
 
+/**
+ * 件名を TITLE_MAX 文字に収める。超える分は「…」にし、絵文字などのサロゲートペアの途中では切らない。
+ * 元の件名は composeDescription が本文の末尾に残す
+ */
+export function clipTitle(title: string): string {
+	if (title.length <= TITLE_MAX) return title;
+	let end = TITLE_MAX - 1;
+	const last = title.charCodeAt(end - 1);
+	if (last >= 0xd800 && last <= 0xdbff) end -= 1;
+	return `${title.slice(0, end)}…`;
+}
+
 /** 本文・コメントの先頭に残す元の名前 */
 export const originalName = (name: string) => `（Backlog: ${name}）`;
 
@@ -155,6 +169,7 @@ export function composeDescription(
 	const resolutionNote = r.resolution && !RESOLUTION_BY_LABEL.has(r.resolution);
 	const lines = [
 		`- Backlog から移行: ${r.key}`,
+		r.title.length > TITLE_MAX && `- 件名（Backlog）: ${r.title}`,
 		o.assigneeName && `- 担当者（Backlog）: ${o.assigneeName}`,
 		o.parentKey && `- 親課題（Backlog）: ${o.parentKey}`,
 		r.milestones.length > 1 && `- マイルストーン（Backlog）: ${r.milestones.slice(1).join('、')}`,
@@ -179,7 +194,6 @@ function rowError(r: BacklogIssueRow, seen: Set<string>): string | null {
 	if (seen.has(r.key)) return 'CSV 内でキーが重複しています';
 	seen.add(r.key);
 	if (r.title === '') return '件名がありません';
-	if (r.title.length > TITLE_MAX) return '件名が200文字を超えています';
 	if (r.createdAt === null) return '登録日の形式が正しくありません';
 	if (!v.is(DateOrEmptySchema, r.startDate)) return '開始日の形式が正しくありません';
 	if (!v.is(DateOrEmptySchema, r.dueDate)) return '期限日の形式が正しくありません';
@@ -435,6 +449,7 @@ export async function buildImport(
 		people: [...people.values()],
 		users: users.map((u) => ({ ...u, member: u.role === 'admin' || memberIds.has(u.id) })),
 		rowErrors: rowErrors.sort((a, b) => a.rowNumber - b.rowNumber),
+		longTitles: valid.filter((r) => r.title.length > TITLE_MAX).map((r) => r.key),
 		alreadyImported: valid
 			.filter((r) => importedByKey.has(r.key))
 			.map((r) => r.key)
@@ -463,13 +478,27 @@ export async function planIssueImport(
 	return (await buildImport(ctx, key, rows)).plan;
 }
 
-/** 二重取り込みを防ぐ一意インデックス（issue_project_backlog_key_uq）に当たったか */
-function isBacklogKeyConflict(e: unknown): boolean {
+const raced = (label: string) =>
+	`取り込み中に同じ名前の${label}が追加されたため、何も書き込んでいません。CSV を読み込み直してください`;
+/** 一意インデックスの列（SQLite の「UNIQUE constraint failed: 表.列」に出る形）と、当たったときの文言 */
+const CONFLICTS: [column: string, message: string][] = [
+	['issue.backlog_key', '既に取り込んだ課題があります。CSV を読み込み直してください'],
+	['issue_type.name', raced('種別')],
+	['category.name', raced('カテゴリー')],
+	['milestone.name', raced('マイルストーン')]
+];
+
+/**
+ * batch が一意インデックスに当たったときの文言。検査と batch の間に、別の取り込みが済んだり
+ * 管理者が同じ名前の種別などを足したりした場合。それ以外のエラーなら null
+ */
+function conflictMessage(e: unknown): string | null {
 	for (let x = e; x; x = (x as { cause?: unknown }).cause) {
 		const message = x instanceof Error ? x.message : String(x);
-		if (message.includes('backlog_key')) return true;
+		const hit = CONFLICTS.find(([column]) => message.includes(column));
+		if (hit) return hit[1];
 	}
-	return false;
+	return null;
 }
 
 export async function importIssues(
@@ -525,7 +554,7 @@ export async function importIssues(
 			projectId: p.id,
 			// 番号はキー ID 順。挿入の順（親が先）とは別に、プロジェクトの続きから振る
 			number: sql`(select ${project.nextIssueNumber} from ${project} where ${project.id} = ${p.id}) + ${i}`,
-			title: r.title,
+			title: clipTitle(r.title),
 			description: composeDescription(r, {
 				reporterName: reporter ? null : r.reporter || null,
 				assigneeName: assignee ? null : r.assignee || null,
@@ -645,9 +674,8 @@ export async function importIssues(
 		const [first, ...rest] = stmts;
 		results = await ctx.db.batch([first, ...rest, range]);
 	} catch (e) {
-		if (isBacklogKeyConflict(e)) {
-			throw new AppError('conflict', '既に取り込んだ課題があります。CSV を読み込み直してください');
-		}
+		const message = conflictMessage(e);
+		if (message) throw new AppError('conflict', message);
 		throw e;
 	}
 	forgetProject(ctx, key); // nextIssueNumber が変わった

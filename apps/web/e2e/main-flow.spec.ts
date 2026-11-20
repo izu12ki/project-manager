@@ -960,7 +960,15 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(rowOf('伊藤 健')).toContainText('参加できるプロジェクトがない');
 	await page.getByLabel('佐藤 次郎 さんの招待ロール').selectOption('guest');
 	await expect(page.getByRole('button', { name: '取り込む（7 人）' })).toBeVisible();
+	// 見出しのチェックで、取り込める人をすべて外す・すべて選ぶ
+	const all = page.getByRole('checkbox', { name: '取り込める人をすべて選ぶ' });
+	await expect(all).toBeChecked();
+	await all.uncheck();
+	await expect(page.getByRole('button', { name: '取り込む（0 人）' })).toBeDisabled();
+	await all.check();
+	await expect(page.getByRole('button', { name: '取り込む（7 人）' })).toBeVisible();
 	await page.getByRole('checkbox', { name: '架空商事 小林 を取り込む' }).uncheck();
+	await expect(all).toHaveJSProperty('indeterminate', true);
 	// 実行ボタンの上に、取り込まない理由の内訳と「参加できるプロジェクトがない」の説明が出る
 	const summary = page.getByTestId('import-summary');
 	await expect(summary).toContainText(

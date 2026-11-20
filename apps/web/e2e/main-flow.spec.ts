@@ -880,10 +880,10 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	const viewerAgain = await browser.newPage({ baseURL });
 	await login(viewerAgain, 'viewer@example.com');
 	await viewerAgain.close();
-	// 閲覧者は担当者の候補（絞り込みの選択肢）に出ない
+	// 閲覧者も担当者の候補（絞り込みの選択肢）に出る
 	await page.goto('/projects/ACME');
 	await expect(page.getByLabel('担当者').locator('option', { hasText: '閲覧 花子' })).toHaveCount(
-		0
+		1
 	);
 
 	// 13. 見たまま編集で開いて中身を変えずに保存しても、本文の Markdown は 1 文字も変わらない

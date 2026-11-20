@@ -1,6 +1,7 @@
 import { and, count, desc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { statusName } from '#lib/labels.ts';
+import { can } from '../authz';
 import type { AppContext } from '../context';
 import {
 	comment,
@@ -174,14 +175,16 @@ export async function markRead(ctx: AppContext, id: string): Promise<{ href: str
 		.innerJoin(project, projectJoin)
 		.where(and(eq(notification.id, id), mine(ctx)));
 	if (!row) throw new AppError('not_found', '通知が見つかりません');
-	await ctx.db
-		.update(notification)
-		.set({ readAt: sql`coalesce(${notification.readAt}, ${Date.now()})` })
-		.where(eq(notification.id, id));
+	if (can(ctx.actor, 'notification:read'))
+		await ctx.db
+			.update(notification)
+			.set({ readAt: sql`coalesce(${notification.readAt}, ${Date.now()})` })
+			.where(eq(notification.id, id));
 	return { href: hrefOf(ctx, row) };
 }
 
 export async function markAllRead(ctx: AppContext): Promise<void> {
+	if (!can(ctx.actor, 'notification:read')) return;
 	await ctx.db
 		.update(notification)
 		.set({ readAt: new Date() })
@@ -191,6 +194,7 @@ export async function markAllRead(ctx: AppContext): Promise<void> {
 /** 課題詳細を開いたときに呼ぶ。課題に参加していなければ not_found（getIssue と同じ） */
 export async function markIssueRead(ctx: AppContext, key: string, number: number): Promise<void> {
 	const { issue: cur } = await getIssue(ctx, key, number);
+	if (!can(ctx.actor, 'notification:read')) return;
 	await ctx.db
 		.update(notification)
 		.set({ readAt: new Date() })

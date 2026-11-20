@@ -24,7 +24,8 @@ export type Action =
 	| 'attachment:delete'
 	| 'emoji:create'
 	| 'emoji:delete'
-	| 'account:modify';
+	| 'account:modify'
+	| 'notification:read';
 
 export interface Resource {
 	reporterId?: string;
@@ -61,8 +62,10 @@ export function can(actor: Actor, action: Action, res: Resource = {}): boolean {
 			return res.uploaderId === actor.id;
 		case 'emoji:delete':
 			return res.creatorId === actor.id;
-		// 表示名・パスワード・Slack 通知などの自分の設定
+		// account:modify は表示名・パスワード・Slack 通知などの自分の設定。
+		// notification:read は通知の既読化（閲覧者の共用アカウントでは既読にせず、次に見る人にも未読のまま残す）
 		case 'account:modify':
+		case 'notification:read':
 			return true;
 	}
 }

@@ -27,6 +27,7 @@ const table: [Action, Parameters<typeof can>[2], boolean, boolean, boolean, bool
 	['attachment:delete', { uploaderId: 'm' }, true, true, false, false],
 	['attachment:delete', { uploaderId: 'g' }, true, false, true, false],
 	['account:modify', {}, true, true, true, false],
+	['notification:read', {}, true, true, true, false],
 	['comment:modify', { authorId: 'v' }, true, false, false, false],
 	['attachment:delete', { uploaderId: 'v' }, true, false, false, false],
 	['emoji:delete', { creatorId: 'v' }, true, false, false, false]

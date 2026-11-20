@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
 import { authorize } from '../authz';
@@ -219,7 +219,6 @@ export async function removeMember(ctx: AppContext, key: string, userId: string)
 	]);
 }
 
-/** 担当者・メンションの候補（通知の宛先にもなる）。閲覧者は参加者でも含めない */
 export async function listAssignableUsers(db: DB, projectId: string) {
 	return db
 		.select({ id: user.id, name: user.name, role: user.role })
@@ -227,7 +226,6 @@ export async function listAssignableUsers(db: DB, projectId: string) {
 		.where(
 			and(
 				isNull(user.disabledAt),
-				ne(user.role, 'viewer'),
 				or(
 					eq(user.role, 'admin'),
 					inArray(

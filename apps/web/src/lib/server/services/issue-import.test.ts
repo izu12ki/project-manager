@@ -12,6 +12,7 @@ import {
 	issue,
 	issueChange,
 	issueStatus,
+	issueType,
 	milestone,
 	notification,
 	project,
@@ -415,22 +416,13 @@ describe('issue-import: run', () => {
 		expect([await count(issue), await count(category)]).toEqual(before);
 	});
 
-	it('検査の後に別の取り込みが済んだら、一意インデックスで止めて何も残さない', async () => {
-		const rows = fixture('issues.csv');
-		const plan = await planIssueImport(ctx(), 'DEMO', { rows });
-		const racing = new Proxy(db, {
+	/** batch の直前に race を走らせる db（確認の後に別の操作が済んだ状況を作る） */
+	const racingDb = (race: () => Promise<unknown>) =>
+		new Proxy(db, {
 			get(target, prop, receiver) {
 				if (prop === 'batch') {
 					return async (stmts: Parameters<DB['batch']>[0]) => {
-						await target.insert(issue).values({
-							id: 'racer',
-							projectId,
-							number: 99,
-							title: 'racer',
-							reporterId: admin.id,
-							position: 'z0',
-							backlogKey: 'DEMO-3'
-						});
+						await race();
 						return target.batch(stmts);
 					};
 				}
@@ -438,6 +430,21 @@ describe('issue-import: run', () => {
 				return typeof value === 'function' ? value.bind(target) : value;
 			}
 		});
+
+	it('検査の後に別の取り込みが済んだら、一意インデックスで止めて何も残さない', async () => {
+		const rows = fixture('issues.csv');
+		const plan = await planIssueImport(ctx(), 'DEMO', { rows });
+		const racing = racingDb(() =>
+			db.insert(issue).values({
+				id: 'racer',
+				projectId,
+				number: 99,
+				title: 'racer',
+				reporterId: admin.id,
+				position: 'z0',
+				backlogKey: 'DEMO-3'
+			})
+		);
 		const statusesBefore = await count(issueStatus);
 		await expect(
 			importIssues({ ...ctx(), db: racing }, 'DEMO', { rows, people: autoPeople(plan) })
@@ -452,6 +459,39 @@ describe('issue-import: run', () => {
 		const joined = await db.select().from(projectMember).where(eq(projectMember.userId, dev.id));
 		expect(joined).toEqual([]);
 	});
+
+	it.each([
+		{
+			label: '種別',
+			add: (name: string) =>
+				db.insert(issueType).values({ id: 'racer', projectId, name, position: 99 }),
+			name: (p: IssueImportPlan) => p.created.types[0]
+		},
+		{
+			label: 'カテゴリー',
+			add: (name: string) => db.insert(category).values({ id: 'racer', projectId, name }),
+			name: (p: IssueImportPlan) => p.created.categories[0]
+		},
+		{
+			label: 'マイルストーン',
+			add: (name: string) => db.insert(milestone).values({ id: 'racer', projectId, name }),
+			name: (p: IssueImportPlan) => p.created.milestones[0]
+		}
+	])(
+		'確認の後に同じ名前の $label が追加されたら、何も書かずにそう伝える',
+		async ({ label, add, name }) => {
+			const rows = fixture('issues.csv');
+			const plan = await planIssueImport(ctx(), 'DEMO', { rows });
+			const racing = racingDb(() => add(name(plan)));
+			await expect(
+				importIssues({ ...ctx(), db: racing }, 'DEMO', { rows, people: autoPeople(plan) })
+			).rejects.toMatchObject({
+				code: 'conflict',
+				message: `取り込み中に同じ名前の${label}が追加されたため、何も書き込んでいません。CSV を読み込み直してください`
+			});
+			expect(await count(issue)).toBe(0);
+		}
+	);
 
 	it('対応先を手で選べ、候補にない人は validation', async () => {
 		const rows = fixture('issues.csv');

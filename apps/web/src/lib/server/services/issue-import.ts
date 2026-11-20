@@ -463,13 +463,27 @@ export async function planIssueImport(
 	return (await buildImport(ctx, key, rows)).plan;
 }
 
-/** 二重取り込みを防ぐ一意インデックス（issue_project_backlog_key_uq）に当たったか */
-function isBacklogKeyConflict(e: unknown): boolean {
+const raced = (label: string) =>
+	`取り込み中に同じ名前の${label}が追加されたため、何も書き込んでいません。CSV を読み込み直してください`;
+/** 一意インデックスの列（SQLite の「UNIQUE constraint failed: 表.列」に出る形）と、当たったときの文言 */
+const CONFLICTS: [column: string, message: string][] = [
+	['issue.backlog_key', '既に取り込んだ課題があります。CSV を読み込み直してください'],
+	['issue_type.name', raced('種別')],
+	['category.name', raced('カテゴリー')],
+	['milestone.name', raced('マイルストーン')]
+];
+
+/**
+ * batch が一意インデックスに当たったときの文言。検査と batch の間に、別の取り込みが済んだり
+ * 管理者が同じ名前の種別などを足したりした場合。それ以外のエラーなら null
+ */
+function conflictMessage(e: unknown): string | null {
 	for (let x = e; x; x = (x as { cause?: unknown }).cause) {
 		const message = x instanceof Error ? x.message : String(x);
-		if (message.includes('backlog_key')) return true;
+		const hit = CONFLICTS.find(([column]) => message.includes(column));
+		if (hit) return hit[1];
 	}
-	return false;
+	return null;
 }
 
 export async function importIssues(
@@ -645,9 +659,8 @@ export async function importIssues(
 		const [first, ...rest] = stmts;
 		results = await ctx.db.batch([first, ...rest, range]);
 	} catch (e) {
-		if (isBacklogKeyConflict(e)) {
-			throw new AppError('conflict', '既に取り込んだ課題があります。CSV を読み込み直してください');
-		}
+		const message = conflictMessage(e);
+		if (message) throw new AppError('conflict', message);
 		throw e;
 	}
 	forgetProject(ctx, key); // nextIssueNumber が変わった

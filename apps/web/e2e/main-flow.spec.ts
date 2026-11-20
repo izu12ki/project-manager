@@ -832,6 +832,60 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page.getByRole('switch', { name: 'Slack 通知' })).toBeDisabled();
 	await expect(page.getByText('Slack 連携は未設定です（管理者に連絡してください）')).toBeVisible();
 
+	// 12b. 閲覧者（公開デモの共用アカウント向け）。見るだけで、何も書き込めない
+	await page.goto('/projects/ACME/settings');
+	await page.getByLabel('メールアドレス', { exact: true }).fill('viewer@example.com');
+	await page.getByLabel('ロール', { exact: true }).selectOption('viewer');
+	await page.getByRole('button', { name: '招待する' }).click();
+	const viewerUrl = await page.getByLabel('招待リンク').inputValue();
+	const viewerPage = await browser.newPage({ baseURL });
+	await watchCsp(viewerPage.context(), cspViolations);
+	await acceptInvite(viewerPage, viewerUrl, '閲覧 花子');
+	// 一覧・課題は見られるが、起票・コメント・子課題の追加・属性の変更の入口がない
+	await viewerPage.goto('/projects/ACME');
+	await expect(viewerPage.getByRole('row', { name: /ログインできない/ })).toBeVisible();
+	await expect(viewerPage.getByRole('link', { name: '新規課題' })).toHaveCount(0);
+	await viewerPage.goto('/projects/ACME/issues/1');
+	await expect(viewerPage.getByRole('heading', { name: 'ログインできない' })).toBeVisible();
+	await expect(viewerPage.getByRole('textbox', { name: 'コメントを追加' })).toHaveCount(0);
+	await expect(viewerPage.getByRole('link', { name: '子課題を追加' })).toHaveCount(0);
+	await expect(viewerPage.getByLabel('ステータス')).toBeDisabled();
+	// URL を直接開いても起票画面は出ない
+	expect((await viewerPage.goto('/projects/ACME/issues/new'))?.status()).toBe(404);
+	// アカウント設定も変えられない（共用のパスワードを変えて他の人を締め出させない）
+	await viewerPage.goto('/account');
+	await expect(viewerPage.getByText('このアカウントは閲覧専用のため')).toBeVisible();
+	await expect(viewerPage.getByRole('heading', { name: 'パスワード変更' })).toHaveCount(0);
+	const origin = { Origin: 'http://localhost:4173' };
+	const viaAction = await viewerPage.request.post('/account?/changePassword', {
+		headers: origin,
+		form: { currentPassword: PW, newPassword: 'changed-password-1' }
+	});
+	expect(viaAction.status()).toBe(404);
+	for (const path of ['/api/auth/change-password', '/api/auth/revoke-sessions']) {
+		const r = await viewerPage.request.post(path, {
+			headers: origin,
+			data: { currentPassword: PW, newPassword: 'changed-password-1' }
+		});
+		expect(r.status(), path).toBe(403);
+	}
+	// 画面に出ない書き込みを直接送っても拒否する
+	const viewerUpload = await viewerPage.request.post('/projects/ACME/attachments', {
+		headers: { ...origin, Accept: 'application/json' },
+		multipart: { file: { name: 'a.png', mimeType: 'image/png', buffer: PNG } }
+	});
+	expect(viewerUpload.ok()).toBe(false);
+	await viewerPage.close();
+	// パスワードは変わっていない
+	const viewerAgain = await browser.newPage({ baseURL });
+	await login(viewerAgain, 'viewer@example.com');
+	await viewerAgain.close();
+	// 閲覧者は担当者の候補（絞り込みの選択肢）に出ない
+	await page.goto('/projects/ACME');
+	await expect(page.getByLabel('担当者').locator('option', { hasText: '閲覧 花子' })).toHaveCount(
+		0
+	);
+
 	// 13. 見たまま編集で開いて中身を変えずに保存しても、本文の Markdown は 1 文字も変わらない
 	// 書き出すと形が変わる書き方（番号の振り直し・Setext 見出し・参照リンク）を含める
 	const rawBody = '* a\n* b\n\n1) x\n1) y\n\nSetext\n===\n\n[x][l]\n\n[l]: https://example.com';

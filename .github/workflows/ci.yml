@@ -33,6 +33,11 @@ jobs:
       - run: pnpm test:e2e
         env:
           WRANGLER_SEND_METRICS: 'false'
+      # E2E は wrangler dev しか使わないので、wrangler deploy が設定を読んで Worker を組み立てられるかも確かめる。
+      # E2E がビルドした成果物をそのまま使う。--dry-run はアップロードせず、認証も要らない
+      - run: pnpm --filter web exec wrangler deploy --dry-run
+        env:
+          WRANGLER_SEND_METRICS: 'false'
       - uses: actions/upload-artifact@v7
         if: failure()
         with:

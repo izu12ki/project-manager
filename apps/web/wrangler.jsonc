@@ -3,8 +3,8 @@
 	"name": "project-manager",
 	"compatibility_date": "2026-10-09",
 	"compatibility_flags": ["nodejs_compat"],
-	"main": ".svelte-kit/cloudflare/_worker.js",
-	"assets": { "binding": "ASSETS", "directory": ".svelte-kit/cloudflare" },
+	// main と assets.directory は adapter-cloudflare がビルド時に設定する（vite build が .wrangler/deploy/config.json を書き、wrangler dev / deploy はそれを読む）
+	"assets": { "binding": "ASSETS" },
 	"workers_dev": true,
 	"preview_urls": true,
 	"observability": { "enabled": true },

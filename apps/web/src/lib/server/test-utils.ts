@@ -1,5 +1,6 @@
 // テスト専用。アプリのコードから import しないこと。
-import { createClient } from '@libsql/client';
+// adapter-cloudflare が依存の解決を workerd に合わせるので、無指定だと Web 版になり :memory: を開けない
+import { createClient } from '@libsql/client/node';
 import { drizzle } from 'drizzle-orm/libsql';
 import { migrate } from 'drizzle-orm/libsql/migrator';
 import { fileURLToPath } from 'node:url';

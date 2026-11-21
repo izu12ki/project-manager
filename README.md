@@ -12,6 +12,47 @@
 
 **利用には Cloudflare アカウント（Workers Paid プラン）と Turso アカウントが必要です。** 手順は[ドキュメント](https://project-manager-docs.hirano-i.workers.dev)（ソースは `apps/docs`）を参照してください。
 
+![カンバンの画面。未着手・進行中・レビュー・完了の列に課題のカードが並ぶ](apps/docs/public/screenshots/board.png)
+
+## デモ
+
+[https://project-manager.hirano-i.workers.dev](https://project-manager.hirano-i.workers.dev) で実際の画面を見られます。プロジェクト、メンバー、課題はすべて架空のものです。
+
+- メールアドレス: `demo@example.com`
+- パスワード: `pm-demo-2026`
+
+> [!NOTE]
+> デモのアカウントは閲覧専用（閲覧者ロール）です。課題の起票・編集、ステータスの変更、コメントとリアクション、ファイルの添付、カンバンやタイムラインのドラッグはできません。これらの操作は、下の画面イメージか[ドキュメントのデモのページ](https://project-manager-docs.hirano-i.workers.dev/guides/demo/)を参照してください。
+
+<details>
+<summary>デモでは試せない操作の画面イメージ</summary>
+
+**課題の起票**（顧客のゲストも起票できます）
+
+![新規課題ボタンから種別とタイトルを入力して起票する様子](apps/docs/public/screenshots/create-issue.gif)
+
+**カンバンでのステータス変更**
+
+![カンバンでカードを「進行中」から「レビュー」の列へドラッグする様子](apps/docs/public/screenshots/board-drag.gif)
+
+**タイムラインでの日程変更**
+
+![タイムラインでバーの右端をドラッグして期限を 2 日延ばす様子](apps/docs/public/screenshots/timeline-drag.gif)
+
+**コメント・メンション・リアクション**
+
+![コメントにリアクションを付け、メンション付きのコメントを投稿する様子](apps/docs/public/screenshots/comment-reaction.gif)
+
+**ファイルの添付**
+
+![コメント欄で画像を添付して投稿する様子](apps/docs/public/screenshots/attach-image.gif)
+
+**子課題の追加**
+
+![課題の詳細の「子課題を追加」から子課題を起票する様子](apps/docs/public/screenshots/add-subtask.gif)
+
+</details>
+
 ## 開発
 
 ```bash

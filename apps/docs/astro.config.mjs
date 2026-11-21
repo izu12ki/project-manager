@@ -17,6 +17,7 @@ export default defineConfig({
 				{
 					label: 'はじめに',
 					items: [
+						{ label: 'デモ', slug: 'guides/demo' },
 						{ label: '必要なもの', slug: 'guides/requirements' },
 						{ label: 'デプロイ手順', slug: 'guides/deploy' },
 						{ label: 'アップデート', slug: 'guides/update' }

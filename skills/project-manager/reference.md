@@ -48,7 +48,7 @@ curl -sS "$PM_API_URL/api/v1/me" -H "Authorization: Bearer $PM_API_KEY"
 ```
 
 ```json
-{ "id": "u1", "name": "平野", "role": "admin" }
+{ "id": "u1", "name": "佐藤", "role": "admin" }
 ```
 
 ## GET /projects
@@ -91,7 +91,7 @@ curl -sS "$PM_API_URL/api/v1/me" -H "Authorization: Bearer $PM_API_KEY"
       "completed": false
     }
   ],
-  "members": [{ "id": "u1", "name": "平野" }]
+  "members": [{ "id": "u1", "name": "佐藤" }]
 }
 ```
 
@@ -126,7 +126,7 @@ curl -sS "$PM_API_URL/api/v1/me" -H "Authorization: Bearer $PM_API_KEY"
       "status": "todo",
       "resolution": null,
       "priority": "none",
-      "assignees": [{ "id": "u1", "name": "平野" }],
+      "assignees": [{ "id": "u1", "name": "佐藤" }],
       "parentNumber": null,
       "startDate": "2026-11-01",
       "dueDate": "2026-11-10",

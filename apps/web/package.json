@@ -74,7 +74,7 @@
 		"diff": "9.0.0",
 		"drizzle-orm": "1.0.0-rc.5",
 		"fractional-indexing": "4.0.0",
-		"hast-util-to-html": "9.0.6",
+		"hast-util-to-html": "9.0.7",
 		"lexical": "0.53.0",
 		"linkify-it": "6.1.0",
 		"mdast-util-from-markdown": "2.1.0",

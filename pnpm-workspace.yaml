@@ -4,3 +4,6 @@ allowBuilds:
   workerd: true
   esbuild: true
   '@parcel/watcher': false
+# 公開から 1 日（1440 分）経っていない版は入れない。pnpm 12 の既定と同じ値だが、方針として明示する。
+# Renovate の minimumReleaseAge もこれに揃えている（短いと Renovate の PR が CI の install で落ちる）
+minimumReleaseAge: 1440

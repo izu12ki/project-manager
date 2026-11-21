@@ -1,5 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import { can } from '#lib/server/authz.ts';
+import { authorize, can } from '#lib/server/authz.ts';
 import { appContext } from '#lib/server/context.ts';
 import { handleAction, handleLoad } from '#lib/server/errors.ts';
 import { listCategories, listMilestones } from '#lib/server/services/issue-fields.ts';
@@ -12,6 +12,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const ctx = appContext(locals);
 	return handleLoad(async () => {
 		const p = await requireProject(ctx, params.key);
+		authorize(ctx.actor, 'issue:create');
 		const canAssign = can(ctx.actor, 'issue:assign');
 		const [assignable, categories, milestones, issues] = await Promise.all([
 			listAssignableUsers(ctx.db, p.id),

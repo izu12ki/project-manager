@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { enhance } from '#lib/forms.ts';
-	import { Check, Copy } from '@lucide/svelte';
+	import { Check, Copy, Eye } from '@lucide/svelte';
 	import ConfirmAction from '#lib/components/ConfirmAction.svelte';
 	import FormAlert from '#lib/components/FormAlert.svelte';
 	import PasswordInput from '#lib/components/PasswordInput.svelte';
@@ -60,24 +60,31 @@
 			message={form.message}
 		/>{/if}
 
-	<form method="POST" action="?/updateName" use:enhance class="card">
-		<div class="card-head">
-			<h2 class="card-title">表示名</h2>
-			<p class="card-desc">課題やコメントに表示される名前です</p>
+	{#if !data.canModifyAccount}
+		<div role="status" class="alert">
+			<Eye />
+			<div>このアカウントは閲覧専用のため、表示名・パスワード・通知の設定は変更できません。</div>
 		</div>
-		<div class="field">
-			<label class="label" for="account-name">名前</label>
-			<input
-				class="input"
-				id="account-name"
-				name="name"
-				required
-				maxlength={50}
-				value={data.user?.name}
-			/>
-		</div>
-		<div><button type="submit" class="btn btn-primary">保存</button></div>
-	</form>
+	{:else}
+		<form method="POST" action="?/updateName" use:enhance class="card">
+			<div class="card-head">
+				<h2 class="card-title">表示名</h2>
+				<p class="card-desc">課題やコメントに表示される名前です</p>
+			</div>
+			<div class="field">
+				<label class="label" for="account-name">名前</label>
+				<input
+					class="input"
+					id="account-name"
+					name="name"
+					required
+					maxlength={50}
+					value={data.user?.name}
+				/>
+			</div>
+			<div><button type="submit" class="btn btn-primary">保存</button></div>
+		</form>
+	{/if}
 
 	<div class="card">
 		<div class="card-head">
@@ -101,69 +108,71 @@
 		</div>
 	</div>
 
-	<form method="POST" action="?/changePassword" use:enhance class="card">
-		<div class="card-head">
-			<h2 class="card-title">パスワード変更</h2>
-			<p class="card-desc">変更後は他の端末からログアウトされます</p>
-		</div>
-		<div class="grid gap-4">
-			<div class="field">
-				<label class="label" for="current-password">現在のパスワード</label>
-				<PasswordInput
-					id="current-password"
-					name="currentPassword"
-					autocomplete="current-password"
-					required
-				/>
+	{#if data.canModifyAccount}
+		<form method="POST" action="?/changePassword" use:enhance class="card">
+			<div class="card-head">
+				<h2 class="card-title">パスワード変更</h2>
+				<p class="card-desc">変更後は他の端末からログアウトされます</p>
 			</div>
-			<div class="field">
-				<label class="label" for="new-password">新しいパスワード</label>
-				<PasswordInput
-					id="new-password"
-					name="newPassword"
-					autocomplete="new-password"
-					required
-					minlength={10}
-					aria-describedby="new-password-hint"
-				/>
-				<p class="hint" id="new-password-hint">10文字以上</p>
+			<div class="grid gap-4">
+				<div class="field">
+					<label class="label" for="current-password">現在のパスワード</label>
+					<PasswordInput
+						id="current-password"
+						name="currentPassword"
+						autocomplete="current-password"
+						required
+					/>
+				</div>
+				<div class="field">
+					<label class="label" for="new-password">新しいパスワード</label>
+					<PasswordInput
+						id="new-password"
+						name="newPassword"
+						autocomplete="new-password"
+						required
+						minlength={10}
+						aria-describedby="new-password-hint"
+					/>
+					<p class="hint" id="new-password-hint">10文字以上</p>
+				</div>
 			</div>
-		</div>
-		<div><button type="submit" class="btn btn-primary">保存</button></div>
-	</form>
-
-	<div class="card">
-		<div class="card-head">
-			<h2 class="card-title">Slack 通知</h2>
-			<p class="card-desc">
-				このアプリのログイン用メールアドレス（{data.user?.email}）と同じメールアドレスの Slack
-				アカウントに、DM で通知が届きます。Slack
-				のプロフィールのメールアドレスが異なる場合は届きません。
-			</p>
-		</div>
-		{#if form && 'slack' in form && form.message}<FormAlert message={form.message} />{/if}
-		<form
-			method="POST"
-			action={data.slack.linked ? '?/disableSlack' : '?/enableSlack'}
-			use:enhance
-			class="flex items-center gap-3"
-		>
-			<button
-				type="submit"
-				class="btn {data.slack.linked ? 'btn-outline' : 'btn-primary'}"
-				role="switch"
-				aria-checked={data.slack.linked}
-				aria-label="Slack 通知"
-				disabled={!data.slack.available && !data.slack.linked}
-			>
-				{data.slack.linked ? 'オフにする' : 'オンにする'}
-			</button>
-			<span class="text-sm text-muted-foreground">
-				{#if data.slack.linked}Slack に連携中{:else if !data.slack.available}Slack
-					連携は未設定です（管理者に連絡してください）{:else}オフ{/if}
-			</span>
+			<div><button type="submit" class="btn btn-primary">保存</button></div>
 		</form>
-	</div>
+
+		<div class="card">
+			<div class="card-head">
+				<h2 class="card-title">Slack 通知</h2>
+				<p class="card-desc">
+					このアプリのログイン用メールアドレス（{data.user?.email}）と同じメールアドレスの Slack
+					アカウントに、DM で通知が届きます。Slack
+					のプロフィールのメールアドレスが異なる場合は届きません。
+				</p>
+			</div>
+			{#if form && 'slack' in form && form.message}<FormAlert message={form.message} />{/if}
+			<form
+				method="POST"
+				action={data.slack.linked ? '?/disableSlack' : '?/enableSlack'}
+				use:enhance
+				class="flex items-center gap-3"
+			>
+				<button
+					type="submit"
+					class="btn {data.slack.linked ? 'btn-outline' : 'btn-primary'}"
+					role="switch"
+					aria-checked={data.slack.linked}
+					aria-label="Slack 通知"
+					disabled={!data.slack.available && !data.slack.linked}
+				>
+					{data.slack.linked ? 'オフにする' : 'オンにする'}
+				</button>
+				<span class="text-sm text-muted-foreground">
+					{#if data.slack.linked}Slack に連携中{:else if !data.slack.available}Slack
+						連携は未設定です（管理者に連絡してください）{:else}オフ{/if}
+				</span>
+			</form>
+		</div>
+	{/if}
 
 	{#if data.apiKeys}
 		<div class="card">

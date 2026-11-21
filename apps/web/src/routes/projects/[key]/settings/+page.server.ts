@@ -118,11 +118,14 @@ export const actions: Actions = {
 		});
 	},
 	inviteGuest: async ({ request, locals, params }) => {
-		const email = String((await request.formData()).get('email') ?? '');
+		const fd = await request.formData();
+		const email = String(fd.get('email') ?? '');
+		// プロジェクト設定から招待できるのはゲストと閲覧者だけ
+		const role = fd.get('role') === 'viewer' ? 'viewer' : 'guest';
 		return handleAction(async () => {
 			const ctx = appContext(locals);
 			const p = await requireProject(ctx, params.key);
-			const { url } = await createInvitation(ctx, { email, role: 'guest', projectIds: [p.id] });
+			const { url } = await createInvitation(ctx, { email, role, projectIds: [p.id] });
 			return { inviteUrl: url };
 		});
 	},

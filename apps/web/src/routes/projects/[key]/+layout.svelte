@@ -33,7 +33,7 @@
 					<p class="page-desc">{plain(data.project.description)}</p>
 				{/if}
 			</div>
-			{#if !data.project.archivedAt && current.label !== '設定'}
+			{#if !data.project.archivedAt && data.canCreateIssue && current.label !== '設定'}
 				<a href={`${base}/issues/new`} class="btn btn-primary"><Plus />新規課題</a>
 			{/if}
 		</div>

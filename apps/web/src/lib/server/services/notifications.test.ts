@@ -78,6 +78,21 @@ describe('notifications service', () => {
 		expect((await listNotifications(as(guest)))[0].read).toBe(true);
 	});
 
+	it('閲覧者も担当・メンションで通知を受け取るが、既読にはならない（共用アカウントの未読を残す）', async () => {
+		const viewer = await seedUser(db, 'viewer', '閲覧');
+		await seedProject(db, { key: 'DEMO', members: [member, viewer] });
+		await createIssue(as(member), 'DEMO', { title: 'デモ' });
+		await updateIssue(as(member), 'DEMO', 1, { assigneeIds: [viewer.id] });
+		await addComment(as(member), 'DEMO', 1, { body: `${mentionToken(viewer)} 見てください` });
+		expect(await countUnread(as(viewer))).toBe(2);
+		const [first] = await listNotifications(as(viewer));
+		// 遷移先は返すが、既読にはしない
+		expect(await markRead(as(viewer), first.id)).toEqual({ href: first.href });
+		await markIssueRead(as(viewer), 'DEMO', 1);
+		await markAllRead(as(viewer));
+		expect(await countUnread(as(viewer))).toBe(2);
+	});
+
 	it('他人の通知は既読化できない（not_found）', async () => {
 		const [n] = await db.select().from(notification).where(eq(notification.userId, guest.id));
 		await expect(markRead(as(member), n.id)).rejects.toMatchObject({ code: 'not_found' });

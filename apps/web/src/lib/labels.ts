@@ -68,7 +68,15 @@ export const PRIORITY_LABEL: Record<Priority, string> = {
 	urgent: '緊急'
 };
 
-export const ROLE_LABEL = { admin: '管理者', member: 'メンバー', guest: 'ゲスト' } as const;
+/** ロールの選択肢の並び（権限が弱い順） */
+export const ROLES = ['viewer', 'guest', 'member', 'admin'] as const;
+
+export const ROLE_LABEL = {
+	admin: '管理者',
+	member: 'メンバー',
+	guest: 'ゲスト',
+	viewer: '閲覧者'
+} as const;
 
 export const DEFAULT_STATUS_COLOR: Record<(typeof DEFAULT_STATUSES)[number], ColorName> = {
 	todo: 'gray',
@@ -100,13 +108,15 @@ export const PRIORITY_CLASS: Record<Priority, string> = {
 export const ROLE_CLASS = {
 	admin: 'pill-admin',
 	member: 'pill-tint',
-	guest: 'pill-tint'
+	guest: 'pill-tint',
+	viewer: 'pill-tint'
 } as const;
 
 export const ROLE_COLOR = {
 	admin: 'var(--primary)',
 	member: 'var(--c-teal)',
-	guest: 'var(--c-pink)'
+	guest: 'var(--c-pink)',
+	viewer: 'var(--c-blue)'
 } as const;
 
 const PALETTE = [

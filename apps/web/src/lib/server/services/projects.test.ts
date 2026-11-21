@@ -180,4 +180,11 @@ describe('projects', () => {
 		const ids = (await listAssignableUsers(db, id)).map((u) => u.id).sort();
 		expect(ids).toEqual([admin.id, member.id, guest.id].sort());
 	});
+
+	it('参加している閲覧者も担当者候補（メンションの候補）に出る', async () => {
+		const viewer = await seedUser(db, 'viewer');
+		const { id } = await seedProject(db, { key: 'ACME', members: [member, viewer] });
+		const ids = (await listAssignableUsers(db, id)).map((u) => u.id).sort();
+		expect(ids).toEqual([admin.id, member.id, viewer.id].sort());
+	});
 });

@@ -2,7 +2,7 @@ import { fail, isActionFailure } from '@sveltejs/kit';
 import { APIError } from 'better-auth/api';
 import * as v from 'valibot';
 import { appContext } from '#lib/server/context.ts';
-import { can } from '#lib/server/authz.ts';
+import { authorize, can } from '#lib/server/authz.ts';
 import { handleAction } from '#lib/server/errors.ts';
 import { createApiKey, listApiKeys, revokeApiKey } from '#lib/server/services/api-keys.ts';
 import { disableSlack, enableSlack, getSlackStatus } from '#lib/server/services/integrations.ts';
@@ -13,6 +13,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const ctx = appContext(locals);
 	return {
 		slack: await getSlackStatus(ctx),
+		// 閲覧者（公開デモの共用アカウントなど）は表示名・パスワード・通知を変えられない
+		canModifyAccount: can(ctx.actor, 'account:modify'),
 		// API キーは管理者だけが使う。それ以外には欄ごと出さない
 		apiKeys: can(ctx.actor, 'api:use') ? await listApiKeys(ctx) : null
 	};
@@ -36,6 +38,7 @@ const apiKeyAction = <T>(fn: () => Promise<T>) => cardAction('apiKey', fn);
 export const actions: Actions = {
 	updateName: async ({ request, locals }) =>
 		handleAction(async () => {
+			authorize(appContext(locals).actor, 'account:modify');
 			const { name } = parse(v.object({ name: NameSchema }), formObject(await request.formData()));
 			await locals.auth.api.updateUser({ body: { name }, headers: request.headers });
 			return { nameSaved: true };
@@ -43,6 +46,7 @@ export const actions: Actions = {
 	changePassword: async ({ request, locals }) => {
 		const input = formObject(await request.formData());
 		return handleAction(async () => {
+			authorize(appContext(locals).actor, 'account:modify');
 			const data = parse(
 				v.object({ currentPassword: v.string(), newPassword: PasswordSchema }),
 				input

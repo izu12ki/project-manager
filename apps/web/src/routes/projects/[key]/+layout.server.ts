@@ -1,3 +1,4 @@
+import { can } from '#lib/server/authz.ts';
 import { appContext } from '#lib/server/context.ts';
 import { handleLoad } from '#lib/server/errors.ts';
 import { listIssueTypesOf, listStatusesOf } from '#lib/server/services/issue-fields.ts';
@@ -12,6 +13,13 @@ export const load: LayoutServerLoad = async ({ locals, params }) => {
 			listStatusesOf(ctx.db, project.id),
 			listIssueTypesOf(ctx.db, project.id)
 		]);
-		return { project, statuses, issueTypes, isAdmin: ctx.actor.role === 'admin' };
+		return {
+			project,
+			statuses,
+			issueTypes,
+			isAdmin: ctx.actor.role === 'admin',
+			canCreateIssue: can(ctx.actor, 'issue:create'),
+			canChangeStatus: can(ctx.actor, 'issue:changeStatus')
+		};
 	});
 };

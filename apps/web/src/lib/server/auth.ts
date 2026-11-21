@@ -49,7 +49,7 @@ export function createAuth(
 		user: {
 			additionalFields: {
 				role: {
-					type: ['admin', 'member', 'guest'],
+					type: ['admin', 'member', 'guest', 'viewer'],
 					required: true,
 					input: false,
 					defaultValue: 'member'

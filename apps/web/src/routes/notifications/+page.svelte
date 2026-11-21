@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { colorFor, formatDateTime } from '#lib/labels.ts';
 	import { toast } from '#lib/toast.svelte.ts';
 	import {
@@ -10,6 +11,8 @@
 
 	const items = $derived(await getNotifications());
 	const hasUnread = $derived(items.some((n) => !n.read));
+	// 閲覧者（共用アカウント）の通知は既読にならないので、まとめて既読にするボタンを出さない
+	const canMarkRead = $derived(page.data.user?.role !== 'viewer');
 
 	async function open(id: string) {
 		try {
@@ -34,9 +37,11 @@
 <section class="grid w-full max-w-[800px] gap-4">
 	<div class="flex items-center justify-between gap-4">
 		<h1 class="m-0 text-xl font-bold">通知</h1>
-		<button type="button" class="btn btn-outline btn-sm" disabled={!hasUnread} onclick={readAll}
-			>すべて既読にする</button
-		>
+		{#if canMarkRead}
+			<button type="button" class="btn btn-outline btn-sm" disabled={!hasUnread} onclick={readAll}
+				>すべて既読にする</button
+			>
+		{/if}
 	</div>
 	{#if items.length === 0}
 		<p class="card m-0 text-muted-foreground">通知はありません</p>

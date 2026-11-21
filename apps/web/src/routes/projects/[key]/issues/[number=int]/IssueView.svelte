@@ -495,7 +495,7 @@
 			</div>
 		{/if}
 
-		{#if !issue.parent && (detail.children.length > 0 || perms.writable)}
+		{#if !issue.parent && (detail.children.length > 0 || perms.create)}
 			<section class="card children" aria-label="子課題">
 				<div class="flex items-center gap-2">
 					<h2 class="card-title">
@@ -507,7 +507,7 @@
 							>
 						{/if}
 					</h2>
-					{#if perms.writable}
+					{#if perms.create}
 						<a
 							href={`/projects/${projectKey}/issues/new?parent=${issue.number}`}
 							class="btn btn-outline btn-sm ml-auto"><Plus />子課題を追加</a
@@ -628,7 +628,7 @@
 								<span class="font-medium">{c.authorName}</span>
 								<span class="text-xs text-muted-foreground">{formatDateTime(c.createdAt)}</span>
 								<div class="ml-auto flex items-center">
-									{#if perms.writable}
+									{#if perms.comment}
 										<ReactionPicker
 											align="end"
 											selected={c.reactions
@@ -705,7 +705,7 @@
 								id={`comment-${c.id}`}
 								reactions={c.reactions}
 								meId={me?.id}
-								canReact={perms.writable}
+								canReact={perms.comment}
 								ontoggle={(emoji) => react(c.id, emoji)}
 							/>
 						</div>
@@ -724,7 +724,7 @@
 					</div>
 				</article>
 			{/each}
-			{#if perms.writable}
+			{#if perms.comment}
 				<form {...commentForm} class="new-comment">
 					<input {...post.fields.key.as('hidden', ref.key)} />
 					<input {...post.fields.number.as('hidden', ref.number)} />

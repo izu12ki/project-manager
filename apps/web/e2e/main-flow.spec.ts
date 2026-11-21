@@ -115,7 +115,11 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.goto('/admin/users');
 	await expect(page.getByRole('heading', { name: 'ユーザーを招待' })).toBeVisible();
 	await page.getByLabel('メールアドレス').fill('member@example.com');
-	await page.getByLabel('ロール', { exact: true }).selectOption('member');
+	// ロールは権限が弱い順に並び、既定はメンバー
+	const inviteRole = page.getByLabel('ロール', { exact: true });
+	await expect(inviteRole.locator('option')).toHaveText(['閲覧者', 'ゲスト', 'メンバー', '管理者']);
+	await expect(inviteRole).toHaveValue('member');
+	await inviteRole.selectOption('member');
 	await page.locator('#invite-project').click();
 	await page.getByRole('checkbox', { name: 'ACME サイト改修' }).check();
 	await expect(page.locator('#invite-project')).toHaveText('ACME サイト改修');
@@ -142,8 +146,8 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(sidebarProject.getByTestId('project-icon-image')).toBeHidden();
 	expect((await page.request.get(iconSrc!)).status()).toBe(404);
 	await setIconImage();
-	await page.getByLabel('ゲストのメールアドレス').fill('guest@example.com');
-	await page.getByRole('button', { name: 'ゲストを招待' }).click();
+	await page.getByLabel('メールアドレス', { exact: true }).fill('guest@example.com');
+	await page.getByRole('button', { name: '招待する' }).click();
 	const guestUrl = await page.getByLabel('招待リンク').inputValue();
 
 	// 4b. カテゴリー・マイルストーンを定義
@@ -832,6 +836,92 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page.getByRole('switch', { name: 'Slack 通知' })).toBeDisabled();
 	await expect(page.getByText('Slack 連携は未設定です（管理者に連絡してください）')).toBeVisible();
 
+	// 12b. 閲覧者（公開デモの共用アカウント向け）。見るだけで、何も書き込めない
+	await page.goto('/projects/ACME/settings');
+	await page.getByLabel('メールアドレス', { exact: true }).fill('viewer@example.com');
+	const guestRole = page.getByLabel('ロール', { exact: true });
+	await expect(guestRole.locator('option')).toHaveText(['閲覧者', 'ゲスト']);
+	await expect(guestRole).toHaveValue('guest');
+	await guestRole.selectOption('viewer');
+	await page.getByRole('button', { name: '招待する' }).click();
+	const viewerUrl = await page.getByLabel('招待リンク').inputValue();
+	const viewerPage = await browser.newPage({ baseURL });
+	await watchCsp(viewerPage.context(), cspViolations);
+	await acceptInvite(viewerPage, viewerUrl, '閲覧 花子');
+	// 一覧・課題は見られるが、起票・コメント・子課題の追加・属性の変更の入口がない
+	await viewerPage.goto('/projects/ACME');
+	await expect(viewerPage.getByRole('row', { name: /ログインできない/ })).toBeVisible();
+	await expect(viewerPage.getByRole('link', { name: '新規課題' })).toHaveCount(0);
+	await viewerPage.goto('/projects/ACME/issues/1');
+	await expect(viewerPage.getByRole('heading', { name: 'ログインできない' })).toBeVisible();
+	await expect(viewerPage.getByRole('textbox', { name: 'コメントを追加' })).toHaveCount(0);
+	await expect(viewerPage.getByRole('link', { name: '子課題を追加' })).toHaveCount(0);
+	await expect(viewerPage.getByLabel('ステータス')).toBeDisabled();
+	// URL を直接開いても起票画面は出ない
+	expect((await viewerPage.goto('/projects/ACME/issues/new'))?.status()).toBe(404);
+	// アカウント設定も変えられない（共用のパスワードを変えて他の人を締め出させない）
+	await viewerPage.goto('/account');
+	await expect(viewerPage.getByText('このアカウントは閲覧専用のため')).toBeVisible();
+	await expect(viewerPage.getByRole('heading', { name: 'パスワード変更' })).toHaveCount(0);
+	// 通知は見られるが既読にはできないので、「すべて既読にする」は出さない
+	await viewerPage.goto('/notifications');
+	await expect(viewerPage.getByRole('heading', { name: '通知' })).toBeVisible();
+	await expect(viewerPage.getByRole('button', { name: 'すべて既読にする' })).toHaveCount(0);
+	const origin = { Origin: 'http://localhost:4173' };
+	const viaAction = await viewerPage.request.post('/account?/changePassword', {
+		headers: origin,
+		form: { currentPassword: PW, newPassword: 'changed-password-1' }
+	});
+	expect(viaAction.status()).toBe(404);
+	// better-auth の HTTP API は、パスワード再設定メールのリンク以外を受け付けない
+	for (const path of [
+		'/api/auth/change-password',
+		'/api/auth/revoke-sessions',
+		'/api/auth/update-user'
+	]) {
+		const r = await viewerPage.request.post(path, {
+			headers: origin,
+			data: { currentPassword: PW, newPassword: 'changed-password-1', name: '書き換え' }
+		});
+		expect(r.status(), path).toBe(404);
+	}
+	// 共用アカウントのセッション一覧（他の利用者の IP）も見せない
+	expect((await viewerPage.request.get('/api/auth/list-sessions')).status()).toBe(404);
+	// 画面に出ない書き込みを直接送っても拒否する
+	const viewerUpload = await viewerPage.request.post('/projects/ACME/attachments', {
+		headers: { ...origin, Accept: 'application/json' },
+		multipart: { file: { name: 'a.png', mimeType: 'image/png', buffer: PNG } }
+	});
+	expect(viewerUpload.ok()).toBe(false);
+	// ログアウト後に古い Cookie（5 分のキャッシュ）を使い回しても、表示名を変えられない
+	const staleCookies = await viewerPage.context().cookies();
+	await logout(viewerPage);
+	await viewerPage.close();
+	const stale = await browser.newContext({ baseURL });
+	await stale.addCookies(staleCookies);
+	const renamed = await stale.request.post('/api/auth/update-user', {
+		headers: origin,
+		data: { name: '書き換え' }
+	});
+	expect(renamed.status()).toBe(404);
+	await stale.close();
+	// パスワード再設定メールのリンクは better-auth に届く（不正なトークンはエラー付きで転送される）
+	const resetLink = await page.request.get(
+		'/api/auth/reset-password/invalid-token?callbackURL=%2Freset-password',
+		{ maxRedirects: 0 }
+	);
+	expect(resetLink.status()).toBe(302);
+	expect(resetLink.headers()['location']).toContain('INVALID_TOKEN');
+	// パスワードは変わっていない
+	const viewerAgain = await browser.newPage({ baseURL });
+	await login(viewerAgain, 'viewer@example.com');
+	await viewerAgain.close();
+	// 閲覧者も担当者の候補（絞り込みの選択肢）に出る
+	await page.goto('/projects/ACME');
+	await expect(page.getByLabel('担当者').locator('option', { hasText: '閲覧 花子' })).toHaveCount(
+		1
+	);
+
 	// 13. 見たまま編集で開いて中身を変えずに保存しても、本文の Markdown は 1 文字も変わらない
 	// 書き出すと形が変わる書き方（番号の振り直し・Setext 見出し・参照リンク）を含める
 	const rawBody = '* a\n* b\n\n1) x\n1) y\n\nSetext\n===\n\n[x][l]\n\n[l]: https://example.com';
@@ -913,6 +1003,8 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await login(page, 'admin@example.com');
 	await page.goto('/admin/users');
 	const roleSelect = page.getByLabel('副管理者 さんのロール');
+	// 一覧のロール変更も、招待と同じ順
+	await expect(roleSelect.locator('option')).toHaveText(['閲覧者', 'ゲスト', 'メンバー', '管理者']);
 	await expect(roleSelect).toHaveValue('admin');
 	await expect(roleSelect.locator('option:checked')).toHaveText('管理者');
 	// 自分の行には select が無い

@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
-import { authorize } from '../authz';
+import { authorize, type Role } from '../authz';
 import type { AppContext, BaseContext } from '../context';
 import type { DB } from '../db';
 import { invitation, invitationProject, project, projectMember, user } from '../db/schema';
@@ -17,7 +17,7 @@ const INVALID_INVITE = '招待リンクが無効か、期限切れです。管�
 
 const CreateInput = v.object({
 	email: EmailSchema,
-	role: v.picklist(['admin', 'member', 'guest'], 'ロールを選択してください'),
+	role: v.picklist(['admin', 'member', 'guest', 'viewer'], 'ロールを選択してください'),
 	projectIds: v.optional(v.array(v.string()), []),
 	name: v.optional(v.union([v.literal(''), NameSchema]), '')
 });
@@ -162,7 +162,7 @@ export async function revokeInvitation(ctx: AppContext, invitationId: string): P
 export interface PendingInvitation {
 	id: string;
 	email: string;
-	role: 'admin' | 'member' | 'guest';
+	role: Role;
 	projects: { id: string; name: string }[];
 	expiresAt: Date;
 	expired: boolean;

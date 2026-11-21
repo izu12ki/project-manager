@@ -6,14 +6,14 @@
 	import InviteLinkBox from '#lib/components/InviteLinkBox.svelte';
 	import MultiSelect from '#lib/components/MultiSelect.svelte';
 	import RolePill from '#lib/components/RolePill.svelte';
-	import { formatDate, ROLE_LABEL } from '#lib/labels.ts';
+	import { formatDate, ROLE_LABEL, ROLES } from '#lib/labels.ts';
 	import { toast } from '#lib/toast.svelte.ts';
 	import BacklogUserImport from './BacklogUserImport.svelte';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
 
-	const roles = ['admin', 'member', 'guest'] as const;
+	const roles = ROLES;
 
 	// 変更確認中の行（select で選んだ値を保持する）
 	let pendingChange = $state<{ id: string; name: string; role: (typeof roles)[number] } | null>(
@@ -60,9 +60,9 @@
 				<div class="field">
 					<label class="label" for="invite-role">ロール</label>
 					<select class="select" id="invite-role" name="role">
-						<option value="member">メンバー</option>
-						<option value="guest">ゲスト</option>
-						<option value="admin">{ROLE_LABEL.admin}</option>
+						{#each roles as value (value)}
+							<option {value} selected={value === 'member'}>{ROLE_LABEL[value]}</option>
+						{/each}
 					</select>
 				</div>
 				<div class="field">

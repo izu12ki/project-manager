@@ -628,6 +628,10 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 
 	// 8c. ゲストは他の人が起票した課題もタイムラインで動かせる
 	await page.goto('/projects/ACME/timeline');
+	// パンくずの末尾は画面名（課題一覧ではない）
+	await expect(
+		page.getByRole('navigation', { name: 'パンくずリスト' }).getByText('タイムライン')
+	).toBeVisible();
 	await expect(page.getByTestId('bar-1').locator('[data-handle]')).toHaveCount(2);
 	const guestBar2 = page.getByTestId('bar-2');
 	await expect(guestBar2.locator('[data-handle]')).toHaveCount(2);

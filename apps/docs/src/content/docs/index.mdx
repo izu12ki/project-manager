@@ -41,8 +41,8 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 	<Card title="添付ファイル" icon="document">
 		Cloudflare R2 に保存します。
 	</Card>
-	<Card title="顧客ゲスト" icon="padlock">
-		顧客を「ゲスト」として招待し、参加しているプロジェクトだけを見せます。ゲストは起票とコメント、自分が起票した課題の編集、自分が担当の課題のステータス変更ができます（[権限](/reference/permissions/)）。
+	<Card title="顧客ゲスト・閲覧者" icon="padlock">
+		顧客を「ゲスト」として招待し、参加しているプロジェクトだけを見せます。ゲストは課題の起票・編集とコメントができます（削除はできません）。見せるだけの相手は「閲覧者」として招待すると、起票・編集・コメント・添付が一切できません（[権限](/reference/permissions/)）。
 	</Card>
 	<Card title="通知" icon="information">
 		担当の割り当て、ステータスの変更、コメント、`@` メンションをアプリ内で通知します。

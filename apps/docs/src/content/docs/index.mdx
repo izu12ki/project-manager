@@ -12,6 +12,10 @@ hero:
     - text: はじめる
       link: /guides/requirements/
       icon: right-arrow
+    - text: デモを見る
+      link: /guides/demo/
+      icon: open-book
+      variant: minimal
     - text: デプロイ手順
       link: /guides/deploy/
       icon: rocket
@@ -19,6 +23,14 @@ hero:
 ---
 
 import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+![カンバンの画面。未着手・進行中・レビュー・完了の列に課題のカードが並ぶ](/screenshots/board.png)
+
+<LinkCard
+	title="デモを見る"
+	description="閲覧専用のアカウントで、実際の画面を見られます。起票やドラッグなど、デモでは試せない操作は画面イメージで紹介しています。"
+	href="/guides/demo/"
+/>
 
 ## できること
 

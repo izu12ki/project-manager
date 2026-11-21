@@ -51,6 +51,7 @@
 			const pc = { label: project.name, href: base };
 			const rest = path.slice(base.length);
 			if (rest === '/board') return [home, pc, { label: 'ボード' }];
+			if (rest === '/timeline') return [home, pc, { label: 'タイムライン' }];
 			if (rest === '/settings') return [home, pc, { label: '設定' }];
 			if (rest === '/issues/new') return [home, pc, { label: '新規課題' }];
 			const m = rest.match(/^\/issues\/(\d+)$/);

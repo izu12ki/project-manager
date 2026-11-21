@@ -1,5 +1,5 @@
 // マイグレーションでの既存データの移し替えを確かめる
-import { createClient, type Client } from '@libsql/client';
+import { createClient, type Client } from '@libsql/client/node';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';

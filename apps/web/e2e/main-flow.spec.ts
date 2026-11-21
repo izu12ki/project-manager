@@ -56,16 +56,28 @@ const savedResponse = (page: Page) =>
 	);
 
 /**
- * CSP に止められた読み込み・実行を violations に集める。
- * 初期化スクリプトは CSP の対象外なので、ページの securitypolicyviolation を拾える
+ * 確かめている操作が通っても見逃しうる問題を problems に集める（最後に空であることを確かめる）。
+ * 依存の更新を CI だけで自動マージするので、画面の裏で壊れたものも落とす。
+ * - CSP に止められた読み込み・実行。初期化スクリプトは CSP の対象外なので、ページの securitypolicyviolation を拾える
+ * - ページで捕まえられなかった例外
+ * - サーバーの 5xx 応答（ブラウザからのもの。page.request などの API 呼び出しは各手順で状態を確かめている）
  */
-async function watchCsp(context: BrowserContext, violations: string[]) {
-	await context.exposeBinding('reportCspViolation', (_source, v: string) => violations.push(v));
+async function watchProblems(context: BrowserContext, problems: string[]) {
+	await context.exposeBinding('reportCspViolation', (_source, v: string) =>
+		problems.push(`CSP: ${v}`)
+	);
 	await context.addInitScript(() => {
 		const w = window as unknown as { reportCspViolation: (v: string) => void };
 		document.addEventListener('securitypolicyviolation', (e) => {
 			w.reportCspViolation(`${e.effectiveDirective} ${e.blockedURI} (${e.documentURI})`);
 		});
+	});
+	const watchPage = (p: Page) =>
+		p.on('pageerror', (e) => problems.push(`例外: ${e.message} (${p.url()})`));
+	context.pages().forEach(watchPage);
+	context.on('page', watchPage);
+	context.on('response', (r) => {
+		if (r.status() >= 500) problems.push(`${r.status()}: ${r.request().method()} ${r.url()}`);
 	});
 }
 
@@ -85,9 +97,9 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	playwright,
 	baseURL
 }) => {
-	// 添付画像・カスタム絵文字・エディタなど、テスト中の読み込みが CSP で止められないこと（最後に確かめる）
-	const cspViolations: string[] = [];
-	await watchCsp(page.context(), cspViolations);
+	// 添付画像・カスタム絵文字・エディタなどの読み込みが CSP で止められず、例外や 5xx も出ないこと（最後に確かめる）
+	const problems: string[] = [];
+	await watchProblems(page.context(), problems);
 
 	// 1. 初期セットアップ
 	// CSP: スクリプトは自サイトと nonce 付きのものだけ。ほかのサイトのフレームには埋め込ませない
@@ -722,7 +734,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	// 9. 管理者がゲストを無効化（確認ダイアログ）
 	// 無効化の前から開いていたゲストの画面（別のセッション）で、無効化の後に書き込ませない
 	const guestPage = await browser.newPage({ baseURL });
-	await watchCsp(guestPage.context(), cspViolations);
+	await watchProblems(guestPage.context(), problems);
 	await login(guestPage, 'guest@example.com');
 	await guestPage.goto('/projects/ACME/issues/1');
 	await logout(page);
@@ -850,7 +862,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.getByRole('button', { name: '招待する' }).click();
 	const viewerUrl = await page.getByLabel('招待リンク').inputValue();
 	const viewerPage = await browser.newPage({ baseURL });
-	await watchCsp(viewerPage.context(), cspViolations);
+	await watchProblems(viewerPage.context(), problems);
 	await acceptInvite(viewerPage, viewerUrl, '閲覧 花子');
 	// 一覧・課題は見られるが、起票・コメント・子課題の追加・属性の変更の入口がない
 	await viewerPage.goto('/projects/ACME');
@@ -918,6 +930,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	expect(resetLink.headers()['location']).toContain('INVALID_TOKEN');
 	// パスワードは変わっていない
 	const viewerAgain = await browser.newPage({ baseURL });
+	await watchProblems(viewerAgain.context(), problems);
 	await login(viewerAgain, 'viewer@example.com');
 	await viewerAgain.close();
 	// 閲覧者も担当者の候補（絞り込みの選択肢）に出る
@@ -1210,5 +1223,5 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page.getByRole('heading', { name: 'パスワード変更' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'API キー' })).toHaveCount(0);
 
-	expect(cspViolations).toEqual([]);
+	expect(problems).toEqual([]);
 });

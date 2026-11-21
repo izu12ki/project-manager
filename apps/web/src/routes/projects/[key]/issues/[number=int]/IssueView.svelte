@@ -280,9 +280,9 @@
 				</select>
 			</div>
 			<div class="prop-row">
-				<span class="prop-label" id={`issue-assignee-${variant}-label`}
-					><UsersRound style="--c: var(--c-pink)" />担当者</span
-				>
+				<span class="prop-label" id={`issue-assignee-${variant}-label`}>
+					<UsersRound style="--c: var(--c-pink)" />担当者
+				</span>
 				<div class="min-w-0">
 					<!-- 全員外したときも送るための空の値（サービス側で除く） -->
 					{#if perms.assign}<input type="hidden" name={assigneeName} value="" />{/if}
@@ -299,9 +299,9 @@
 				</div>
 			</div>
 			<div class="prop-row">
-				<label for={`issue-parent-${variant}`}
-					><CornerLeftUp style="--c: var(--c-violet)" />親課題</label
-				>
+				<label for={`issue-parent-${variant}`}>
+					<CornerLeftUp style="--c: var(--c-violet)" />親課題
+				</label>
 				<div class="min-w-0">
 					<input
 						class="input"
@@ -320,9 +320,9 @@
 				</div>
 			</div>
 			<div class="prop-row">
-				<span class="prop-label" id={`issue-category-${variant}-label`}
-					><Tag style="--c: var(--c-amber)" />カテゴリー</span
-				>
+				<span class="prop-label" id={`issue-category-${variant}-label`}>
+					<Tag style="--c: var(--c-amber)" />カテゴリー
+				</span>
 				<div class="min-w-0">
 					<!-- 全部外したときも送るための空の値（サービス側で除く） -->
 					{#if perms.edit}<input type="hidden" name={categoryName} value="" />{/if}
@@ -410,9 +410,9 @@
 			{/if}
 			{#if detail.issueTypes.length > 0 || issue.typeId}
 				<div class="flex items-center gap-2">
-					<label for={`issue-type-${variant}`} class="text-[0.8125rem] text-muted-foreground"
-						>種別</label
-					>
+					<label for={`issue-type-${variant}`} class="text-[0.8125rem] text-muted-foreground">
+						種別
+					</label>
 					<!-- 属性フォームに form 属性で紐づける。タイトル・本文の編集中でなければ選んだ時点で保存する -->
 					<select
 						class="select type-select"
@@ -501,17 +501,19 @@
 					<h2 class="card-title">
 						<ListTree class="size-4" /> 子課題
 						{#if detail.children.length > 0}
-							<span class="text-[0.8125rem] font-normal text-muted-foreground"
-								>{detail.children.filter((c) => c.status === DONE_STATUS).length} / {detail.children
-									.length} 完了</span
-							>
+							<span class="text-[0.8125rem] font-normal text-muted-foreground">
+								{detail.children.filter((c) => c.status === DONE_STATUS).length} / {detail.children
+									.length} 完了
+							</span>
 						{/if}
 					</h2>
 					{#if perms.create}
 						<a
 							href={`/projects/${projectKey}/issues/new?parent=${issue.number}`}
-							class="btn btn-outline btn-sm ml-auto"><Plus />子課題を追加</a
+							class="btn btn-outline btn-sm ml-auto"
 						>
+							<Plus />子課題を追加
+						</a>
 					{/if}
 				</div>
 				{#if detail.children.length > 0}
@@ -519,16 +521,16 @@
 						{#each detail.children as c (c.id)}
 							<li>
 								<a href={issueHref(c.number)} class="child-link">
-									<span class="mono shrink-0 text-[0.8125rem] text-muted-foreground"
-										>{projectKey}-{c.number}</span
-									>
+									<span class="mono shrink-0 text-[0.8125rem] text-muted-foreground">
+										{projectKey}-{c.number}
+									</span>
 									<span class="min-w-0 truncate">{c.title}</span>
 								</a>
 								<span class="ml-auto flex shrink-0 items-center gap-2">
 									{#if c.assignees.length > 0}
-										<span class="max-w-40 truncate text-xs text-muted-foreground"
-											>{c.assignees.map((u) => u.name).join('、')}</span
-										>
+										<span class="max-w-40 truncate text-xs text-muted-foreground">
+											{c.assignees.map((u) => u.name).join('、')}
+										</span>
 									{/if}
 									<StatusPill status={c.status} statuses={detail.statuses} />
 								</span>
@@ -553,11 +555,13 @@
 								href={a.url}
 								target={a.isImage ? '_blank' : undefined}
 								rel="noopener"
-								download={a.isImage ? undefined : a.filename}>{a.filename}</a
+								download={a.isImage ? undefined : a.filename}
 							>
-							<span class="text-xs text-muted-foreground"
-								>{formatBytes(a.size)} · {a.uploaderName} · {formatDateTime(a.createdAt)}</span
-							>
+								{a.filename}
+							</a>
+							<span class="text-xs text-muted-foreground">
+								{formatBytes(a.size)} · {a.uploaderName} · {formatDateTime(a.createdAt)}
+							</span>
 							{#if a.canDelete}
 								<ConfirmAction
 									onconfirm={() => deleteAttachment(a.id)}
@@ -692,8 +696,10 @@
 										<button
 											type="button"
 											class="btn btn-outline btn-sm"
-											onclick={() => (editingComment = null)}>キャンセル</button
+											onclick={() => (editingComment = null)}
 										>
+											キャンセル
+										</button>
 										<button type="submit" class="btn btn-primary btn-sm">更新</button>
 									</div>
 								</form>

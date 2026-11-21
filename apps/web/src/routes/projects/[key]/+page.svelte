@@ -106,9 +106,9 @@
 					<option value="">すべて</option>
 					<option value="none" selected={data.filters.milestoneId === 'none'}>未設定</option>
 					{#each data.milestones as m (m.id)}
-						<option value={m.id} selected={data.filters.milestoneId === m.id}
-							>{milestoneLabel(m)}{m.completedAt ? '（完了）' : ''}</option
-						>
+						<option value={m.id} selected={data.filters.milestoneId === m.id}>
+							{milestoneLabel(m)}{m.completedAt ? '（完了）' : ''}
+						</option>
 					{/each}
 				</select>
 			</div>
@@ -119,9 +119,9 @@
 
 	{#if data.issues.length === 0}
 		<div class="empty">
-			<span class="empty-icon"
-				>{#if filtering}<SearchX />{:else}<Inbox />{/if}</span
-			>
+			<span class="empty-icon">
+				{#if filtering}<SearchX />{:else}<Inbox />{/if}
+			</span>
 			<div class="grid gap-1">
 				<div class="empty-title">
 					{filtering ? '条件に一致する課題はありません' : '課題はまだありません'}
@@ -155,16 +155,17 @@
 				</div>
 				{#each data.issues as i (i.id)}
 					<div role="row" class="row">
-						<span role="cell" class="mono text-[0.8125rem] whitespace-nowrap text-muted-foreground"
-							>{data.project.key}-{i.number}</span
-						>
+						<span role="cell" class="mono text-[0.8125rem] whitespace-nowrap text-muted-foreground">
+							{data.project.key}-{i.number}
+						</span>
 						<span role="cell" class="flex min-w-0 items-center gap-2">
 							{#if i.parentNumber !== null}
 								<span
 									class="flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground"
 									title={`${data.project.key}-${i.parentNumber} の子課題`}
-									><CornerDownRight size={14} />{i.parentNumber}</span
 								>
+									<CornerDownRight size={14} />{i.parentNumber}
+								</span>
 							{/if}
 							{#if i.typeName}<IssueTypeTag name={i.typeName} color={i.typeColor} />{/if}
 							<a href={`${base}/issues/${i.number}`} class="title truncate">{i.title}</a>
@@ -181,20 +182,23 @@
 							class:text-muted-foreground={i.assignees.length === 0}
 							class="truncate"
 							title={i.assignees.map((u) => u.name).join('、') || undefined}
-							>{i.assignees.map((u) => u.name).join('、') || '未割当'}</span
 						>
+							{i.assignees.map((u) => u.name).join('、') || '未割当'}
+						</span>
 						<span role="cell" class="flex min-w-0 items-center gap-1.5 text-muted-foreground">
-							{#if i.milestoneName}<Flag size={14} class="shrink-0" /><span class="truncate"
-									>{i.milestoneName}</span
-								>{:else}—{/if}
+							{#if i.milestoneName}<Flag size={14} class="shrink-0" /><span class="truncate">
+									{i.milestoneName}
+								</span>{:else}—{/if}
 						</span>
 						<span
 							role="cell"
 							class="tabular-nums"
 							style:color={isDueAlert(i.dueDate, i.status)
 								? 'var(--destructive)'
-								: 'var(--muted-foreground)'}>{formatDue(i.dueDate)}</span
+								: 'var(--muted-foreground)'}
 						>
+							{formatDue(i.dueDate)}
+						</span>
 					</div>
 				{/each}
 			</div>
@@ -209,13 +213,13 @@
 			<ul>
 				{#each data.deletedIssues as d (d.number)}
 					<li>
-						<span class="mono shrink-0 text-[0.8125rem] whitespace-nowrap text-muted-foreground"
-							>{data.project.key}-{d.number}</span
-						>
+						<span class="mono shrink-0 text-[0.8125rem] whitespace-nowrap text-muted-foreground">
+							{data.project.key}-{d.number}
+						</span>
 						<a href={`${base}/issues/${d.number}`} class="min-w-0 truncate">{d.title}</a>
-						<span class="ml-auto shrink-0 text-xs text-muted-foreground"
-							>{d.deletedByName ?? '—'} が {d.deletedAt ? formatDateTime(d.deletedAt) : ''} に削除</span
-						>
+						<span class="ml-auto shrink-0 text-xs text-muted-foreground">
+							{d.deletedByName ?? '—'} が {d.deletedAt ? formatDateTime(d.deletedAt) : ''} に削除
+						</span>
 					</li>
 				{/each}
 			</ul>

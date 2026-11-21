@@ -7,6 +7,6 @@
 		$props();
 </script>
 
-<span class="pill pill-tint pill-status" style:--c={statusColor(statuses, status)}
-	>{statusName(statuses, status)}</span
->
+<span class="pill pill-tint pill-status" style:--c={statusColor(statuses, status)}>
+	{statusName(statuses, status)}
+</span>

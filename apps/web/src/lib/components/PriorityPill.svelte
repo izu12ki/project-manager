@@ -9,5 +9,7 @@
 	style:--c="var(--c-orange)"
 	style:height={small ? '20px' : undefined}
 	style:font-size={small ? '11px' : undefined}
-	style:padding={small ? '0 8px' : undefined}>{PRIORITY_LABEL[priority]}</span
+	style:padding={small ? '0 8px' : undefined}
 >
+	{PRIORITY_LABEL[priority]}
+</span>

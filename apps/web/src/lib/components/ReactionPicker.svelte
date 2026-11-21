@@ -50,8 +50,9 @@
 		aria-label={label}
 		title={img ? label : undefined}
 		onclick={() => pick(emoji)}
-		>{#if img}<img src={img} alt="" />{:else}{emoji}{/if}</button
 	>
+		{#if img}<img src={img} alt="" />{:else}{emoji}{/if}
+	</button>
 {/snippet}
 
 <details class="picker" bind:this={root}>

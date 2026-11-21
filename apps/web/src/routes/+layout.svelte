@@ -103,8 +103,10 @@
 							<span
 								class="crumb"
 								class:current={i === crumbs.length - 1}
-								aria-current={i === crumbs.length - 1 ? 'page' : undefined}>{c.label}</span
+								aria-current={i === crumbs.length - 1 ? 'page' : undefined}
 							>
+								{c.label}
+							</span>
 						{/if}
 					{/each}
 				</nav>

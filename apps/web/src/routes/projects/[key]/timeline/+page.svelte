@@ -191,23 +191,25 @@
 						value={view.from}
 						onchange={(e) => setQuery({ from: e.currentTarget.value })}
 					/>
-					<button type="button" class="btn btn-outline" onclick={() => setQuery({ from: '' })}
-						>今日</button
-					>
+					<button type="button" class="btn btn-outline" onclick={() => setQuery({ from: '' })}>
+						今日
+					</button>
 					<button
 						type="button"
 						class="icon-btn"
 						aria-label="前の期間"
 						onclick={() => setQuery({ from: addDays(range.from, -range.step) })}
-						><ChevronLeft size={18} /></button
 					>
+						<ChevronLeft size={18} />
+					</button>
 					<button
 						type="button"
 						class="icon-btn"
 						aria-label="次の期間"
 						onclick={() => setQuery({ from: addDays(range.from, range.step) })}
-						><ChevronRight size={18} /></button
 					>
+						<ChevronRight size={18} />
+					</button>
 				</div>
 			</div>
 			<div class="field w-24 gap-1.5">
@@ -255,8 +257,9 @@
 					type="button"
 					class="btn btn-outline"
 					onclick={() => setQuery({ status: '', assignee: '', category: '', milestone: '' })}
-					>絞り込みを解除</button
 				>
+					絞り込みを解除
+				</button>
 			{:else}
 				<div class="empty-title">表示できる課題はありません</div>
 			{/if}

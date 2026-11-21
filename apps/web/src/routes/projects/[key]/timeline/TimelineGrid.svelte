@@ -404,9 +404,9 @@
 											{/if}
 										</a>
 										{#if drag?.moved && drag.item.id === item.id}
-											<span class="drag-label" style:left={colW(span.startCol)} style:top="-2px"
-												>{period(dates)}</span
-											>
+											<span class="drag-label" style:left={colW(span.startCol)} style:top="-2px">
+												{period(dates)}
+											</span>
 										{/if}
 									{/if}
 								</div>

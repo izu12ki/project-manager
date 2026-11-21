@@ -390,11 +390,11 @@
 		{/if}
 	</div>
 	<div class="toolbar" role="toolbar" aria-label="書式">
-		<span class="hint"
-			>Markdown が使えます{mentionCandidates ? '・@ でメンション' : ''}{projectKey
+		<span class="hint">
+			Markdown が使えます{mentionCandidates ? '・@ でメンション' : ''}{projectKey
 				? '・ファイルは貼り付けかドロップでも添付できます'
-				: ''}</span
-		>
+				: ''}
+		</span>
 		<span style="flex: 1"></span>
 		{#each tools as t (t.f)}
 			{@const on = rich && active.has(t.f)}

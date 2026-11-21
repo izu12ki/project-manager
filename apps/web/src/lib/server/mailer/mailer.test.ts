@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createMailer, parseFrom } from './index';
+import { createMailer, isReservedAddress, parseFrom } from './index';
 
-const msg = { to: 'to@example.com', subject: 'S', text: 'T' };
+const msg = { to: 'to@x.com', subject: 'S', text: 'T' };
 
 function okFetch() {
 	return vi.fn(async () => new Response('{}', { status: 200 })) as unknown as typeof fetch & {
@@ -19,7 +19,7 @@ describe('createMailer', () => {
 		).send({ ...msg, html: '<p>T</p>' });
 		expect(send).toHaveBeenCalledWith({
 			from: { name: 'PM', email: 'a@x.com' },
-			to: 'to@example.com',
+			to: 'to@x.com',
 			subject: 'S',
 			text: 'T',
 			html: '<p>T</p>'
@@ -53,10 +53,38 @@ describe('createMailer', () => {
 		expect((init.headers as Record<string, string>)['X-Smtp2go-Api-Key']).toBe('k');
 		expect(JSON.parse(init.body as string)).toEqual({
 			sender: 'PM <a@x.com>',
-			to: ['to@example.com'],
+			to: ['to@x.com'],
 			subject: 'S',
 			text_body: 'T'
 		});
+	});
+
+	it('smtp2go: 200 でも宛先ごとの失敗（data.failed）が返れば例外にする', async () => {
+		const f = vi.fn(
+			async () =>
+				new Response(
+					JSON.stringify({ data: { succeeded: 0, failed: 1, failures: ['to@x.com'] } }),
+					{ status: 200 }
+				)
+		) as unknown as typeof fetch;
+		await expect(
+			createMailer({ MAIL_PROVIDER: 'smtp2go', MAIL_API_KEY: 'k', MAIL_FROM: 'a@x.com' }, f).send(
+				msg
+			)
+		).rejects.toThrow('to@x.com');
+	});
+
+	it('予約ドメイン（example.com など）宛ては送らない（デモの架空ユーザーでバウンスさせない）', async () => {
+		const f = okFetch();
+		const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+		const mailer = createMailer(
+			{ MAIL_PROVIDER: 'smtp2go', MAIL_API_KEY: 'k', MAIL_FROM: 'a@x.com' },
+			f
+		);
+		await mailer.send({ ...msg, to: 'demo@example.com' });
+		expect(f).not.toHaveBeenCalled();
+		expect(log).toHaveBeenCalledWith(expect.stringContaining('demo@example.com'));
+		log.mockRestore();
 	});
 
 	it('resend: Bearer トークンで JSON を POST する', async () => {
@@ -70,7 +98,7 @@ describe('createMailer', () => {
 		expect((init.headers as Record<string, string>).Authorization).toBe('Bearer k');
 		expect(JSON.parse(init.body as string)).toEqual({
 			from: 'a@x.com',
-			to: ['to@example.com'],
+			to: ['to@x.com'],
 			subject: 'S',
 			text: 'T'
 		});
@@ -99,6 +127,25 @@ describe('createMailer', () => {
 		expect(f).not.toHaveBeenCalled();
 		expect(log).toHaveBeenCalled();
 		log.mockRestore();
+	});
+});
+
+describe('isReservedAddress', () => {
+	it('RFC 2606・6761 の予約ドメインとそのサブドメインだけ true', () => {
+		for (const to of [
+			'a@example.com',
+			'a@EXAMPLE.ORG',
+			'a@mail.example.net',
+			'a@foo.example',
+			'a@shop.test',
+			'unknown-user@invalid',
+			'a@localhost'
+		]) {
+			expect(isReservedAddress(to), to).toBe(true);
+		}
+		for (const to of ['a@x.com', 'a@notexample.com', 'a@example.co.jp', 'a@test.dev']) {
+			expect(isReservedAddress(to), to).toBe(false);
+		}
 	});
 });
 

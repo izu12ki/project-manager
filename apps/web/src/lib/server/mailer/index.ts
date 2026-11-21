@@ -22,13 +22,22 @@ async function postJson(
 	url: string,
 	headers: Record<string, string>,
 	body: unknown
-): Promise<void> {
+): Promise<Response> {
 	const res = await fetchFn(url, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json', ...headers },
 		body: JSON.stringify(body)
 	});
 	if (!res.ok) throw new Error(`mail API ${url} failed: ${res.status} ${await res.text()}`);
+	return res;
+}
+
+/** 届かないと決まっているドメイン（RFC 2606・6761）。サブドメインも含む */
+const RESERVED_DOMAIN = /(^|\.)(example\.(com|net|org)|example|test|invalid|localhost)$/i;
+
+/** 予約ドメイン宛てか。デモやテストの架空ユーザー（example.com など）に送ってバウンスさせないために使う */
+export function isReservedAddress(to: string): boolean {
+	return RESERVED_DOMAIN.test(to.slice(to.lastIndexOf('@') + 1).trim());
 }
 
 /** "名前 <addr>" をバインディングの形 { name, email } にする。名前が無ければアドレスだけ */
@@ -46,6 +55,19 @@ export function createMailer(env: MailEnv, fetchFn: typeof fetch = fetch): Maile
 			}
 		};
 	}
+	const mailer = providerMailer(env, fetchFn);
+	return {
+		async send(m) {
+			if (isReservedAddress(m.to)) {
+				console.log(`[mail] skipped: ${m.to} is a reserved domain (subject=${m.subject})`);
+				return;
+			}
+			await mailer.send(m);
+		}
+	};
+}
+
+function providerMailer(env: MailEnv, fetchFn: typeof fetch): Mailer {
 	const { MAIL_API_KEY: key, MAIL_FROM: from } = env;
 	if (!from) throw new Error('MAIL_FROM is required when MAIL_PROVIDER is not console');
 
@@ -70,8 +92,8 @@ export function createMailer(env: MailEnv, fetchFn: typeof fetch = fetch): Maile
 
 	if (env.MAIL_PROVIDER === 'smtp2go') {
 		return {
-			send: (m) =>
-				postJson(
+			async send(m) {
+				const res = await postJson(
 					fetchFn,
 					'https://api.smtp2go.com/v3/email/send',
 					{ 'X-Smtp2go-Api-Key': key },
@@ -82,12 +104,20 @@ export function createMailer(env: MailEnv, fetchFn: typeof fetch = fetch): Maile
 						text_body: m.text,
 						...(m.html ? { html_body: m.html } : {})
 					}
-				)
+				);
+				// 200 でも宛先ごとの失敗は data.failed / data.failures で返る
+				const body = (await res.json().catch(() => null)) as {
+					data?: { failed?: number; failures?: unknown };
+				} | null;
+				if (body?.data?.failed) {
+					throw new Error(`mail API smtp2go failed: ${JSON.stringify(body.data.failures)}`);
+				}
+			}
 		};
 	}
 	return {
-		send: (m) =>
-			postJson(
+		send: async (m) => {
+			await postJson(
 				fetchFn,
 				'https://api.resend.com/emails',
 				{ Authorization: `Bearer ${key}` },
@@ -98,6 +128,7 @@ export function createMailer(env: MailEnv, fetchFn: typeof fetch = fetch): Maile
 					text: m.text,
 					...(m.html ? { html: m.html } : {})
 				}
-			)
+			);
+		}
 	};
 }

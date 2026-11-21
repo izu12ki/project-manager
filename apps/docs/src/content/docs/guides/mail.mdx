@@ -31,8 +31,8 @@ import { Steps } from '@astrojs/starlight/components';
 
    ```bash
    cd apps/web
-   pnpm exec wrangler secret put MAIL_PROVIDER   # cloudflare
    pnpm exec wrangler secret put MAIL_FROM       # 例: Project Manager <noreply@example.com>（手順 2 のドメインのアドレス）
+   pnpm exec wrangler secret put MAIL_PROVIDER   # cloudflare（必ず最後に登録する）
    pnpm deploy
    ```
 
@@ -48,19 +48,23 @@ import { Steps } from '@astrojs/starlight/components';
 
 <Steps>
 
-1. サービスに登録し、送信元に使うドメインを認証する（DNS に SPF / DKIM レコードを追加）
+1. サービスに登録し、送信元に使うドメインを認証する（DNS に SPF / DKIM レコードを追加）。SMTP2GO では、DNS を変えられない場合に送信元のアドレスだけを確認する方法（Single sender emails）も使えるが、SPF・DKIM が揃わないため迷惑メールに入りやすい
 2. API キーを発行する
 3. シークレットを登録して再デプロイする
 
    ```bash
    cd apps/web
-   pnpm exec wrangler secret put MAIL_PROVIDER   # smtp2go または resend
    pnpm exec wrangler secret put MAIL_API_KEY
    pnpm exec wrangler secret put MAIL_FROM       # 例: Project Manager <noreply@example.com>
+   pnpm exec wrangler secret put MAIL_PROVIDER   # smtp2go または resend（必ず最後に登録する）
    pnpm deploy
    ```
 
 </Steps>
+
+:::caution[MAIL_PROVIDER は最後に登録する]
+シークレットは登録した時点で本番に反映されます。`MAIL_FROM`（SMTP2GO・Resend では `MAIL_API_KEY` も）が無いまま `MAIL_PROVIDER` を変えると、そのあいだ全てのページがエラーになります。
+:::
 
 ## メール送信を設定しない場合
 
@@ -70,6 +74,7 @@ import { Steps } from '@astrojs/starlight/components';
 
 - 送信に失敗してもアプリの操作自体は成功します。失敗は Workers のログ（ダッシュボードの Observability、または `pnpm exec wrangler tail`）に `invitation mail failed`（パスワードリセットは `reset password mail failed`）として出ます。
 - Cloudflare Email Sending では、ダッシュボードの「Email Sending」のログでも送信結果を確認できます。
+- `example.com` などの予約ドメイン（RFC 2606・6761）宛てのメールは送りません。ログに `[mail] skipped` と出ます。デモやテスト用の架空のユーザーに送って、バウンスで送信元の評価を下げないためです。
 - 招待は管理画面の「未使用の招待」から「リンクをコピー」でいつでも渡せます。
 
 :::caution

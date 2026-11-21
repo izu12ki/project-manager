@@ -104,9 +104,9 @@
 				{#each data.users as u (u.id)}
 					<div role="row" class:opacity-65={!!u.disabledAt}>
 						<span role="cell" class="truncate font-medium">{u.name}</span>
-						<span role="cell" class="truncate text-[0.8125rem] text-muted-foreground"
-							>{u.email}</span
-						>
+						<span role="cell" class="truncate text-[0.8125rem] text-muted-foreground">
+							{u.email}
+						</span>
 						<span role="cell">
 							{#if u.id === data.user?.id}
 								<RolePill role={u.role} />
@@ -183,20 +183,22 @@
 						<Mail size={16} class="shrink-0 text-muted-foreground" />
 						<span class="min-w-40 flex-1 truncate">{inv.email}</span>
 						<RolePill role={inv.role} />
-						{#if inv.projects.length > 0}<span class="text-[0.8125rem] text-muted-foreground"
-								>{inv.projects.map((p) => p.name).join('、')}</span
-							>{/if}
+						{#if inv.projects.length > 0}<span class="text-[0.8125rem] text-muted-foreground">
+								{inv.projects.map((p) => p.name).join('、')}
+							</span>{/if}
 						{#if inv.expired}<span class="pill pill-urgent">期限切れ</span>{/if}
-						<span class="text-xs text-muted-foreground tabular-nums"
-							>期限 {formatDate(inv.expiresAt)}</span
-						>
+						<span class="text-xs text-muted-foreground tabular-nums">
+							期限 {formatDate(inv.expiresAt)}
+						</span>
 						<form method="POST" action="?/reissue" use:enhance>
 							<input type="hidden" name="id" value={inv.id} />
 							<button
 								type="submit"
 								class="btn btn-ghost btn-xs"
-								title="再発行すると以前のリンクは無効になります">リンクを再発行</button
+								title="再発行すると以前のリンクは無効になります"
 							>
+								リンクを再発行
+							</button>
 						</form>
 						<ConfirmAction
 							action="?/revoke"

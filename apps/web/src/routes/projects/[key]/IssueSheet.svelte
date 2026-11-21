@@ -32,8 +32,10 @@
 			target="_blank"
 			rel="noopener"
 			aria-label="課題詳細を新しいタブで開く"
-			title="課題詳細を新しいタブで開く"><ExternalLink /></a
+			title="課題詳細を新しいタブで開く"
 		>
+			<ExternalLink />
+		</a>
 		<h2 id={titleId} class="mono">{projectKey}-{number}</h2>
 		<button type="button" class="icon-btn" aria-label="閉じる" title="閉じる" onclick={onclose}>
 			<X />

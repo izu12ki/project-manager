@@ -112,9 +112,9 @@
 					<option value="">すべて</option>
 					<option value="none" selected={ref.milestone === 'none'}>未設定</option>
 					{#each board.milestones as m (m.id)}
-						<option value={m.id} selected={ref.milestone === m.id}
-							>{milestoneLabel(m)}{m.completedAt ? '（完了）' : ''}</option
-						>
+						<option value={m.id} selected={ref.milestone === m.id}>
+							{milestoneLabel(m)}{m.completedAt ? '（完了）' : ''}
+						</option>
 					{/each}
 				</select>
 			</div>
@@ -173,30 +173,31 @@
 											name={card.typeName}
 											color={card.typeColor}
 										/>{/if}
-									<span class="mono text-xs text-muted-foreground"
-										>{data.project.key}-{card.number}</span
-									>
+									<span class="mono text-xs text-muted-foreground">
+										{data.project.key}-{card.number}
+									</span>
 									{#if card.parentNumber !== null}
 										<span
 											class="flex items-center gap-0.5 text-xs text-muted-foreground"
 											title={`${data.project.key}-${card.parentNumber} の子課題`}
-											><CornerDownRight size={12} />{card.parentNumber}</span
 										>
+											<CornerDownRight size={12} />{card.parentNumber}
+										</span>
 									{/if}
 								</span>
 								{#if card.priority !== 'none'}<PriorityPill priority={card.priority} small />{/if}
 							</div>
-							<a href={`/projects/${data.project.key}/issues/${card.number}`} class="title"
-								>{card.title}</a
-							>
+							<a href={`/projects/${data.project.key}/issues/${card.number}`} class="title">
+								{card.title}
+							</a>
 							{#if card.categories.length > 0 || card.milestoneName}
 								<div class="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
 									{#each card.categories as c (c.id)}<span class="tag">{c.name}</span>{/each}
-									{#if card.milestoneName}<span class="flex min-w-0 items-center gap-1"
-											><Flag size={12} class="shrink-0" /><span class="truncate"
-												>{card.milestoneName}</span
-											></span
-										>{/if}
+									{#if card.milestoneName}<span class="flex min-w-0 items-center gap-1">
+											<Flag size={12} class="shrink-0" /><span class="truncate">
+												{card.milestoneName}
+											</span>
+										</span>{/if}
 								</div>
 							{/if}
 							<div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
@@ -206,19 +207,19 @@
 									{:else}
 										<span class="avatars">
 											{#each card.assignees.slice(0, 3) as u (u.id)}
-												<span class="avatar" style="--size: 20px" style:--c={colorFor(u.name)}
-													>{u.name[0]}</span
-												>
+												<span class="avatar" style="--size: 20px" style:--c={colorFor(u.name)}>
+													{u.name[0]}
+												</span>
 											{/each}
 										</span>
 									{/if}
-									<span class="truncate"
-										>{card.assignees.length === 0
+									<span class="truncate">
+										{card.assignees.length === 0
 											? '未割当'
 											: card.assignees.length === 1
 												? card.assignees[0].name
-												: `${card.assignees[0].name} 他${card.assignees.length - 1}名`}</span
-									>
+												: `${card.assignees[0].name} 他${card.assignees.length - 1}名`}
+									</span>
 								</span>
 								<span
 									class="flex shrink-0 items-center gap-1"

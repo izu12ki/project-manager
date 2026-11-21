@@ -18,10 +18,11 @@
 				<div class="row {r.kind}">
 					<span class="mark" aria-hidden="true">{MARK[r.kind]}</span>
 					{#if LABEL[r.kind]}<span class="sr-only">{LABEL[r.kind]}:</span>{/if}
-					<span class="text"
-						>{#each r.segments as s, j (j)}{#if s.changed}<mark>{s.text}</mark
-								>{:else}{s.text}{/if}{/each}</span
-					>
+					<span class="text">
+						{#each r.segments as s, j (j)}{#if s.changed}<mark>
+									{s.text}
+								</mark>{:else}{s.text}{/if}{/each}
+					</span>
 				</div>
 			{/if}
 		{/each}

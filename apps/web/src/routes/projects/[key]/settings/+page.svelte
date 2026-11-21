@@ -287,8 +287,9 @@
 								type="submit"
 								class="btn btn-ghost btn-xs"
 								title="コピーすると招待を再発行し、以前のリンクは無効になります"
-								>リンクを再発行</button
 							>
+								リンクを再発行
+							</button>
 						</form>
 						<ConfirmAction
 							action="?/revoke"
@@ -317,8 +318,10 @@
 				class="icon-btn"
 				disabled={i === 0}
 				aria-label={`${name} を上へ`}
-				title="上へ"><ChevronUp /></button
+				title="上へ"
 			>
+				<ChevronUp />
+			</button>
 			<button
 				type="submit"
 				name="dir"
@@ -326,8 +329,10 @@
 				class="icon-btn"
 				disabled={i === total - 1}
 				aria-label={`${name} を下へ`}
-				title="下へ"><ChevronDown /></button
+				title="下へ"
 			>
+				<ChevronDown />
+			</button>
 		</form>
 	{/snippet}
 
@@ -370,8 +375,9 @@
 									</div>
 									<ColorPicker name="color" value={t.color} label={`${t.name} の色`} />
 									<div class="field">
-										<label class="label" for={`issue-type-template-${t.id}`}>本文テンプレート</label
-										>
+										<label class="label" for={`issue-type-template-${t.id}`}>
+											本文テンプレート
+										</label>
 										<textarea
 											class="textarea"
 											id={`issue-type-template-${t.id}`}
@@ -635,15 +641,15 @@
 								</form>
 							</details>
 						{:else}
-							<span class="min-w-0 flex-1 truncate" class:text-muted-foreground={m.completedAt}
-								>{m.name}</span
-							>
+							<span class="min-w-0 flex-1 truncate" class:text-muted-foreground={m.completedAt}>
+								{m.name}
+							</span>
 						{/if}
-						<span class="row-meta text-[0.8125rem] text-muted-foreground tabular-nums"
-							>{m.completedAt ? '完了 · ' : ''}{m.releaseDate
+						<span class="row-meta text-[0.8125rem] text-muted-foreground tabular-nums">
+							{m.completedAt ? '完了 · ' : ''}{m.releaseDate
 								? `${m.releaseDate.replaceAll('-', '/')} リリース`
-								: '日付なし'}</span
-						>
+								: '日付なし'}
+						</span>
 						{#if writable}
 							<form method="POST" action="?/completeMilestone" use:enhance class="row-meta">
 								<input type="hidden" name="id" value={m.id} />

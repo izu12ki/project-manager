@@ -52,9 +52,9 @@
 		aria-labelledby={`${id}-label ${id}-value`}
 		aria-describedby={describedBy}
 	>
-		<span id={`${id}-value`} class="truncate" class:text-muted-foreground={!summary}
-			>{summary || placeholder}</span
-		>
+		<span id={`${id}-value`} class="truncate" class:text-muted-foreground={!summary}>
+			{summary || placeholder}
+		</span>
 	</summary>
 	<div class="menu" role="group" aria-labelledby={`${id}-label`}>
 		{#each options as o (o.value)}

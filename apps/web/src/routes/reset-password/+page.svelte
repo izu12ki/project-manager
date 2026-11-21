@@ -15,9 +15,9 @@
 	{#if data.invalid || !data.token}
 		<div role="alert" class="alert alert-destructive" style="grid-template-columns: 1fr">
 			<div>
-				リンクが無効か期限切れです。<a href="/forgot-password" class="underline"
-					>もう一度やり直してください</a
-				>。
+				リンクが無効か期限切れです。<a href="/forgot-password" class="underline">
+					もう一度やり直してください
+				</a>。
 			</div>
 		</div>
 	{:else}

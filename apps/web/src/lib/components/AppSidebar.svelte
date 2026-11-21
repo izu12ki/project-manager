@@ -90,9 +90,9 @@
 			>
 				<Bell size={16} class="muted-icon" />通知
 				{#if (unread.current ?? 0) > 0}
-					<span class="badge" data-testid="unread-badge" aria-label={`未読 ${unreadLabel} 件`}
-						>{unreadLabel}</span
-					>
+					<span class="badge" data-testid="unread-badge" aria-label={`未読 ${unreadLabel} 件`}>
+						{unreadLabel}
+					</span>
 				{/if}
 			</a>
 			<a href="/emoji" class="item row" aria-current={path === '/emoji' ? 'page' : undefined}>
@@ -137,12 +137,13 @@
 					<span class="sub">{user.email}</span>
 				</div>
 				<div class="sep"></div>
-				<a href="/account" class="item row"><CircleUser size={16} class="muted-icon" />アカウント</a
-				>
+				<a href="/account" class="item row">
+					<CircleUser size={16} class="muted-icon" />アカウント
+				</a>
 				<form method="POST" action="/logout" style="margin: 0">
-					<button type="submit" class="item row"
-						><LogOut size={16} class="muted-icon" />ログアウト</button
-					>
+					<button type="submit" class="item row">
+						<LogOut size={16} class="muted-icon" />ログアウト
+					</button>
 				</form>
 			</div>
 		{/if}

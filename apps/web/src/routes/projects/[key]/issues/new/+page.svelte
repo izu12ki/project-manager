@@ -52,9 +52,10 @@
 		<h1 class="m-0 text-lg leading-snug font-bold">
 			{data.parent ? '子課題を追加' : '新規課題'}
 			{#if data.parent}
-				<span class="block text-[0.8125rem] font-normal text-muted-foreground"
-					>親課題: {data.project.key}-{data.parent.number} {data.parent.title}</span
-				>
+				<span class="block text-[0.8125rem] font-normal text-muted-foreground">
+					親課題: {data.project.key}-{data.parent.number}
+					{data.parent.title}
+				</span>
 			{/if}
 		</h1>
 		{@render actions()}
@@ -118,9 +119,9 @@
 					</select>
 				</div>
 				<div class="prop-row">
-					<span class="prop-label" id="issue-category-label"
-						><Tag style="--c: var(--c-amber)" />カテゴリー</span
-					>
+					<span class="prop-label" id="issue-category-label">
+						<Tag style="--c: var(--c-amber)" />カテゴリー
+					</span>
 					<div class="min-w-0">
 						<MultiSelect
 							id="issue-category"
@@ -138,9 +139,9 @@
 			<div class="prop-list prop-list-wide">
 				{#if data.canAssign}
 					<div class="prop-row">
-						<span class="prop-label" id="issue-assignee-label"
-							><UsersRound style="--c: var(--c-pink)" />担当者</span
-						>
+						<span class="prop-label" id="issue-assignee-label">
+							<UsersRound style="--c: var(--c-pink)" />担当者
+						</span>
 						<div class="flex flex-wrap items-center gap-2">
 							<div class="assignees">
 								<MultiSelect
@@ -183,8 +184,9 @@
 					</div>
 				</div>
 				<div class="prop-row">
-					<label for="issue-milestone"><Milestone style="--c: var(--c-teal)" />マイルストーン</label
-					>
+					<label for="issue-milestone">
+						<Milestone style="--c: var(--c-teal)" />マイルストーン
+					</label>
 					<select class="select" id="issue-milestone" name="milestoneId">
 						<option value="">未設定</option>
 						{#each data.milestones as m (m.id)}

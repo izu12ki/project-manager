@@ -171,9 +171,9 @@
 				<div class="alert">
 					<TriangleAlert color="var(--c-amber)" />
 					<p class="m-0">
-						複数の Backlog プロジェクトの課題が含まれています: <span class="mono"
-							>{plan.backlogProjects.join('、')}</span
-						>
+						複数の Backlog プロジェクトの課題が含まれています: <span class="mono">
+							{plan.backlogProjects.join('、')}
+						</span>
 					</p>
 				</div>
 			{/if}
@@ -243,9 +243,9 @@
 							{@const selected = usersById.get(chosen[person.name])}
 							<div role="row" class="row">
 								<span role="cell" class="truncate font-medium">{person.name}</span>
-								<span role="cell" class="text-[0.8125rem] text-muted-foreground"
-									>{usesText(person.uses)}</span
-								>
+								<span role="cell" class="text-[0.8125rem] text-muted-foreground">
+									{usesText(person.uses)}
+								</span>
 								<span role="cell">
 									<select
 										class="select w-full"
@@ -276,11 +276,13 @@
 					type="button"
 					class="btn btn-primary"
 					disabled={pending || plan.issues === 0 || plan.alreadyImported.length > 0}
-					onclick={run}>取り込む（{plan.issues} 件）</button
+					onclick={run}
 				>
-				<button type="button" class="btn btn-outline" disabled={pending} onclick={close}
-					>やめる</button
-				>
+					取り込む（{plan.issues} 件）
+				</button>
+				<button type="button" class="btn btn-outline" disabled={pending} onclick={close}>
+					やめる
+				</button>
 			</div>
 		</div>
 	{/if}

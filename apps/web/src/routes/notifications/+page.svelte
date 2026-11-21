@@ -38,9 +38,9 @@
 	<div class="flex items-center justify-between gap-4">
 		<h1 class="m-0 text-xl font-bold">通知</h1>
 		{#if canMarkRead}
-			<button type="button" class="btn btn-outline btn-sm" disabled={!hasUnread} onclick={readAll}
-				>すべて既読にする</button
-			>
+			<button type="button" class="btn btn-outline btn-sm" disabled={!hasUnread} onclick={readAll}>
+				すべて既読にする
+			</button>
 		{/if}
 	</div>
 	{#if items.length === 0}
@@ -52,13 +52,13 @@
 					<button type="button" class="notif" class:unread={!n.read} onclick={() => open(n.id)}>
 						<span class="avatar" style:--c={colorFor(n.actorName)}>{n.actorName[0]}</span>
 						<span class="grid min-w-0 gap-0.5 text-left">
-							<span class="truncate"
-								><span class="font-medium">{n.actorName}</span> さんが {n.summary}</span
-							>
-							<span class="truncate text-xs text-muted-foreground"
-								>{#if n.issueNumber === null}{n.projectKey}{:else}{n.projectKey}-{n.issueNumber}
-									{n.issueTitle}{/if} · {formatDateTime(n.createdAt)}</span
-							>
+							<span class="truncate">
+								<span class="font-medium">{n.actorName}</span> さんが {n.summary}
+							</span>
+							<span class="truncate text-xs text-muted-foreground">
+								{#if n.issueNumber === null}{n.projectKey}{:else}{n.projectKey}-{n.issueNumber}
+									{n.issueTitle}{/if} · {formatDateTime(n.createdAt)}
+							</span>
 						</span>
 						{#if !n.read}<span class="dot" aria-label="未読"></span>{/if}
 					</button>

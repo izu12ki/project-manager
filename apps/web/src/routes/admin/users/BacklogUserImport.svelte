@@ -175,8 +175,9 @@
 							{plan.missingKeys.join('、')}
 						</p>
 						<p class="m-0 text-[0.8125rem] text-muted-foreground">
-							Backlog と同じキーで<a class="link" href="/admin/projects/new">プロジェクトを作って</a
-							>から CSV を読み込み直すと、そのプロジェクトにも参加させられます。
+							Backlog と同じキーで<a class="link" href="/admin/projects/new">
+								プロジェクトを作って
+							</a>から CSV を読み込み直すと、そのプロジェクトにも参加させられます。
 						</p>
 					</div>
 				</div>
@@ -185,9 +186,9 @@
 				<div class="alert">
 					<Archive class="text-muted-foreground" />
 					<p class="m-0">
-						アーカイブ済みのプロジェクトには参加させません: <span class="mono"
-							>{plan.archivedKeys.join('、')}</span
-						>
+						アーカイブ済みのプロジェクトには参加させません: <span class="mono">
+							{plan.archivedKeys.join('、')}
+						</span>
 					</p>
 				</div>
 			{/if}
@@ -234,8 +235,10 @@
 							<span
 								role="cell"
 								class="truncate text-[0.8125rem] text-muted-foreground"
-								title={row.email}>{row.email}</span
+								title={row.email}
 							>
+								{row.email}
+							</span>
 							<span role="cell" class="flex items-center gap-2">
 								{#if row.action === 'invite'}
 									<select
@@ -294,11 +297,13 @@
 					class="btn btn-primary"
 					aria-describedby="backlog-import-summary"
 					disabled={pending || count === 0 || count > MAX_IMPORT_USERS}
-					onclick={run}>取り込む（{count} 人）</button
+					onclick={run}
 				>
-				<button type="button" class="btn btn-outline" disabled={pending} onclick={close}
-					>やめる</button
-				>
+					取り込む（{count} 人）
+				</button>
+				<button type="button" class="btn btn-outline" disabled={pending} onclick={close}>
+					やめる
+				</button>
 			</div>
 		</div>
 	{/if}

@@ -21,7 +21,8 @@
 	type Plan = Awaited<ReturnType<typeof previewUserImport>>;
 	type PlanRow = Plan['rows'][number];
 
-	const roles = ['admin', 'member', 'guest'] as const;
+	// 権限が弱い順（ROLES と同じ並び）。Backlog からの取り込みでは閲覧者を選べない
+	const roles = ['guest', 'member', 'admin'] as const;
 
 	let input = $state<HTMLInputElement>();
 	/** 確認画面。実行時は CSV の行にチェックとロールを足して送る（サーバーが計画を作り直す） */

@@ -266,8 +266,8 @@
 			<div class="field">
 				<label class="label" for="guest-role">ロール</label>
 				<select class="select" id="guest-role" name="role">
-					<option value="guest">{ROLE_LABEL.guest}</option>
 					<option value="viewer">{ROLE_LABEL.viewer}</option>
+					<option value="guest" selected>{ROLE_LABEL.guest}</option>
 				</select>
 			</div>
 			<button type="submit" class="btn btn-outline">招待する</button>

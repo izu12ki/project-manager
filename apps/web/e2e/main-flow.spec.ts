@@ -115,7 +115,11 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.goto('/admin/users');
 	await expect(page.getByRole('heading', { name: 'ユーザーを招待' })).toBeVisible();
 	await page.getByLabel('メールアドレス').fill('member@example.com');
-	await page.getByLabel('ロール', { exact: true }).selectOption('member');
+	// ロールは権限が弱い順に並び、既定はメンバー
+	const inviteRole = page.getByLabel('ロール', { exact: true });
+	await expect(inviteRole.locator('option')).toHaveText(['閲覧者', 'ゲスト', 'メンバー', '管理者']);
+	await expect(inviteRole).toHaveValue('member');
+	await inviteRole.selectOption('member');
 	await page.locator('#invite-project').click();
 	await page.getByRole('checkbox', { name: 'ACME サイト改修' }).check();
 	await expect(page.locator('#invite-project')).toHaveText('ACME サイト改修');
@@ -835,7 +839,10 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	// 12b. 閲覧者（公開デモの共用アカウント向け）。見るだけで、何も書き込めない
 	await page.goto('/projects/ACME/settings');
 	await page.getByLabel('メールアドレス', { exact: true }).fill('viewer@example.com');
-	await page.getByLabel('ロール', { exact: true }).selectOption('viewer');
+	const guestRole = page.getByLabel('ロール', { exact: true });
+	await expect(guestRole.locator('option')).toHaveText(['閲覧者', 'ゲスト']);
+	await expect(guestRole).toHaveValue('guest');
+	await guestRole.selectOption('viewer');
 	await page.getByRole('button', { name: '招待する' }).click();
 	const viewerUrl = await page.getByLabel('招待リンク').inputValue();
 	const viewerPage = await browser.newPage({ baseURL });
@@ -996,6 +1003,8 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await login(page, 'admin@example.com');
 	await page.goto('/admin/users');
 	const roleSelect = page.getByLabel('副管理者 さんのロール');
+	// 一覧のロール変更も、招待と同じ順
+	await expect(roleSelect.locator('option')).toHaveText(['閲覧者', 'ゲスト', 'メンバー', '管理者']);
 	await expect(roleSelect).toHaveValue('admin');
 	await expect(roleSelect.locator('option:checked')).toHaveText('管理者');
 	// 自分の行には select が無い

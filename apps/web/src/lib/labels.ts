@@ -68,6 +68,9 @@ export const PRIORITY_LABEL: Record<Priority, string> = {
 	urgent: '緊急'
 };
 
+/** ロールの選択肢の並び（権限が弱い順） */
+export const ROLES = ['viewer', 'guest', 'member', 'admin'] as const;
+
 export const ROLE_LABEL = {
 	admin: '管理者',
 	member: 'メンバー',

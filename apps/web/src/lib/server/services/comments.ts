@@ -68,6 +68,11 @@ export async function listComments(ctx: AppContext, key: string, number: number)
 	return rows.map((c) => ({ ...c, reactions: byComment.get(c.id) ?? [] }));
 }
 
+/** コメントの投稿・編集で、課題の更新日時（一覧の「更新日」）も進める。削除とリアクションでは進めない */
+function touchIssue(ctx: AppContext, issueId: string) {
+	return ctx.db.update(issueTable).set({ updatedAt: new Date() }).where(eq(issueTable.id, issueId));
+}
+
 export async function addComment(
 	ctx: AppContext,
 	key: string,
@@ -80,7 +85,10 @@ export async function addComment(
 	authorize(ctx.actor, 'comment:create');
 	const { body } = parse(BodyInput, input);
 	const id = uuidv7();
-	await ctx.db.insert(comment).values({ id, issueId: issue.id, authorId: ctx.actor.id, body });
+	await ctx.db.batch([
+		ctx.db.insert(comment).values({ id, issueId: issue.id, authorId: ctx.actor.id, body }),
+		touchIssue(ctx, issue.id)
+	]);
 	await linkAttachments(ctx, { projectId: project.id, issueId: issue.id, commentId: id }, body);
 	await notify(ctx, {
 		project,
@@ -111,7 +119,10 @@ export async function editComment(
 ): Promise<void> {
 	const c = await findOwnedComment(ctx, key, number, commentId);
 	const { body } = parse(BodyInput, input);
-	await ctx.db.update(comment).set({ body }).where(eq(comment.id, c.id));
+	await ctx.db.batch([
+		ctx.db.update(comment).set({ body }).where(eq(comment.id, c.id)),
+		touchIssue(ctx, c.issueId)
+	]);
 	await linkAttachments(ctx, { projectId: c.projectId, issueId: c.issueId, commentId: c.id }, body);
 	await notify(ctx, {
 		project: c.project,

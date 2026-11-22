@@ -18,6 +18,7 @@ import { defaultFieldInserts } from './services/issue-fields';
  * 本番の D1 にある制約をテストでも再現する。違反するクエリはテストで失敗させる。
  * - 途中で処理を挟むトランザクション（db.transaction）は使えない
  * - 1 クエリのバインド変数は D1_MAX_PARAMS 個まで
+ * - LIKE のパターンは 50 バイトまで（LIKE を含む文で、50 バイトを超える文字列の変数を渡したら失敗にする）
  * - db.batch() の結果は列名をキーにした行で返る（drizzle はその値の並びを列の並びとして読む）ので、
  *   同じ名前の列（join した表の id・name など）があると値がずれる。batch の select では別名を付けること
  */
@@ -27,6 +28,13 @@ export function emulateD1(client: Client): Client {
 		const n = Array.isArray(args) ? args.length : Object.keys(args).length;
 		if (n > D1_MAX_PARAMS)
 			throw new Error(`too many SQL variables: ${n} (D1 allows ${D1_MAX_PARAMS})`);
+		const values = Array.isArray(args) ? args : Object.values(args);
+		const sql = typeof stmt === 'string' ? stmt : stmt.sql;
+		if (
+			/\blike\b/i.test(sql) &&
+			values.some((v) => typeof v === 'string' && new TextEncoder().encode(v).length > 50)
+		)
+			throw new Error('LIKE or GLOB pattern too complex (D1 allows 50 bytes)');
 	};
 	return new Proxy(client, {
 		get(target, prop, receiver) {

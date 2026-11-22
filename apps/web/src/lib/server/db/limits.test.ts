@@ -82,4 +82,17 @@ describe('db/limits', () => {
 		// batch でなければ D1 も列の並びで返すので問題ない
 		await expect(joined).resolves.toEqual([]);
 	});
+
+	it('emulateD1: LIKE のパターンが 50 バイトを超えると失敗する', async () => {
+		const db = await createTestDb();
+		const pattern = `%${'あ'.repeat(17)}%`; // 53 バイト
+		expect(
+			await messageOf(
+				db
+					.select()
+					.from(user)
+					.where(sql`${user.name} like ${pattern}`)
+			)
+		).toMatch(/LIKE/);
+	});
 });

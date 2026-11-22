@@ -53,12 +53,12 @@ pnpm db:migrate:local
 
 ### D1 の制約
 
-DB は Cloudflare D1 です。SQL は SQLite と同じですが、次の制約があります。単体テストの DB（`createTestDb`）は 1〜3 を再現していて、違反するとテストが失敗します。
+DB は Cloudflare D1 です。SQL は SQLite と同じですが、次の制約があります。単体テストの DB（`createTestDb`）は 1〜4 を再現していて、違反するとテストが失敗します。
 
 1. `db.transaction()` は使えません。まとめて成功・失敗させたい書き込みは `db.batch()` にします（batch は 1 つのトランザクションとして実行されます）。
 2. 1 つのクエリのバインド変数は 100 個までです。`IN` には `drizzle-orm` の `inArray` ではなく `apps/web/src/lib/server/db/limits.ts` の `inList` を使い（ESLint で強制しています）、複数行の insert は `insertChunks` で分けます。
 3. `db.batch()` に入れた select の結果は、列名をキーにした行で返ります。そのため、同じ名前の列（join した表の `id` や `name` など）があると値がずれます。batch の中で join するときは、列に別名（`` sql`${列}`.as('別名') ``）を付けます。
-4. LIKE のパターンは 50 バイトまでです。
+4. LIKE のパターンは 50 バイトまでです（日本語なら 16 文字ほど）。利用者が入力した文字列での部分一致には、LIKE ではなく `instr` を使います。
 5. Workers の無料プランでは、1 回のリクエストで 50 クエリまでです（`db.batch()` は 1 回と数えます）。
 6. 外部キー制約を切れません。テーブルを作り直すマイグレーション（drizzle が `PRAGMA foreign_keys=OFF` を出すもの）では、`DROP TABLE` の時点で `ON DELETE CASCADE` の子の行が消えます。ほかのテーブルから参照されているテーブルは作り直さないでください。`pnpm db:sync` は `PRAGMA foreign_keys=OFF` を `PRAGMA defer_foreign_keys = on` に置き換えますが、これで防げるのは制約違反のエラーだけです。
 

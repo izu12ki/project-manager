@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
-import { commentReaction } from '../db/schema';
+import { eq } from 'drizzle-orm';
+import { commentReaction, issue as issueTable } from '../db/schema';
 import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
 import { addComment, deleteComment, editComment, listComments, toggleReaction } from './comments';
 import { createIssue, deleteIssue } from './issues';
@@ -30,6 +31,28 @@ describe('comments', () => {
 			['first', 'guest'],
 			['second', 'member']
 		]);
+	});
+
+	it('投稿・編集で課題の更新日時が進む。削除・リアクションでは進まない', async () => {
+		const old = new Date(Date.UTC(2026, 0, 1));
+		const reset = () =>
+			db.update(issueTable).set({ updatedAt: old }).where(eq(issueTable.number, 1));
+		const updatedAt = async () =>
+			(await db.select().from(issueTable).where(eq(issueTable.number, 1)))[0].updatedAt;
+
+		await reset();
+		await addComment(as(guest), 'ACME', 1, { body: 'g' });
+		expect((await updatedAt()).getTime()).toBeGreaterThan(old.getTime());
+		const [c] = await listComments(as(guest), 'ACME', 1);
+
+		await reset();
+		await editComment(as(guest), 'ACME', 1, c.id, { body: 'g2' });
+		expect((await updatedAt()).getTime()).toBeGreaterThan(old.getTime());
+
+		await reset();
+		await toggleReaction(as(member), 'ACME', 1, c.id, { emoji: '👍' });
+		await deleteComment(as(guest), 'ACME', 1, c.id);
+		expect(await updatedAt()).toEqual(old);
 	});
 
 	it('空のコメントは validation', async () => {

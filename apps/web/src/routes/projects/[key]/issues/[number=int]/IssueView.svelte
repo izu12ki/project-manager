@@ -46,6 +46,7 @@
 		getChanges,
 		getComments,
 		getIssueDetail,
+		getParentCandidates,
 		postComment,
 		reactToComment,
 		readIssueNotifications,
@@ -129,6 +130,8 @@
 	const RECENT_COUNT = 20;
 	let expandedFor = $state<string | null>(null);
 	const issueKey = $derived(`${projectKey}-${number}`);
+	/** 親課題の候補を取った課題（親課題の欄にフォーカスしたとき） */
+	let parentOptionsFor = $state<string | null>(null);
 	const hiddenCount = $derived.by(() => {
 		const hidden = shownActivity.length - RECENT_COUNT;
 		if (hidden <= 0 || expandedFor === issueKey) return 0;
@@ -358,11 +361,19 @@
 						placeholder={detail.children.length > 0 ? '子課題があるため設定不可' : '課題番号'}
 						{...save.fields.parentNumber.as('text', shown.parentNumber)}
 						disabled={!perms.edit || detail.children.length > 0}
+						onfocus={() => (parentOptionsFor = issueKey)}
 					/>
+					<!-- 候補はプロジェクトの課題数だけ増えるので、欄を使うときに取る -->
 					<datalist id={`issue-parent-${variant}-options`}>
-						{#each detail.parentCandidates as c (c.number)}
-							<option value={String(c.number)}>{projectKey}-{c.number} {c.title}</option>
-						{/each}
+						{#if parentOptionsFor === issueKey}
+							{#await getParentCandidates(ref) then candidates}
+								{#each candidates as c (c.number)}
+									<option value={String(c.number)}>{projectKey}-{c.number} {c.title}</option>
+								{/each}
+							{:catch}
+								<!-- 候補が出ないだけで、番号の入力はできる -->
+							{/await}
+						{/if}
 					</datalist>
 				</div>
 			</div>

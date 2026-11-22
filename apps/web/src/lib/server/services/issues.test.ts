@@ -13,12 +13,12 @@ import {
 	listBoard,
 	listDeletedIssues,
 	listIssueChanges,
-	listChildIssues,
 	listIssues,
 	listTimeline,
 	moveIssue,
 	updateIssue
 } from './issues';
+import { getIssueDetailRows } from './issue-detail';
 import { createCategory, listCategories, listIssueTypes } from './issue-fields';
 import { categoryIdsValue } from './issue-input';
 import { setProjectArchived } from './projects';
@@ -390,10 +390,8 @@ describe('issues', () => {
 			await createIssue(as(member), 'ACME', { title: '親' });
 			await createIssue(as(member), 'ACME', { title: '子1', parentNumber: '1' });
 			await createIssue(as(guest), 'ACME', { title: '子2', parentNumber: 'ACME-1' });
-			const { issue: parent } = await getIssue(as(member), 'ACME', 1);
-			expect((await listChildIssues(as(member), 'ACME', parent.id)).map((i) => i.number)).toEqual([
-				2, 3
-			]);
+			const { children } = await getIssueDetailRows(as(member), 'ACME', 1);
+			expect(children.map((i) => i.number)).toEqual([2, 3]);
 			const { issue: child } = await getIssue(as(member), 'ACME', 2);
 			expect(child.parent).toEqual({ number: 1, title: '親' });
 			expect((await listIssues(as(member), 'ACME')).find((i) => i.number === 3)).toMatchObject({

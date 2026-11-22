@@ -1,9 +1,7 @@
-import { inArray } from 'drizzle-orm';
 import * as v from 'valibot';
 import { command, form, query } from '$app/server';
 import { attachmentUrl, isSafeImage } from '#lib/attachment-rules.ts';
 import { can } from '#lib/server/authz.ts';
-import { user } from '#lib/server/db/schema.ts';
 import { renderMarkdown } from '#lib/server/markdown.ts';
 import { getUnreadCount } from '#lib/notifications.remote.ts';
 import { remoteContext, runCommand, runForm, runQuery } from '#lib/server/remote-helpers.ts';
@@ -15,21 +13,14 @@ import {
 	listComments,
 	toggleReaction
 } from '#lib/server/services/comments.ts';
-import {
-	listCategories,
-	listIssueTypesOf,
-	listMilestones,
-	listStatusesOf
-} from '#lib/server/services/issue-fields.ts';
+import { getIssueDetailRows } from '#lib/server/services/issue-detail.ts';
 import {
 	getIssue,
-	listChildIssues,
 	listIssueChanges,
-	listIssues,
+	listParentCandidates,
 	updateIssue
 } from '#lib/server/services/issues.ts';
 import { markIssueRead } from '#lib/server/services/notifications.ts';
-import { listAssignableUsers, requireProject } from '#lib/server/services/projects.ts';
 
 const IssueRef = v.object({
 	key: v.string(),
@@ -42,47 +33,20 @@ const opt = v.optional(v.string());
 export const getIssueDetail = query(IssueRef, ({ key, number }) => {
 	const ctx = remoteContext();
 	return runQuery(async () => {
-		const p = await requireProject(ctx, key);
-		const { project, issue } = await getIssue(ctx, key, number);
-		const [assignees, statuses, issueTypes, categories, milestones, children, issues] =
-			await Promise.all([
-				listAssignableUsers(ctx.db, p.id),
-				listStatusesOf(ctx.db, p.id),
-				listIssueTypesOf(ctx.db, p.id),
-				listCategories(ctx, key),
-				listMilestones(ctx, key),
-				listChildIssues(ctx, key, issue.id),
-				listIssues(ctx, key)
-			]);
-		const assignable = assignees.map((u) => ({ ...u, disabled: false }));
-		// 無効化・脱退した人が担当のままなら、選択肢に残して外せるようにする
-		const former = issue.assigneeIds.filter((id) => !assignable.some((u) => u.id === id));
-		if (former.length > 0) {
-			const rows = await ctx.db
-				.select({ id: user.id, name: user.name, role: user.role })
-				.from(user)
-				.where(inArray(user.id, former));
-			assignable.push(...rows.map((u) => ({ ...u, disabled: true })));
-		}
+		const { project, issue, children, assignees, statuses, issueTypes, categories, milestones } =
+			await getIssueDetailRows(ctx, key, number);
 		const res = { reporterId: issue.reporterId };
 		// 削除した課題は閲覧だけできる
 		const writable = !project.archivedAt && !issue.deletedAt;
 		return {
 			issue: { ...issue, descriptionHtml: renderMarkdown(issue.description) },
-			assignees: assignable,
+			assignees,
 			statuses,
 			issueTypes,
 			categories,
 			// 完了済みは選択肢から外す。ただし現在設定されているものは残す
 			milestones: milestones.filter((m) => !m.completedAt || m.id === issue.milestoneId),
 			children,
-			// 子課題は 1 階層までなので、親にできるのは子課題でない課題だけ。子課題を持つ課題は親を設定できない
-			parentCandidates:
-				children.length > 0
-					? []
-					: issues
-							.filter((i) => !i.parentId && i.id !== issue.id)
-							.map((i) => ({ number: i.number, title: i.title })),
 			perms: {
 				writable,
 				create: writable && can(ctx.actor, 'issue:create'),
@@ -94,6 +58,12 @@ export const getIssueDetail = query(IssueRef, ({ key, number }) => {
 			}
 		};
 	});
+});
+
+/** 親課題の候補。プロジェクトの課題数だけ増えるので、詳細とは別に親課題の欄を使うときだけ取る */
+export const getParentCandidates = query(IssueRef, ({ key, number }) => {
+	const ctx = remoteContext();
+	return runQuery(() => listParentCandidates(ctx, key, number));
 });
 
 export const getComments = query(IssueRef, ({ key, number }) => {

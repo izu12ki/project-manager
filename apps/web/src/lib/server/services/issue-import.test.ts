@@ -397,6 +397,15 @@ describe('issue-import: run', () => {
 		expect(nextIssueNumber).toBe(5);
 	});
 
+	it('課題 40 件・コメント 120 件を取り込める', async () => {
+		const comments = (i: number) =>
+			[1, 2, 3].map((k) => ({ at: null, author: '', body: `コメント ${i}-${k}` }));
+		const result = await run(Array.from({ length: 40 }, (_, i) => row({ comments: comments(i) })));
+		expect([result.issues, result.comments]).toEqual([40, 120]);
+		expect(await count(issue)).toBe(40);
+		expect((await db.select().from(comment)).length).toBe(120);
+	});
+
 	it('件名が 200 文字を超える課題は、切り詰めて取り込み、元の件名を本文の末尾に残す', async () => {
 		const long = 'あ'.repeat(198) + '😀😀'; // 202 文字（UTF-16）。199 文字目が絵文字の途中
 		await run([row({ title: long }), row({ title: 'い'.repeat(200) })]);

@@ -1,6 +1,6 @@
 # Project Manager
 
-受託開発会社と顧客（ゲスト）が課題を共有するための、セルフホスト型プロジェクト管理ツールです。Cloudflare Workers と Turso で動きます。
+受託開発会社と顧客（ゲスト）が課題を共有するための、セルフホスト型プロジェクト管理ツールです。Cloudflare Workers と D1 で動きます。
 
 - 課題管理（番号・ステータス・種別・優先度・複数の担当者・開始日と期限・カテゴリー・マイルストーン・1 階層のサブタスク）、絞り込みと編集履歴
 - カンバンとタイムライン（ガントチャート。バーのドラッグで日程を変更）
@@ -10,7 +10,7 @@
 - 顧客をゲストとして招待し、参加プロジェクトだけを見せる。見せるだけの相手は閲覧者として招待できる（起票・編集・コメント不可）
 - REST API と Claude Code 用の Skill
 
-**利用には Cloudflare アカウント（Workers Paid プラン）と Turso アカウントが必要です。** 手順は[ドキュメント](https://project-manager-docs.hirano-i.workers.dev)（ソースは `apps/docs`）を参照してください。
+**利用には Cloudflare アカウント（Workers Paid プラン）が必要です。** 手順は[ドキュメント](https://project-manager-docs.hirano-i.workers.dev)（ソースは `apps/docs`）を参照してください。
 
 ![カンバンの画面。未着手・進行中・レビュー・完了の列に課題のカードが並ぶ](apps/docs/public/screenshots/board.png)
 
@@ -56,9 +56,9 @@
 ## 開発
 
 ```bash
-mise install && pnpm install   # mise install はローカル DB サーバ (sqld) も導入します
+mise install && pnpm install
 pnpm docs:dev   # ドキュメント
-pnpm dev        # アプリ（事前に apps/web で .dev.vars と pnpm db:local が必要）
+pnpm dev        # アプリ（事前に apps/web で .dev.vars の用意と pnpm db:migrate:local が必要）
 ```
 
 Issue や Pull Request の送り方は [CONTRIBUTING.md](CONTRIBUTING.md) を参照してください。脆弱性は公開の Issue にせず、[SECURITY.md](SECURITY.md) の手順で報告してください。

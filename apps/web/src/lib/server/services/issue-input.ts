@@ -1,6 +1,7 @@
 // 課題の起票・更新の入力検証と、書き込む値の組み立て。1 件の起票・更新と一括 API の両方から使う。
 // DB に触れない同期関数にしておき、問い合わせは loadFieldSets でまとめて先に済ませる。
-import { asc, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import { asc, eq, sql, type SQL } from 'drizzle-orm';
+import { inList } from '../db/limits';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
 import {
@@ -406,7 +407,7 @@ export async function loadFormerAssigneeNames(
 	const rows = await db
 		.select({ id: user.id, name: user.name })
 		.from(user)
-		.where(inArray(user.id, [...ids]));
+		.where(inList(user.id, [...ids]));
 	return new Map(rows.map((r) => [r.id, r.name]));
 }
 

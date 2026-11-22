@@ -2,7 +2,8 @@ import { eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
-import { invitation, projectMember, user } from '../db/schema';
+import { invitation, invitationProject, projectMember, user } from '../db/schema';
+import { sha256Hex } from '../tokens';
 import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
 import {
 	acceptInvitation,
@@ -203,6 +204,38 @@ describe('invitations', () => {
 		).toHaveLength(1);
 		await expect(acceptInvitation(base, input)).rejects.toMatchObject({ code: 'not_found' });
 		expect(await getInvitationByToken(db, tokenOf(url))).toBeNull();
+	});
+
+	it('同じメール宛ての招待 2 件を同時に受諾したら、失敗した側の招待は未使用に戻る', async () => {
+		// 2 件とも重複チェックを通り、後から実行された登録が user_email_uq で失敗する状況
+		const tokens = ['token-a', 'token-b'];
+		for (const [i, token] of tokens.entries()) {
+			const id = `inv-${i}`;
+			await db.insert(invitation).values({
+				id,
+				email: 'same@example.com',
+				role: 'member',
+				tokenHash: await sha256Hex(token),
+				invitedBy: admin.id,
+				expiresAt: new Date(Date.now() + 60_000)
+			});
+			await db.insert(invitationProject).values({ invitationId: id, projectId });
+		}
+
+		const results = await Promise.allSettled(
+			tokens.map((token) => acceptInvitation(base, { token, name: 'S', password: 'password-1234' }))
+		);
+
+		expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+		const failed = results.findIndex((r) => r.status === 'rejected');
+		const reason = results[failed].status === 'rejected' && results[failed].reason;
+		expect(reason).toMatchObject({ code: 'conflict' });
+		expect(await db.select().from(user).where(eq(user.email, 'same@example.com'))).toHaveLength(1);
+		const [left] = await db
+			.select()
+			.from(invitation)
+			.where(eq(invitation.id, `inv-${failed}`));
+		expect(left.acceptedAt).toBeNull();
 	});
 
 	it('アドミンとして招待でき、受諾したユーザーの role が admin になる', async () => {

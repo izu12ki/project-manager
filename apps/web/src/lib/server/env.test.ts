@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { readEnv } from './env';
 
 const ok = {
-	TURSO_DATABASE_URL: 'http://127.0.0.1:8080',
 	BETTER_AUTH_SECRET: 'x'.repeat(32),
 	BETTER_AUTH_URL: 'http://localhost:5173'
 };

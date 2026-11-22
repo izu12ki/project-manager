@@ -13,7 +13,7 @@ git checkout "$(git tag --list 'web@*' --sort=-version:refname | head -n 1)"
 mise install
 pnpm install
 cd apps/web
-TURSO_DATABASE_URL="libsql://..." TURSO_AUTH_TOKEN="..." pnpm db:migrate
+pnpm db:migrate:remote
 pnpm deploy
 ```
 

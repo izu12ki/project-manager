@@ -1,6 +1,7 @@
 // 課題の一括起票・一括更新（API 用）。全件を検証してから 1 回の db.batch で書き込み、全件成功か全件失敗にする。
 // DB への問い合わせ回数は件数によらず一定にする（Workers のサブリクエスト数の上限があるため）。
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
+import { inList } from '../db/limits';
 import { generateNKeysBetween } from 'fractional-indexing';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
@@ -81,7 +82,7 @@ export async function tailPositions(
 			: await db
 					.select({ status: issue.status, max: sql<string | null>`max(${issue.position})` })
 					.from(issue)
-					.where(and(eq(issue.projectId, projectId), inArray(issue.status, [...counts.keys()])))
+					.where(and(eq(issue.projectId, projectId), inList(issue.status, [...counts.keys()])))
 					.groupBy(issue.status);
 	const max = new Map(rows.map((r) => [r.status, r.max]));
 	const keys = new Map(
@@ -142,7 +143,7 @@ export async function bulkCreateIssues(
 	const select = ctx.db
 		.select({ id: issue.id, number: issue.number })
 		.from(issue)
-		.where(inArray(issue.id, ids));
+		.where(inList(issue.id, ids));
 	// 振られた番号はバッチ末尾の select で引く（往復を増やさない）
 	const [first, ...rest] = stmts;
 	const results = await ctx.db.batch([first, ...rest, select]);
@@ -181,7 +182,7 @@ export async function bulkUpdateIssues(
 		ctx.db
 			.select()
 			.from(issue)
-			.where(and(eq(issue.projectId, p.id), inArray(issue.number, wanted)))
+			.where(and(eq(issue.projectId, p.id), inList(issue.number, wanted)))
 	]);
 	const byNumber = new Map(rows.map((r) => [r.number, r]));
 	const seen = new Set<number>();

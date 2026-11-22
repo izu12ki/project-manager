@@ -1,4 +1,5 @@
-import { and, count, desc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { inList } from '../db/limits';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { statusName } from '#lib/labels.ts';
 import { can } from '../authz';
@@ -45,11 +46,11 @@ function mine(ctx: AppContext): SQL {
 	return and(
 		own,
 		or(
-			inArray(
+			inList(
 				notification.issueId,
-				ctx.db.select({ id: issue.id }).from(issue).where(inArray(issue.projectId, joined))
+				ctx.db.select({ id: issue.id }).from(issue).where(inList(issue.projectId, joined))
 			),
-			inArray(notification.projectId, joined)
+			inList(notification.projectId, joined)
 		)
 	)!;
 }

@@ -292,6 +292,21 @@ describe('issues', () => {
 		expect(row).toMatchObject({ createdAt: at(20), updatedAt: at(21), startDate: '2026-12-10' });
 	});
 
+	it('キーワードは件名の部分一致。長い日本語でも探せ、% と _ は文字として扱い、英字の大小は区別しない', async () => {
+		const long =
+			'会員登録画面で住所の入力欄が郵便番号から自動で埋まらない不具合について調査して修正する';
+		await createIssue(as(member), 'ACME', { title: long });
+		await createIssue(as(member), 'ACME', { title: '進捗 100%_done' });
+		await createIssue(as(member), 'ACME', { title: 'Login Bug' });
+		await createIssue(as(member), 'ACME', { title: '進捗 1000 done' });
+		const titles = async (q: string) =>
+			(await listIssues(as(member), 'ACME', { q })).map((i) => i.title);
+
+		expect(await titles(long.slice(2, 40))).toEqual([long]);
+		expect(await titles('%_')).toEqual(['進捗 100%_done']);
+		expect(await titles('login')).toEqual(['Login Bug']);
+	});
+
 	it('削除はメンバー以上。ゲストは不可', async () => {
 		await createIssue(as(guest), 'ACME', { title: 'A' });
 		await expect(deleteIssue(as(guest), 'ACME', 1)).rejects.toMatchObject({ code: 'forbidden' });

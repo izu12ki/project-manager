@@ -1,4 +1,5 @@
-import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, or, sql } from 'drizzle-orm';
+import { inList } from '../db/limits';
 import { alias, type SQLiteColumn } from 'drizzle-orm/sqlite-core';
 import type { AppContext } from '../context';
 import {
@@ -21,14 +22,14 @@ const deleter = alias(user, 'deleter');
 
 /**
  * 課題の詳細画面に要る行をまとめて引く。
- * DB（Turso）への 1 往復ごとに 10ms 前後かかるので、プロジェクトの ID を待たずに引けるよう
+ * DB（D1）への 1 往復ごとに待ち時間と CPU 時間がかかるので、プロジェクトの ID を待たずに引けるよう
  * プロジェクトキーの副問い合わせで絞り、1 回の batch（1 往復）で送る。担当者名だけは
  * 課題と子課題の担当者 ID が分かってから 1 往復で引く。
  */
 export async function getIssueDetailRows(ctx: AppContext, key: string, number: number) {
 	const { db } = ctx;
 	const projectId = db.select({ id: project.id }).from(project).where(eq(project.key, key));
-	const ofProject = (col: SQLiteColumn) => inArray(col, projectId);
+	const ofProject = (col: SQLiteColumn) => inList(col, projectId);
 	const [
 		projectRows,
 		issueRows,
@@ -51,10 +52,11 @@ export async function getIssueDetailRows(ctx: AppContext, key: string, number: n
 		db
 			.select({
 				issue,
-				parentNumber: parent.number,
-				parentTitle: parent.title,
-				reporterName: reporter.name,
-				deletedByName: deleter.name
+				// batch では同じ名前の列が重なるので（D1 の仕様）、join した表の列には別名を付ける
+				parentNumber: sql<number | null>`${parent.number}`.as('parent_number'),
+				parentTitle: sql<string | null>`${parent.title}`.as('parent_title'),
+				reporterName: sql<string>`${reporter.name}`.as('reporter_name'),
+				deletedByName: sql<string | null>`${deleter.name}`.as('deleted_by_name')
 			})
 			.from(issue)
 			.leftJoin(parent, eq(issue.parentId, parent.id))
@@ -74,7 +76,7 @@ export async function getIssueDetailRows(ctx: AppContext, key: string, number: n
 			.where(
 				and(
 					ofProject(issue.projectId),
-					inArray(
+					inList(
 						issue.parentId,
 						db
 							.select({ id: parent.id })
@@ -94,7 +96,7 @@ export async function getIssueDetailRows(ctx: AppContext, key: string, number: n
 					isNull(user.disabledAt),
 					or(
 						eq(user.role, 'admin'),
-						inArray(
+						inList(
 							user.id,
 							db
 								.select({ id: projectMember.userId })
@@ -146,7 +148,7 @@ export async function getIssueDetailRows(ctx: AppContext, key: string, number: n
 			: await db
 					.select({ id: user.id, name: user.name, role: user.role })
 					.from(user)
-					.where(inArray(user.id, ids));
+					.where(inList(user.id, ids));
 	const byId = new Map(people.map((u) => [u.id, u]));
 	const named = (assigneeIds: string[]): AssigneeRef[] =>
 		assigneeIds.flatMap((id) => {

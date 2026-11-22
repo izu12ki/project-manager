@@ -1,6 +1,6 @@
 // テスト専用。アプリのコードから import しないこと。
 // adapter-cloudflare が依存の解決を workerd に合わせるので、無指定だと Web 版になり :memory: を開けない
-import { createClient } from '@libsql/client/node';
+import { createClient, type Client, type InStatement } from '@libsql/client/node';
 import { drizzle } from 'drizzle-orm/libsql';
 import { migrate } from 'drizzle-orm/libsql/migrator';
 import { fileURLToPath } from 'node:url';
@@ -9,16 +9,70 @@ import { createMemoryStore } from './attachment-store';
 import type { Actor, Role } from './authz';
 import type { AppContext, BaseContext } from './context';
 import type { DB } from './db';
+import { D1_MAX_PARAMS } from './db/limits';
 import { project, projectMember, relations, user } from './db/schema';
 import type { MailMessage } from './mailer';
 import { defaultFieldInserts } from './services/issue-fields';
 
+/**
+ * 本番の D1 にある制約をテストでも再現する。違反するクエリはテストで失敗させる。
+ * - 途中で処理を挟むトランザクション（db.transaction）は使えない
+ * - 1 クエリのバインド変数は D1_MAX_PARAMS 個まで
+ * - LIKE のパターンは 50 バイトまで（LIKE を含む文で、50 バイトを超える文字列の変数を渡したら失敗にする）
+ * - db.batch() の結果は列名をキーにした行で返る（drizzle はその値の並びを列の並びとして読む）ので、
+ *   同じ名前の列（join した表の id・name など）があると値がずれる。batch の select では別名を付けること
+ */
+export function emulateD1(client: Client): Client {
+	const check = (stmt: InStatement) => {
+		const args = typeof stmt === 'string' ? [] : (stmt.args ?? []);
+		const n = Array.isArray(args) ? args.length : Object.keys(args).length;
+		if (n > D1_MAX_PARAMS)
+			throw new Error(`too many SQL variables: ${n} (D1 allows ${D1_MAX_PARAMS})`);
+		const values = Array.isArray(args) ? args : Object.values(args);
+		const sql = typeof stmt === 'string' ? stmt : stmt.sql;
+		if (
+			/\blike\b/i.test(sql) &&
+			values.some((v) => typeof v === 'string' && new TextEncoder().encode(v).length > 50)
+		)
+			throw new Error('LIKE or GLOB pattern too complex (D1 allows 50 bytes)');
+	};
+	return new Proxy(client, {
+		get(target, prop, receiver) {
+			if (prop === 'transaction')
+				return () => {
+					throw new Error('D1 does not support interactive transactions. Use db.batch().');
+				};
+			if (prop === 'execute')
+				return (stmt: InStatement) => {
+					check(stmt);
+					return target.execute(stmt);
+				};
+			if (prop === 'batch')
+				return async (stmts: InStatement[], mode?: Parameters<Client['batch']>[1]) => {
+					stmts.forEach(check);
+					const results = await target.batch(stmts, mode);
+					for (const r of results) {
+						const dup = r.columns.find((c, i) => r.columns.indexOf(c) !== i);
+						if (dup !== undefined)
+							throw new Error(
+								`duplicate column name "${dup}" in a batched select (D1 collapses them). Alias the column.`
+							);
+					}
+					return results;
+				};
+			const value = Reflect.get(target, prop, receiver);
+			return typeof value === 'function' ? value.bind(target) : value;
+		}
+	});
+}
+
 export async function createTestDb(): Promise<DB> {
-	const db = drizzle({ client: createClient({ url: ':memory:' }), relations });
-	await migrate(db, {
+	const client = createClient({ url: ':memory:' });
+	// drizzle の migrator は内部でトランザクションを使うので、制約をかける前の client で流す
+	await migrate(drizzle({ client }), {
 		migrationsFolder: fileURLToPath(new URL('../../../drizzle', import.meta.url))
 	});
-	return db as unknown as DB;
+	return drizzle({ client: emulateD1(client), relations }) as unknown as DB;
 }
 
 export function createTestBase(

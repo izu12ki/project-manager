@@ -1,7 +1,8 @@
 // Backlog の課題 CSV の取り込み。ブラウザで読んだ行を受け取り、確認画面の「計画」を作る（planIssueImport）。
 // 実行（importIssues）は送られた行と人の対応表から計画を作り直し、1 回の db.batch で全件成功か全件失敗にする。
 // 通知・編集履歴は作らない。DB への問い合わせ回数は件数によらず一定にする。
-import { and, asc, eq, gte, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, isNotNull, isNull, ne, sql } from 'drizzle-orm';
+import { inList, insertChunks } from '../db/limits';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
 import {
@@ -139,10 +140,6 @@ const ImportInput = v.object({
 });
 
 /** 1 文のパラメーターが 999 を超えないように、複数行の insert を分ける */
-const ISSUE_CHUNK = 30;
-const COMMENT_CHUNK = 100;
-const chunks = <T>(xs: T[], size: number): T[][] =>
-	Array.from({ length: Math.ceil(xs.length / size) }, (_, i) => xs.slice(i * size, (i + 1) * size));
 
 const KEY = /^[A-Z][A-Z0-9_]*-\d+$/;
 
@@ -315,7 +312,7 @@ export async function buildImport(
 							deletedAt: issue.deletedAt
 						})
 						.from(issue)
-						.where(and(eq(issue.projectId, p.id), inArray(issue.backlogKey, lookupKeys)))
+						.where(and(eq(issue.projectId, p.id), inList(issue.backlogKey, lookupKeys)))
 		]);
 
 	// ---- 分類項目（なければ作る。作る順はキー ID 順で最初に出た順） ----
@@ -603,7 +600,8 @@ export async function importIssues(
 				.where(
 					and(eq(issueStatus.projectId, p.id), gte(issueStatus.position, built.statusInsertAt))
 				),
-			ctx.db.insert(issueStatus).values(
+			...insertChunks(
+				issueStatus,
 				built.newStatuses.map((st, i) => ({
 					projectId: p.id,
 					key: st.key,
@@ -611,12 +609,13 @@ export async function importIssues(
 					color: 'gray' as const,
 					position: built.statusInsertAt + i
 				}))
-			)
+			).map((part) => ctx.db.insert(issueStatus).values(part))
 		);
 	}
 	if (built.newTypes.length > 0) {
 		stmts.push(
-			ctx.db.insert(issueType).values(
+			...insertChunks(
+				issueType,
 				built.newTypes.map((t, i) => ({
 					id: t.id,
 					projectId: p.id,
@@ -624,38 +623,40 @@ export async function importIssues(
 					color: 'gray' as const,
 					position: built.typeNextPosition + i
 				}))
-			)
+			).map((part) => ctx.db.insert(issueType).values(part))
 		);
 	}
 	if (built.newCategories.length > 0) {
 		stmts.push(
-			ctx.db
-				.insert(category)
-				.values(built.newCategories.map((c) => ({ id: c.id, projectId: p.id, name: c.name })))
+			...insertChunks(
+				category,
+				built.newCategories.map((c) => ({ id: c.id, projectId: p.id, name: c.name }))
+			).map((part) => ctx.db.insert(category).values(part))
 		);
 	}
 	if (built.newMilestones.length > 0) {
 		stmts.push(
-			ctx.db
-				.insert(milestone)
-				.values(built.newMilestones.map((m) => ({ id: m.id, projectId: p.id, name: m.name })))
+			...insertChunks(
+				milestone,
+				built.newMilestones.map((m) => ({ id: m.id, projectId: p.id, name: m.name }))
+			).map((part) => ctx.db.insert(milestone).values(part))
 		);
 	}
 	if (joins.size > 0) {
 		stmts.push(
-			ctx.db
-				.insert(projectMember)
-				.values([...joins].map((userId) => ({ projectId: p.id, userId })))
-				.onConflictDoNothing()
+			...insertChunks(
+				projectMember,
+				[...joins].map((userId) => ({ projectId: p.id, userId }))
+			).map((part) => ctx.db.insert(projectMember).values(part).onConflictDoNothing())
 		);
 	}
 	// 親課題を先に入れる（parent_id の外部キーのため）
 	const parents = issueValues.filter((x) => !x.parentId || !csvIds.has(x.parentId));
 	const children = issueValues.filter((x) => x.parentId && csvIds.has(x.parentId));
-	for (const part of [...chunks(parents, ISSUE_CHUNK), ...chunks(children, ISSUE_CHUNK)]) {
+	for (const part of [...insertChunks(issue, parents), ...insertChunks(issue, children)]) {
 		stmts.push(ctx.db.insert(issue).values(part));
 	}
-	for (const part of chunks(commentValues, COMMENT_CHUNK)) {
+	for (const part of insertChunks(comment, commentValues)) {
 		stmts.push(ctx.db.insert(comment).values(part));
 	}
 	stmts.push(
@@ -667,7 +668,7 @@ export async function importIssues(
 	const range = ctx.db
 		.select({ first: sql<number>`min(${issue.number})`, last: sql<number>`max(${issue.number})` })
 		.from(issue)
-		.where(inArray(issue.id, [...csvIds]));
+		.where(inList(issue.id, [...csvIds]));
 
 	let results;
 	try {

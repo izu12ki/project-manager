@@ -1,17 +1,5 @@
-import {
-	and,
-	asc,
-	count,
-	desc,
-	eq,
-	inArray,
-	isNotNull,
-	isNull,
-	ne,
-	or,
-	sql,
-	type SQL
-} from 'drizzle-orm';
+import { and, asc, count, desc, eq, isNotNull, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
+import { inList } from '../db/limits';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
 import { uuidv7 } from 'uuidv7';
@@ -108,7 +96,7 @@ export async function withAssignees<T extends { assigneeIds: string[] }>(
 	const users =
 		ids.length === 0
 			? []
-			: await db.select({ id: user.id, name: user.name }).from(user).where(inArray(user.id, ids));
+			: await db.select({ id: user.id, name: user.name }).from(user).where(inList(user.id, ids));
 	const names = new Map(users.map((u) => [u.id, u.name]));
 	return rows.map((r) => ({
 		...r,
@@ -131,7 +119,7 @@ export async function withCategories<T extends { categoryIds: string[] }>(
 			: await db
 					.select({ id: category.id, name: category.name })
 					.from(category)
-					.where(inArray(category.id, ids))
+					.where(inList(category.id, ids))
 					.orderBy(asc(category.createdAt), asc(category.id));
 	return rows.map((r) => ({
 		...r,
@@ -177,8 +165,9 @@ function optionCond(
 function keywordCond(projectKey: string, q: string | undefined): SQL | undefined {
 	const kw = q?.trim();
 	if (!kw) return undefined;
-	const escaped = kw.replace(/[\\%_]/g, (c) => `\\${c}`);
-	const title = sql`${issue.title} like ${`%${escaped}%`} escape '\\'`;
+	// LIKE は使わない（D1 は LIKE のパターンが 50 バイトまでで、日本語 17 文字ほどで失敗する）。
+	// instr なら長さの制限がなく、% や _ も文字のまま比べる。lower は LIKE と同じく英字だけを小文字にする
+	const title = sql`instr(lower(${issue.title}), lower(${kw})) > 0`;
 	const m = kw.match(new RegExp(`^(?:${projectKey}-|#)?(\\d{1,9})$`, 'i'));
 	return m ? or(title, eq(issue.number, Number(m[1]))) : title;
 }
@@ -239,7 +228,7 @@ export async function countOpenIssues(
 		.from(issue)
 		.where(
 			and(
-				inArray(issue.projectId, projectIds),
+				inList(issue.projectId, projectIds),
 				ne(issue.status, DONE_STATUS),
 				isNull(issue.deletedAt)
 			)

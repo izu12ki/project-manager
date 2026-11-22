@@ -1,4 +1,5 @@
-import { and, asc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { inList } from '../db/limits';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
 import { authorize } from '../authz';
@@ -228,7 +229,7 @@ export async function listAssignableUsers(db: DB, projectId: string) {
 				isNull(user.disabledAt),
 				or(
 					eq(user.role, 'admin'),
-					inArray(
+					inList(
 						user.id,
 						db
 							.select({ id: projectMember.userId })

@@ -1,4 +1,5 @@
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
+import { inList } from '../db/limits';
 import { PROJECT_KEY_PATTERN } from '#lib/project-key.ts';
 import type { AppContext } from '../context';
 import { attachment } from '../db/schema';
@@ -39,7 +40,7 @@ export function linkAttachmentsQuery(
 		.set({ issueId: target.issueId, commentId: target.commentId ?? null })
 		.where(
 			and(
-				inArray(attachment.id, ids),
+				inList(attachment.id, ids),
 				eq(attachment.projectId, target.projectId),
 				isNull(attachment.issueId),
 				eq(attachment.uploaderId, ctx.actor.id)

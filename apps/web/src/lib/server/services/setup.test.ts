@@ -36,6 +36,20 @@ describe('setup', () => {
 		});
 	});
 
+	it('同時に 2 回実行しても管理者は 1 人だけ', async () => {
+		const db = await createTestDb();
+		const base = createTestBase(db);
+		const results = await Promise.allSettled([
+			createFirstAdmin(base, { ...input, name: 'A', email: 'a@example.com' }),
+			createFirstAdmin(base, { ...input, name: 'B', email: 'b@example.com' })
+		]);
+		expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+		const rejected = results.find((r) => r.status === 'rejected');
+		expect(rejected?.status === 'rejected' && rejected.reason).toMatchObject({ code: 'conflict' });
+		expect(await db.$count(user)).toBe(1);
+		expect(await db.$count(account)).toBe(1);
+	});
+
 	it('短いパスワードは validation', async () => {
 		const db = await createTestDb();
 		await expect(

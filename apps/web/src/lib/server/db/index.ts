@@ -1,11 +1,8 @@
-import { createClient } from '@libsql/client/web';
-import { drizzle } from 'drizzle-orm/libsql/web';
+import { drizzle } from 'drizzle-orm/d1';
 import { relations } from './schema';
 
-export function createDb(env: { TURSO_DATABASE_URL: string; TURSO_AUTH_TOKEN?: string }) {
-	const client = createClient({ url: env.TURSO_DATABASE_URL, authToken: env.TURSO_AUTH_TOKEN });
-	return drizzle({ client, relations });
+export function createDb(d1: D1Database) {
+	return drizzle(d1, { relations });
 }
 
 export type DB = ReturnType<typeof createDb>;
-export type Tx = Parameters<Parameters<DB['transaction']>[0]>[0];

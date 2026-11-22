@@ -10,18 +10,17 @@ mise install
 pnpm install
 cd apps/web
 cp .dev.vars.example .dev.vars   # BETTER_AUTH_SECRET を書き換える
-pnpm db:local                    # 別ターミナルで起動したまま
-pnpm db:migrate
+pnpm db:migrate:local            # ローカルの D1 にテーブルを作る
 pnpm dev                         # http://localhost:5173
 ```
 
-`mise install` は Node.js・pnpm・Turso CLI と、`pnpm db:local` が使うローカル DB サーバー（sqld）を入れます。最初に一度実行してください。
+`mise install` は Node.js と pnpm を入れます。最初に一度実行してください。DB はローカルの D1（wrangler が `.wrangler/state` に作る SQLite）なので、別のサーバーを起動する必要はありません。
 
 ## テスト
 
 ```bash
-pnpm test:unit --run   # services の単体テスト（インメモリ DB）
-pnpm test:e2e          # Playwright（turso dev と wrangler dev を自動で起動）
+pnpm test:unit --run   # services の単体テスト（インメモリ DB。D1 の制約を再現する）
+pnpm test:e2e          # Playwright（空のローカル D1 と wrangler dev を自動で用意）
 pnpm lint && pnpm check
 ```
 
@@ -29,8 +28,10 @@ pnpm lint && pnpm check
 
 ```bash
 pnpm db:generate --name <変更内容>
-pnpm db:migrate
+pnpm db:migrate:local
 ```
+
+D1 にはトランザクションが使えない、1 つのクエリのバインド変数が 100 個まで、などの制約があります。コードを書く前に [CONTRIBUTING.md の「D1 の制約」](https://github.com/izu12ki/project-manager/blob/main/CONTRIBUTING.md#d1-の制約)を読んでください。
 
 ## 構成
 

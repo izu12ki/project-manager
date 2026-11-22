@@ -1,11 +1,29 @@
 <script lang="ts">
-	import { CornerDownRight, Flag, Inbox, Search, SearchX, Trash2 } from '@lucide/svelte';
+	import {
+		ArrowDown,
+		ArrowUp,
+		ArrowUpDown,
+		CornerDownRight,
+		Flag,
+		Inbox,
+		Search,
+		SearchX,
+		Trash2
+	} from '@lucide/svelte';
+	import { page } from '$app/state';
 	import IssueTypeTag from '#lib/components/IssueTypeTag.svelte';
 	import PriorityPill from '#lib/components/PriorityPill.svelte';
 	import StatusPill from '#lib/components/StatusPill.svelte';
 	import {
+		isDefaultIssueSort,
+		nextIssueSort,
+		withIssueSort,
+		type IssueSortKey
+	} from '#lib/issue-sort.ts';
+	import {
 		PRIORITIES,
 		PRIORITY_LABEL,
+		formatDate,
 		formatDateTime,
 		formatDue,
 		isDueAlert,
@@ -16,6 +34,10 @@
 	let { data }: PageProps = $props();
 	const base = $derived(`/projects/${data.project.key}`);
 	const filtering = $derived(Object.values(data.filters).some(Boolean));
+	// 並べ替えても絞り込みは残し、絞り込みを変えても並びは残す
+	const sortHref = (key: IssueSortKey) =>
+		base + withIssueSort(page.url.searchParams, nextIssueSort(data.sort, key));
+	const clearFiltersHref = $derived(base + withIssueSort(new URLSearchParams(), data.sort));
 	// キーは 0.8125rem の等幅フォント（JetBrains Mono は 1 文字 0.6em）で出す。
 	// プロジェクトのキーは 25 文字まであるので、いちばん長い課題キーが 1 行に収まる幅をキー列に取る。
 	// 16px はセルの左右の余白、2px は丸めの誤差の分
@@ -25,6 +47,32 @@
 		return `max(96px, calc(${chars} * 0.6 * 0.8125rem + 18px))`;
 	});
 </script>
+
+{#snippet sortHeader(key: IssueSortKey, label: string)}
+	{@const active = data.sort.key === key}
+	<span
+		role="columnheader"
+		aria-sort={active ? (data.sort.order === 'asc' ? 'ascending' : 'descending') : 'none'}
+	>
+		<a
+			href={sortHref(key)}
+			class="sort"
+			class:active
+			data-sveltekit-noscroll
+			data-sveltekit-keepfocus
+			title={`${label}で並べ替え`}
+		>
+			{label}
+			{#if !active}
+				<ArrowUpDown size={12} class="sort-icon" aria-hidden="true" />
+			{:else if data.sort.order === 'asc'}
+				<ArrowUp size={12} class="sort-icon" aria-hidden="true" />
+			{:else}
+				<ArrowDown size={12} class="sort-icon" aria-hidden="true" />
+			{/if}
+		</a>
+	</span>
+{/snippet}
 
 <section class="grid gap-4">
 	<form
@@ -113,6 +161,10 @@
 				</select>
 			</div>
 		{/if}
+		{#if !isDefaultIssueSort(data.sort)}
+			<input type="hidden" name="sort" value={data.sort.key} />
+			<input type="hidden" name="order" value={data.sort.order} />
+		{/if}
 		<noscript><button type="submit" class="btn btn-outline">絞り込む</button></noscript>
 		<span class="ml-auto pb-2 text-[0.8125rem] text-muted-foreground">{data.issues.length} 件</span>
 	</form>
@@ -134,24 +186,31 @@
 							: '右上の「新規課題」から起票できます'}
 				</div>
 			</div>
-			{#if filtering}<a href={base} class="btn btn-outline">絞り込みを解除</a>{/if}
+			{#if filtering}<a href={clearFiltersHref} class="btn btn-outline">絞り込みを解除</a>{/if}
 		</div>
 	{:else}
 		<div
 			class="grid-table"
 			style:--key-col={keyColumnWidth}
-			style="--cols: var(--key-col) minmax(240px, 1fr) 120px 80px 140px 140px 88px"
+			style="--cols: var(--key-col) minmax(240px, 1fr) 120px 80px 140px 140px 88px 88px var(--stamp-col) var(--stamp-col)"
 		>
 			<!-- キー列が 96px より広がった分だけ、表の最小幅も広げる -->
-			<div role="table" aria-label="課題一覧" style="min-width: calc(var(--key-col) + 804px)">
+			<div
+				role="table"
+				aria-label="課題一覧"
+				style="min-width: calc(var(--key-col) + 892px + 2 * var(--stamp-col))"
+			>
 				<div role="row" class="grid-table-head">
-					<span role="columnheader">キー</span>
+					{@render sortHeader('number', 'キー')}
 					<span role="columnheader">タイトル</span>
 					<span role="columnheader">ステータス</span>
 					<span role="columnheader">優先度</span>
 					<span role="columnheader">担当者</span>
 					<span role="columnheader">マイルストーン</span>
-					<span role="columnheader">期限</span>
+					{@render sortHeader('start', '開始日')}
+					{@render sortHeader('due', '期限')}
+					{@render sortHeader('created', '登録日')}
+					{@render sortHeader('updated', '更新日')}
 				</div>
 				{#each data.issues as i (i.id)}
 					<div role="row" class="row">
@@ -190,6 +249,9 @@
 									{i.milestoneName}
 								</span>{:else}—{/if}
 						</span>
+						<span role="cell" class="text-muted-foreground tabular-nums">
+							{formatDue(i.startDate)}
+						</span>
 						<span
 							role="cell"
 							class="tabular-nums"
@@ -198,6 +260,20 @@
 								: 'var(--muted-foreground)'}
 						>
 							{formatDue(i.dueDate)}
+						</span>
+						<span
+							role="cell"
+							class="text-muted-foreground tabular-nums"
+							title={formatDateTime(i.createdAt)}
+						>
+							{formatDate(i.createdAt)}
+						</span>
+						<span
+							role="cell"
+							class="text-muted-foreground tabular-nums"
+							title={formatDateTime(i.updatedAt)}
+						>
+							{formatDate(i.updatedAt)}
 						</span>
 					</div>
 				{/each}
@@ -247,6 +323,30 @@
 		gap: 12px;
 		min-height: 40px;
 		border-bottom: 1px solid var(--border);
+	}
+	/* 登録日・更新日（2026/11/22）の列。文字サイズの設定に合わせて広げる */
+	.grid-table {
+		--stamp-col: 6.5rem;
+	}
+	.sort {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		white-space: nowrap;
+		border-radius: var(--radius-sm);
+	}
+	.sort:hover,
+	.sort.active {
+		color: var(--foreground);
+	}
+	.sort :global(.sort-icon) {
+		flex-shrink: 0;
+	}
+	.sort:not(.active) :global(.sort-icon) {
+		opacity: 0.45;
+	}
+	.sort:hover :global(.sort-icon) {
+		opacity: 1;
 	}
 	.row {
 		position: relative;

@@ -243,6 +243,55 @@ describe('issues', () => {
 		expect(await listIssues(as(member), 'ACME', { status: 'done' })).toHaveLength(0);
 	});
 
+	it('一覧の並べ替え: 日付が空の課題はどちらの向きでも末尾。絞り込みと併用できる', async () => {
+		await createIssue(as(member), 'ACME', {
+			title: 'A',
+			startDate: '2026-12-10',
+			priority: 'high'
+		});
+		await createIssue(as(member), 'ACME', { title: 'B', priority: 'high' });
+		await createIssue(as(member), 'ACME', {
+			title: 'C',
+			startDate: '2026-12-01',
+			dueDate: '2026-12-20'
+		});
+		await createIssue(as(member), 'ACME', {
+			title: 'D',
+			startDate: '2026-12-01',
+			priority: 'high'
+		});
+		// 登録日は番号と逆にする（Backlog から取り込んだ課題は番号順とは限らない）
+		const at = (day: number) => new Date(Date.UTC(2026, 10, day));
+		for (const [n, created, updated] of [
+			[1, 20, 21],
+			[2, 15, 23],
+			[3, 10, 22],
+			[4, 5, 20]
+		]) {
+			await db
+				.update(issueTable)
+				.set({ createdAt: at(created), updatedAt: at(updated) })
+				.where(eq(issueTable.number, n));
+		}
+		const numbers = async (
+			sort: Parameters<typeof listIssues>[3],
+			filters: Parameters<typeof listIssues>[2] = {}
+		) => (await listIssues(as(member), 'ACME', filters, sort)).map((i) => i.number);
+
+		expect(await numbers(undefined)).toEqual([4, 3, 2, 1]);
+		expect(await numbers({ key: 'number', order: 'asc' })).toEqual([1, 2, 3, 4]);
+		// 同じ開始日の中はキーの降順
+		expect(await numbers({ key: 'start', order: 'asc' })).toEqual([4, 3, 1, 2]);
+		expect(await numbers({ key: 'start', order: 'desc' })).toEqual([1, 4, 3, 2]);
+		expect(await numbers({ key: 'due', order: 'asc' })).toEqual([3, 4, 2, 1]);
+		expect(await numbers({ key: 'created', order: 'desc' })).toEqual([1, 2, 3, 4]);
+		expect(await numbers({ key: 'created', order: 'asc' })).toEqual([4, 3, 2, 1]);
+		expect(await numbers({ key: 'updated', order: 'desc' })).toEqual([2, 3, 1, 4]);
+		expect(await numbers({ key: 'start', order: 'asc' }, { priority: 'high' })).toEqual([4, 1, 2]);
+		const [row] = await listIssues(as(member), 'ACME', { q: 'ACME-1' });
+		expect(row).toMatchObject({ createdAt: at(20), updatedAt: at(21), startDate: '2026-12-10' });
+	});
+
 	it('削除はメンバー以上。ゲストは不可', async () => {
 		await createIssue(as(guest), 'ACME', { title: 'A' });
 		await expect(deleteIssue(as(guest), 'ACME', 1)).rejects.toMatchObject({ code: 'forbidden' });

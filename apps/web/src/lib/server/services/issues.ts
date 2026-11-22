@@ -24,6 +24,7 @@ import {
 	type Status,
 	type StatusDef
 } from '#lib/labels.ts';
+import { DEFAULT_ISSUE_SORT, type IssueSort } from '#lib/issue-sort.ts';
 import { authorize, can } from '../authz';
 import type { AppContext } from '../context';
 import type { DB } from '../db';
@@ -90,6 +91,7 @@ const listColumns = {
 	milestoneId: issue.milestoneId,
 	milestoneName: milestone.name,
 	reporterId: issue.reporterId,
+	createdAt: issue.createdAt,
 	updatedAt: issue.updatedAt
 };
 
@@ -195,9 +197,35 @@ function filterConds(p: ProjectRow, filters: IssueFilters): SQL | undefined {
 	);
 }
 
-export async function listIssues(ctx: AppContext, key: string, filters: IssueFilters = {}) {
+/** 並べ替えの ORDER BY。日付が空の課題は、どちらの向きでも末尾に置く。同じ値の中はキーの降順 */
+function sortOrder(sort: IssueSort): SQL[] {
+	const dir = sort.order === 'asc' ? asc : desc;
+	const byDate = (col: typeof issue.startDate | typeof issue.dueDate) => [
+		sql`${col} is null`,
+		dir(col)
+	];
+	switch (sort.key) {
+		case 'number':
+			return [dir(issue.number)];
+		case 'start':
+			return [...byDate(issue.startDate), desc(issue.number)];
+		case 'due':
+			return [...byDate(issue.dueDate), desc(issue.number)];
+		case 'created':
+			return [dir(issue.createdAt), desc(issue.number)];
+		case 'updated':
+			return [dir(issue.updatedAt), desc(issue.number)];
+	}
+}
+
+export async function listIssues(
+	ctx: AppContext,
+	key: string,
+	filters: IssueFilters = {},
+	sort: IssueSort = DEFAULT_ISSUE_SORT
+) {
 	const p = await requireProject(ctx, key);
-	return selectIssues(ctx.db, filterConds(p, filters), [desc(issue.number)]);
+	return selectIssues(ctx.db, filterConds(p, filters), sortOrder(sort));
 }
 
 /** プロジェクトごとの未完了（完了以外）の課題数。projectIds は呼び出し側で閲覧可能なものに限ること。 */

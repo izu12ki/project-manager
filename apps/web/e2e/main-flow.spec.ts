@@ -884,6 +884,44 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page).toHaveURL(/milestone=none/);
 	await expect(page.getByText('条件に一致する課題はありません')).toBeVisible();
 
+	// 列見出しで並べ替える。開始日が空の課題は末尾。並べ替えと絞り込みは、どちらを変えても他方が残る
+	await page.goto('/projects/ACME');
+	const sortHeader = (name: string) => page.getByRole('columnheader', { name, exact: true });
+	const sortLink = (name: string) => page.getByRole('link', { name, exact: true });
+	await expect(sortHeader('キー')).toHaveAttribute('aria-sort', 'descending');
+	await expect(issueRow.getByRole('cell').nth(8)).toHaveText(/^\d{4}\/\d{2}\/\d{2}$/);
+	await expect(issueRow.getByRole('cell').nth(9)).toHaveText(/^\d{4}\/\d{2}\/\d{2}$/);
+	await sortLink('開始日').click();
+	await expect(page).toHaveURL(/\?sort=start&order=asc$/);
+	await expect(sortHeader('開始日')).toHaveAttribute('aria-sort', 'ascending');
+	await expect(sortHeader('キー')).toHaveAttribute('aria-sort', 'none');
+	const startCells = await page
+		.getByRole('table', { name: '課題一覧' })
+		.getByRole('row')
+		.evaluateAll((rows) =>
+			rows.slice(1).map((r) => r.querySelectorAll('[role="cell"]')[6].textContent!.trim())
+		);
+	expect(startCells[0]).not.toBe('—');
+	const firstBlank = startCells.indexOf('—');
+	if (firstBlank !== -1) expect(new Set(startCells.slice(firstBlank))).toEqual(new Set(['—']));
+	await sortLink('開始日').click();
+	await expect(page).toHaveURL(/\?sort=start&order=desc$/);
+	await expect(sortHeader('開始日')).toHaveAttribute('aria-sort', 'descending');
+	await page.getByLabel('キーワード').fill('acme-1');
+	await page.getByLabel('キーワード').press('Enter');
+	await expect(page).toHaveURL(/\?q=acme-1&.*&sort=start&order=desc$/);
+	await expect(issueRow).toBeVisible();
+	await sortLink('更新日').click();
+	await expect(page).toHaveURL(/\?q=acme-1&.*&sort=updated&order=desc$/);
+	await expect(sortHeader('更新日')).toHaveAttribute('aria-sort', 'descending');
+	await expect(issueRow).toBeVisible();
+	// キーの降順（既定の並び）に戻すと、URL から並びが消える
+	await sortLink('キー').click();
+	await expect(page).toHaveURL(
+		(url) => url.searchParams.get('q') === 'acme-1' && !/sort=|order=/.test(url.search)
+	);
+	await expect(sortHeader('キー')).toHaveAttribute('aria-sort', 'descending');
+
 	await page.goto('/projects/ACME/board');
 	await page.getByLabel('マイルストーン').selectOption({ label: '未設定' });
 	await expect(page).toHaveURL(/milestone=none/);

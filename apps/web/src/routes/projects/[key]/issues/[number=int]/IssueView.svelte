@@ -17,7 +17,7 @@
 		UsersRound,
 		X
 	} from '@lucide/svelte';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { formatBytes } from '#lib/attachment-rules.ts';
 	import CommentReactions from '#lib/components/CommentReactions.svelte';
@@ -105,6 +105,12 @@
 		} catch {
 			// localStorage が使えない環境ではすべて表示のまま
 		}
+		// サーバーの描画では URL の # を知らず、リンク先のコメントが折りたたまれていて
+		// ブラウザがスクロールできていない。開いた後で改めてスクロールする
+		const target = location.hash.slice(1);
+		if (/^(comment|change)-/.test(target)) {
+			void tick().then(() => document.getElementById(target)?.scrollIntoView());
+		}
 	});
 	function setCommentsOnly(value: boolean) {
 		commentsOnly = value;
@@ -117,6 +123,24 @@
 	}
 	const shownActivity = $derived(
 		commentsOnly ? activity.filter((e) => e.kind === 'comment') : activity
+	);
+	// 件数が多いときは新しい 20 件だけを出し、それより前は「以前の◯件を表示」で開く。
+	// 開いた状態は課題ごと（シートで別の課題に切り替えたら閉じる）
+	const RECENT_COUNT = 20;
+	let expandedFor = $state<string | null>(null);
+	const issueKey = $derived(`${projectKey}-${number}`);
+	const hiddenCount = $derived.by(() => {
+		const hidden = shownActivity.length - RECENT_COUNT;
+		if (hidden <= 0 || expandedFor === issueKey) return 0;
+		// 通知などのリンクで開いたコメントが隠れる位置にあるときは折りたたまない
+		const target = page.url.hash.slice(1);
+		if (target && shownActivity.slice(0, hidden).some((e) => `${e.kind}-${e.id}` === target)) {
+			return 0;
+		}
+		return hidden;
+	});
+	const visibleActivity = $derived(
+		hiddenCount > 0 ? shownActivity.slice(hiddenCount) : shownActivity
 	);
 	const mentionCandidates = $derived(
 		detail.assignees.filter((u) => !u.disabled).map(({ id, name }) => ({ id, name }))
@@ -629,7 +653,12 @@
 					{/if}
 				</div>
 				<div class="card activity-card">
-					{#each shownActivity as e (e.id)}
+					{#if hiddenCount > 0}
+						<button type="button" class="show-older" onclick={() => (expandedFor = issueKey)}>
+							以前の {hiddenCount} 件を表示
+						</button>
+					{/if}
+					{#each visibleActivity as e (e.id)}
 						{#if e.kind === 'change'}
 							{@const h = e.h}
 							<article class="entry change" id={`change-${h.id}`}>
@@ -1042,6 +1071,19 @@
 		margin: 0;
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
+	}
+	.show-older {
+		width: 100%;
+		padding: 12px 16px;
+		border: none;
+		background: transparent;
+		color: var(--primary-ink);
+		font: inherit;
+		font-size: 0.8125rem;
+		cursor: pointer;
+	}
+	.show-older:hover {
+		background: var(--accent);
 	}
 	.activity-empty {
 		margin: 0;

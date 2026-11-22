@@ -1,3 +1,4 @@
+import { alias } from 'drizzle-orm/sqlite-core';
 import { eq, inArray, sql } from 'drizzle-orm'; // eslint-disable-line no-restricted-imports -- 101 個の変数を作るために直接使う
 import { describe, expect, it } from 'vitest';
 import { createTestDb, seedUser } from '../test-utils';
@@ -68,5 +69,17 @@ describe('db/limits', () => {
 				db.batch([db.select().from(user), db.select().from(user).where(inArray(user.id, ids))])
 			)
 		).toMatch(/100/);
+	});
+
+	it('emulateD1: batch の select で列名が重複すると失敗する（D1 は列名をキーにした行を返すので重なる）', async () => {
+		const db = await createTestDb();
+		const other = alias(user, 'other');
+		const joined = db
+			.select({ a: user.name, b: other.name })
+			.from(user)
+			.innerJoin(other, eq(other.id, user.id));
+		expect(await messageOf(db.batch([joined]))).toMatch(/duplicate column/);
+		// batch でなければ D1 も列の並びで返すので問題ない
+		await expect(joined).resolves.toEqual([]);
 	});
 });

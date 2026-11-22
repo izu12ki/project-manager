@@ -52,10 +52,11 @@ export async function getIssueDetailRows(ctx: AppContext, key: string, number: n
 		db
 			.select({
 				issue,
-				parentNumber: parent.number,
-				parentTitle: parent.title,
-				reporterName: reporter.name,
-				deletedByName: deleter.name
+				// batch では同じ名前の列が重なるので（D1 の仕様）、join した表の列には別名を付ける
+				parentNumber: sql<number | null>`${parent.number}`.as('parent_number'),
+				parentTitle: sql<string | null>`${parent.title}`.as('parent_title'),
+				reporterName: sql<string>`${reporter.name}`.as('reporter_name'),
+				deletedByName: sql<string | null>`${deleter.name}`.as('deleted_by_name')
 			})
 			.from(issue)
 			.leftJoin(parent, eq(issue.parentId, parent.id))

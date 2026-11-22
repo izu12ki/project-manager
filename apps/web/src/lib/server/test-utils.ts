@@ -18,6 +18,8 @@ import { defaultFieldInserts } from './services/issue-fields';
  * 本番の D1 にある制約をテストでも再現する。違反するクエリはテストで失敗させる。
  * - 途中で処理を挟むトランザクション（db.transaction）は使えない
  * - 1 クエリのバインド変数は D1_MAX_PARAMS 個まで
+ * - db.batch() の結果は列名をキーにした行で返る（drizzle はその値の並びを列の並びとして読む）ので、
+ *   同じ名前の列（join した表の id・name など）があると値がずれる。batch の select では別名を付けること
  */
 export function emulateD1(client: Client): Client {
 	const check = (stmt: InStatement) => {
@@ -38,9 +40,17 @@ export function emulateD1(client: Client): Client {
 					return target.execute(stmt);
 				};
 			if (prop === 'batch')
-				return (stmts: InStatement[], mode?: Parameters<Client['batch']>[1]) => {
+				return async (stmts: InStatement[], mode?: Parameters<Client['batch']>[1]) => {
 					stmts.forEach(check);
-					return target.batch(stmts, mode);
+					const results = await target.batch(stmts, mode);
+					for (const r of results) {
+						const dup = r.columns.find((c, i) => r.columns.indexOf(c) !== i);
+						if (dup !== undefined)
+							throw new Error(
+								`duplicate column name "${dup}" in a batched select (D1 collapses them). Alias the column.`
+							);
+					}
+					return results;
 				};
 			const value = Reflect.get(target, prop, receiver);
 			return typeof value === 'function' ? value.bind(target) : value;

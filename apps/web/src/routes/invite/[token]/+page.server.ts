@@ -33,7 +33,8 @@ export const actions: Actions = {
 			}
 			try {
 				await locals.auth.api.signInEmail({
-					body: { email, password: form.password },
+					// acceptInvitation が鍵の形式を確かめている
+					body: { email, password: String(form.passwordKey) },
 					headers: request.headers
 				});
 			} catch (e) {

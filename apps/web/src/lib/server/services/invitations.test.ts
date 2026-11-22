@@ -15,6 +15,8 @@ import {
 } from './invitations';
 
 const tokenOf = (url: string) => url.split('/invite/')[1];
+/** ブラウザで作る鍵（16 進 64 文字）の代わり */
+const KEY = 'a'.repeat(64);
 
 describe('invitations', () => {
 	let db: DB;
@@ -75,7 +77,7 @@ describe('invitations', () => {
 			projectIds: []
 		});
 		expect(base.sent[0].subject).toContain('Project Manager');
-		await acceptInvitation(base, { token: tokenOf(url), name: 'A2', password: 'password-1234' });
+		await acceptInvitation(base, { token: tokenOf(url), name: 'A2', passwordKey: KEY });
 		const [u] = await db.select().from(user).where(eq(user.email, 'a2@example.com'));
 		expect(
 			await db.select().from(projectMember).where(eq(projectMember.userId, u.id))
@@ -131,7 +133,7 @@ describe('invitations', () => {
 		});
 		expect(base.sent[0].subject).toContain('「Acme」「Beta」');
 		expect((await getInvitationByToken(db, tokenOf(url)))?.projectNames).toEqual(['Acme', 'Beta']);
-		await acceptInvitation(base, { token: tokenOf(url), name: 'M', password: 'password-1234' });
+		await acceptInvitation(base, { token: tokenOf(url), name: 'M', passwordKey: KEY });
 		const [u] = await db.select().from(user).where(eq(user.email, 'm@example.com'));
 		const joined = await db.select().from(projectMember).where(eq(projectMember.userId, u.id));
 		expect(joined.map((m) => m.projectId).sort()).toEqual([projectId, other].sort());
@@ -157,7 +159,7 @@ describe('invitations', () => {
 		});
 		expect(base.sent[1].subject).toContain('「Acme」「Beta」');
 		expect(await listPendingInvitations(ctx)).toHaveLength(1);
-		await acceptInvitation(base, { token: tokenOf(second), name: 'G', password: 'password-1234' });
+		await acceptInvitation(base, { token: tokenOf(second), name: 'G', passwordKey: KEY });
 		const [u] = await db.select().from(user).where(eq(user.email, 'g@example.com'));
 		const joined = await db.select().from(projectMember).where(eq(projectMember.userId, u.id));
 		expect(joined.map((m) => m.projectId).sort()).toEqual([projectId, other].sort());
@@ -193,7 +195,7 @@ describe('invitations', () => {
 			role: 'guest',
 			projectIds: [projectId]
 		});
-		const input = { token: tokenOf(url), name: '顧客', password: 'password-1234' };
+		const input = { token: tokenOf(url), name: '顧客', passwordKey: KEY };
 
 		expect(await acceptInvitation(base, input)).toEqual({ email: 'guest@example.com' });
 
@@ -223,7 +225,7 @@ describe('invitations', () => {
 		}
 
 		const results = await Promise.allSettled(
-			tokens.map((token) => acceptInvitation(base, { token, name: 'S', password: 'password-1234' }))
+			tokens.map((token) => acceptInvitation(base, { token, name: 'S', passwordKey: KEY }))
 		);
 
 		expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
@@ -247,7 +249,7 @@ describe('invitations', () => {
 		await acceptInvitation(base, {
 			token: tokenOf(url),
 			name: '管理者2',
-			password: 'password-1234'
+			passwordKey: KEY
 		});
 		const [u] = await db.select().from(user).where(eq(user.email, 'boss@example.com'));
 		expect(u.role).toBe('admin');
@@ -262,9 +264,21 @@ describe('invitations', () => {
 		await db.update(invitation).set({ expiresAt: new Date(Date.now() - 1000) });
 		expect(await getInvitationByToken(db, tokenOf(url))).toBeNull();
 		await expect(
-			acceptInvitation(base, { token: tokenOf(url), name: 'M', password: 'password-1234' })
+			acceptInvitation(base, { token: tokenOf(url), name: 'M', passwordKey: KEY })
 		).rejects.toMatchObject({ code: 'not_found' });
 		expect(await db.select().from(user)).toHaveLength(1);
+	});
+
+	it('鍵でない値（生のパスワード）では受諾できない', async () => {
+		const { url } = await createInvitation(ctxOf(base, admin), {
+			email: 'm@example.com',
+			role: 'member',
+			projectIds: [projectId]
+		});
+		await expect(
+			acceptInvitation(base, { token: tokenOf(url), name: 'M', password: 'password-1234' })
+		).rejects.toMatchObject({ code: 'validation' });
+		expect(await getInvitationByToken(db, tokenOf(url))).not.toBeNull();
 	});
 
 	it('再発行すると古いリンクは無効になり、メールは送らない', async () => {
@@ -307,7 +321,7 @@ describe('invitations', () => {
 		await reissueInvitation(ctx, pending.id);
 
 		await expect(
-			acceptInvitation(base, { token: tokenOf(oldUrl), name: 'X', password: 'password-1234' })
+			acceptInvitation(base, { token: tokenOf(oldUrl), name: 'X', passwordKey: KEY })
 		).rejects.toMatchObject({ code: 'not_found' });
 		expect(await db.select().from(user)).toHaveLength(1);
 	});
@@ -323,7 +337,7 @@ describe('invitations', () => {
 		await revokeInvitation(ctx, pending.id);
 
 		await expect(
-			acceptInvitation(base, { token: tokenOf(url), name: 'X', password: 'password-1234' })
+			acceptInvitation(base, { token: tokenOf(url), name: 'X', passwordKey: KEY })
 		).rejects.toMatchObject({ code: 'not_found' });
 		expect(await db.select().from(user)).toHaveLength(1);
 	});
@@ -343,7 +357,7 @@ describe('invitations', () => {
 		});
 
 		await expect(
-			acceptInvitation(base, { token: tokenOf(url), name: 'X', password: 'password-1234' })
+			acceptInvitation(base, { token: tokenOf(url), name: 'X', passwordKey: KEY })
 		).rejects.toMatchObject({ code: 'conflict' });
 		const [inv] = await db.select().from(invitation);
 		expect(inv.acceptedAt).toBeNull();

@@ -48,6 +48,8 @@ async function loginBeforeHydration(page: Page, email: string) {
 	await page.goto('/login', { waitUntil: 'domcontentloaded' });
 	await page.getByLabel('メールアドレス').fill(email);
 	await page.getByLabel('パスワード').fill(PW);
+	// 読み込み前に送ると鍵が付かないので、送信ボタンは押せない
+	await expect(page.getByRole('button', { name: 'ログイン' })).toBeDisabled();
 	await page.waitForLoadState('networkidle');
 	await restore();
 	await expect(page.getByLabel('メールアドレス')).toHaveValue(email);
@@ -263,6 +265,13 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await addIn('マイルストーン名').click();
 	await expect(page.getByRole('listitem').filter({ hasText: 'v1.0' })).toBeVisible();
 	await logout(page);
+	// スクリプトなしで送られた（ブラウザで作る鍵が無い）ログインは、生のパスワードが正しくても受け付けない
+	const noKey = await page.request.post('/login', {
+		headers: { Origin: 'http://localhost:4173' },
+		form: { email: 'admin@example.com', password: PW }
+	});
+	expect(noKey.status()).toBe(400);
+	expect(await noKey.text()).toContain('パスワードを受け取れませんでした');
 
 	// 5. ゲストが登録して起票
 	await acceptInvite(page, guestUrl, '顧客 太郎');

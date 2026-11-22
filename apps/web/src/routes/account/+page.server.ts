@@ -6,7 +6,7 @@ import { authorize, can } from '#lib/server/authz.ts';
 import { handleAction } from '#lib/server/errors.ts';
 import { createApiKey, listApiKeys, revokeApiKey } from '#lib/server/services/api-keys.ts';
 import { disableSlack, enableSlack, getSlackStatus } from '#lib/server/services/integrations.ts';
-import { formObject, NameSchema, parse, PasswordSchema } from '#lib/server/validation.ts';
+import { formObject, NameSchema, parse } from '#lib/server/validation.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -48,7 +48,7 @@ export const actions: Actions = {
 		return handleAction(async () => {
 			authorize(appContext(locals).actor, 'account:modify');
 			const data = parse(
-				v.object({ currentPassword: v.string(), newPassword: PasswordSchema }),
+				v.object({ currentPassword: v.string(), newPassword: v.string() }),
 				input
 			);
 			try {

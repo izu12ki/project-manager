@@ -7,6 +7,7 @@ import { account, rateLimit, session, user, verification } from './db/schema';
 import type { AppEnv } from './env';
 import type { Mailer } from './mailer';
 import { resetPasswordMail } from './mailer/templates';
+import { hashPasswordKey, verifyPasswordKey } from './password';
 
 export function createAuth(
 	env: Pick<AppEnv, 'BETTER_AUTH_SECRET' | 'BETTER_AUTH_URL'>,
@@ -28,8 +29,10 @@ export function createAuth(
 		emailAndPassword: {
 			enabled: true,
 			disableSignUp: true,
-			minPasswordLength: 10,
-			maxPasswordLength: 128,
+			// 受け取るのはブラウザで作った鍵（16 進 64 文字）。生のパスワードの長さはブラウザで確かめる
+			minPasswordLength: 64,
+			maxPasswordLength: 64,
+			password: { hash: hashPasswordKey, verify: verifyPasswordKey },
 			revokeSessionsOnPasswordReset: true,
 			resetPasswordTokenExpiresIn: 3600,
 			sendResetPassword: async ({ user: u, url }) => {

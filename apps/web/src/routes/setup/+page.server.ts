@@ -22,7 +22,8 @@ export const actions: Actions = {
 			const { email } = await createFirstAdmin(locals.base, input);
 			try {
 				await locals.auth.api.signInEmail({
-					body: { email, password: input.password },
+					// createFirstAdmin が鍵の形式を確かめている
+					body: { email, password: String(input.passwordKey) },
 					headers: request.headers
 				});
 			} catch (e) {

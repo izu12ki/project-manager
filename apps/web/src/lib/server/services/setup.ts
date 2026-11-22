@@ -4,7 +4,7 @@ import type { BaseContext } from '../context';
 import type { DB } from '../db';
 import { user } from '../db/schema';
 import { AppError } from '../errors';
-import { EmailSchema, NameSchema, parse, PasswordSchema } from '../validation';
+import { EmailSchema, NameSchema, parse, PasswordKeySchema } from '../validation';
 import { credentialUserInserts } from './credentials';
 
 export async function needsSetup(db: DB): Promise<boolean> {
@@ -12,14 +12,18 @@ export async function needsSetup(db: DB): Promise<boolean> {
 	return row.n === 0;
 }
 
-const SetupInput = v.object({ name: NameSchema, email: EmailSchema, password: PasswordSchema });
+const SetupInput = v.object({
+	name: NameSchema,
+	email: EmailSchema,
+	passwordKey: PasswordKeySchema
+});
 
 export async function createFirstAdmin(
 	base: BaseContext,
 	input: unknown
 ): Promise<{ email: string }> {
 	const data = parse(SetupInput, input);
-	const passwordHash = await base.hashPassword(data.password);
+	const passwordHash = await base.hashPassword(data.passwordKey);
 	const done = new AppError('conflict', 'セットアップは既に完了しています');
 	if (!(await needsSetup(base.db))) throw done;
 	const { id, statements } = credentialUserInserts(

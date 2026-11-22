@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { createAuth } from './auth';
+import { account } from './db/schema';
+import { PASSWORD_HASH_PREFIX } from './password';
 import { createTestBase, createTestDb, seedUser } from './test-utils';
 import { createFirstAdmin } from './services/setup';
+
+/** ブラウザで作る鍵（16 進 64 文字）の代わり */
+const KEY = 'a'.repeat(64);
 
 const env = {
 	BETTER_AUTH_SECRET: 'test-secret-'.repeat(4),
@@ -19,24 +24,26 @@ describe('createAuth', () => {
 		await createFirstAdmin(base, {
 			name: '管理者',
 			email: 'admin@example.com',
-			password: 'password-1234'
+			passwordKey: KEY
 		});
 
 		const res = await auth.api.signInEmail({
-			body: { email: 'admin@example.com', password: 'password-1234' }
+			body: { email: 'admin@example.com', password: KEY }
 		});
 		expect(res.user.email).toBe('admin@example.com');
 		expect(res.token).toBeTruthy();
+		const [a] = await db.select().from(account);
+		expect(a.password?.startsWith(PASSWORD_HASH_PREFIX)).toBe(true);
 	});
 
-	it('間違ったパスワードは拒否される', async () => {
+	it('間違った鍵は拒否される', async () => {
 		const db = await createTestDb();
 		const base = createTestBase(db);
 		const auth = createAuth(env, db, { mailer: base.mailer, waitUntil: base.waitUntil });
 		base.hashPassword = async (pw) => (await auth.$context).password.hash(pw);
-		await createFirstAdmin(base, { name: 'A', email: 'a@example.com', password: 'password-1234' });
+		await createFirstAdmin(base, { name: 'A', email: 'a@example.com', passwordKey: KEY });
 		await expect(
-			auth.api.signInEmail({ body: { email: 'a@example.com', password: 'wrong-password' } })
+			auth.api.signInEmail({ body: { email: 'a@example.com', password: 'b'.repeat(64) } })
 		).rejects.toThrow();
 	});
 

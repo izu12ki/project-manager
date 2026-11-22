@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { enhance } from '#lib/forms.ts';
+	import { enhance, withPasswordKeys } from '#lib/forms.ts';
 	import FormAlert from '#lib/components/FormAlert.svelte';
 	import PasswordInput from '#lib/components/PasswordInput.svelte';
+	import PasswordSubmit from '#lib/components/PasswordSubmit.svelte';
 	import type { PageProps } from './$types';
 
 	let { form }: PageProps = $props();
@@ -12,7 +13,11 @@
 		<h1>ログイン</h1>
 		<p>メールアドレスとパスワードを入力してください</p>
 	</div>
-	<form method="POST" use:enhance class="auth-form">
+	<form
+		method="POST"
+		use:enhance={withPasswordKeys({ fields: [{ name: 'password' }] })}
+		class="auth-form"
+	>
 		{#if form?.message}<FormAlert title="ログインできませんでした" message={form.message} />{/if}
 		<div class="field">
 			<label class="label" for="email">メールアドレス</label>
@@ -35,6 +40,6 @@
 			</div>
 			<PasswordInput id="password" name="password" autocomplete="current-password" required />
 		</div>
-		<button type="submit" class="btn btn-primary">ログイン</button>
+		<PasswordSubmit>ログイン</PasswordSubmit>
 	</form>
 </div>

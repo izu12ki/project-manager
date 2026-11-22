@@ -76,3 +76,16 @@ export function createAuth(
 }
 
 export type Auth = ReturnType<typeof createAuth>;
+
+/**
+ * パスワード再設定のトークンの持ち主のメールアドレス。無効・期限切れ・使用済みなら null。
+ * 再設定の画面では、新しいパスワードの鍵を作るのにメールアドレス（ソルト）が要る。
+ * better-auth の保存形式に合わせるため、表を直接読まずに internalAdapter を使う
+ */
+export async function resetPasswordEmail(auth: Auth, token: string): Promise<string | null> {
+	const ctx = await auth.$context;
+	const v = await ctx.internalAdapter.findVerificationValue(`reset-password:${token}`);
+	if (!v || v.expiresAt < new Date()) return null;
+	const u = await ctx.internalAdapter.findUserById(v.value);
+	return u?.email ?? null;
+}

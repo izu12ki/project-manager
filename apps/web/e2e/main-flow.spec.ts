@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import {
 	expect,
 	test,
@@ -24,12 +25,30 @@ async function logout(page: Page) {
 	await expect(page).toHaveURL(/\/login/);
 }
 
-async function login(page: Page, email: string) {
+async function login(page: Page, email: string, password = PW) {
 	await page.goto('/login');
 	await page.getByLabel('メールアドレス').fill(email);
-	await page.getByLabel('パスワード').fill(PW);
+	await page.getByLabel('パスワード').fill(password);
 	await page.getByRole('button', { name: 'ログイン' }).click();
 	await expect(page).toHaveURL(HOME);
+}
+
+/**
+ * いちばん新しいパスワード再設定のトークン。E2E のメールは送らずログに出すだけなので、
+ * E2E のサーバーが使うローカル D1（scripts/e2e-server.sh の --persist-to）から読む
+ */
+function latestResetToken(): string {
+	const out = execFileSync(
+		'pnpm',
+		[
+			...['exec', 'wrangler', 'd1', 'execute', 'DB', '--local'],
+			...['--persist-to', '.wrangler/e2e-state', '--json', '--command'],
+			"SELECT identifier FROM verification WHERE identifier LIKE 'reset-password:%' ORDER BY created_at DESC LIMIT 1"
+		],
+		{ encoding: 'utf8', env: { ...process.env, WRANGLER_SEND_METRICS: 'false' } }
+	);
+	const identifier: string = JSON.parse(out)[0].results[0].identifier;
+	return identifier.slice('reset-password:'.length);
 }
 
 /** 遠い回線を真似て、一致した通信を ms だけ遅らせる。戻り値で元に戻す */
@@ -1362,6 +1381,19 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.goto('/account');
 	await expect(page.getByRole('heading', { name: 'パスワード変更' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'API キー' })).toHaveCount(0);
+
+	// 15. パスワード再設定のメールのリンクから、新しいパスワードにできる
+	await logout(page);
+	await page.goto('/forgot-password');
+	await page.getByLabel('メールアドレス').fill('member@example.com');
+	await page.getByRole('button', { name: '再設定メールを送信' }).click();
+	await expect(page.getByText('再設定用のリンクを送信しました')).toBeVisible();
+	await page.goto(`/reset-password?token=${latestResetToken()}`);
+	await expect(page.getByLabel('メールアドレス')).toHaveValue('member@example.com');
+	await page.getByLabel('パスワード', { exact: true }).fill('reset-password-1');
+	await page.getByRole('button', { name: 'パスワードを再設定' }).click();
+	await expect(page).toHaveURL(/\/login$/);
+	await login(page, 'member@example.com', 'reset-password-1');
 
 	expect(problems).toEqual([]);
 });

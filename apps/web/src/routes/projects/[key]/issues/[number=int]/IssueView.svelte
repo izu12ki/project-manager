@@ -17,7 +17,7 @@
 		UsersRound,
 		X
 	} from '@lucide/svelte';
-	import { untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { formatBytes } from '#lib/attachment-rules.ts';
 	import CommentReactions from '#lib/components/CommentReactions.svelte';
@@ -95,6 +95,28 @@
 			...comments.map((c) => ({ kind: 'comment' as const, id: c.id, at: c.createdAt, c })),
 			...changes.map((h) => ({ kind: 'change' as const, id: h.id, at: h.createdAt, h }))
 		].sort((a, b) => a.at.getTime() - b.at.getTime() || a.id.localeCompare(b.id))
+	);
+	// 「コメントのみ表示」にすると編集履歴を隠す。選んだ表示はブラウザごとに覚える
+	const COMMENTS_ONLY_KEY = 'issue-comments-only';
+	let commentsOnly = $state(false);
+	onMount(() => {
+		try {
+			commentsOnly = localStorage.getItem(COMMENTS_ONLY_KEY) === '1';
+		} catch {
+			// localStorage が使えない環境ではすべて表示のまま
+		}
+	});
+	function setCommentsOnly(value: boolean) {
+		commentsOnly = value;
+		try {
+			if (value) localStorage.setItem(COMMENTS_ONLY_KEY, '1');
+			else localStorage.removeItem(COMMENTS_ONLY_KEY);
+		} catch {
+			// 覚えられなくても切り替えはできる
+		}
+	}
+	const shownActivity = $derived(
+		commentsOnly ? activity.filter((e) => e.kind === 'comment') : activity
 	);
 	const mentionCandidates = $derived(
 		detail.assignees.filter((u) => !u.disabled).map(({ id, name }) => ({ id, name }))
@@ -499,7 +521,7 @@
 		{#if !issue.parent && (detail.children.length > 0 || perms.create)}
 			<section class="card children" aria-label="子課題">
 				<div class="flex items-center gap-2">
-					<h2 class="card-title">
+					<h2 class="card-title flex items-center gap-1.5">
 						<ListTree class="size-4" /> 子課題
 						{#if detail.children.length > 0}
 							<span class="text-[0.8125rem] font-normal text-muted-foreground">
@@ -517,6 +539,7 @@
 						</a>
 					{/if}
 				</div>
+				<!-- 子課題がないときは見出しと追加ボタンだけにする -->
 				{#if detail.children.length > 0}
 					<ul>
 						{#each detail.children as c (c.id)}
@@ -538,15 +561,13 @@
 							</li>
 						{/each}
 					</ul>
-				{:else}
-					<p class="m-0 text-[0.8125rem] text-muted-foreground">子課題はありません</p>
 				{/if}
 			</section>
 		{/if}
 
 		{#if attachments.length > 0}
 			<section class="card attachments" aria-label="添付ファイル">
-				<h2 class="card-title">
+				<h2 class="card-title flex items-center gap-1.5">
 					<Paperclip class="size-4" /> 添付ファイル数: {attachments.length}
 				</h2>
 				<ul>
@@ -581,179 +602,217 @@
 			</section>
 		{/if}
 
-		<section class="grid grid-cols-1 gap-4" aria-label="コメントと編集履歴">
-			{#each activity as e (e.id)}
-				{#if e.kind === 'change'}
-					{@const h = e.h}
-					<article class="change" id={`change-${h.id}`}>
-						<span class="avatar" style:--c={colorFor(h.actorName)}>{h.actorName[0]}</span>
-						<div class="grid min-w-0 grid-cols-1 gap-1">
-							<div class="flex items-center gap-2">
-								<span class="font-medium">{h.actorName}</span>
-								<span class="text-xs text-muted-foreground">{formatDateTime(h.createdAt)}</span>
-							</div>
-							<ul class="change-list">
-								{#each h.changes as ch (ch.field)}
-									<li class:full={ch.field === 'description'}>
-										{#if ch.field === 'description' && ch.from !== null && ch.to !== null}
-											{@const before = ch.from}
-											{@const after = ch.to}
-											<details
-												class="desc-diff"
-												ontoggle={(e) =>
-													e.currentTarget.open ? openDiffs.add(h.id) : openDiffs.delete(h.id)}
-											>
-												<summary>本文を変更しました（差分を表示）</summary>
-												{#if openDiffs.has(h.id)}
-													{#await import('#lib/components/DescriptionDiff.svelte') then { default: DescriptionDiff }}
-														<DescriptionDiff {before} {after} />
-													{/await}
-												{/if}
-											</details>
-										{:else if ch.field === 'description'}
-											<!-- 差分の保存を始める前の履歴 -->
-											<span>本文を変更しました</span>
-										{:else}
-											<span class="change-field">{ISSUE_CHANGE_FIELD_LABEL[ch.field]}</span>
-											<span class="change-value">{ch.from ?? '未設定'}</span>
-											<span aria-label="から">→</span>
-											<span class="change-value">{ch.to ?? '未設定'}</span>
-										{/if}
-									</li>
-								{/each}
-							</ul>
+		{#if activity.length > 0 || pendingComments.length > 0 || perms.comment}
+			<section class="activity" aria-labelledby={`activity-title-${variant}`}>
+				<div class="activity-head">
+					<h2 class="card-title" id={`activity-title-${variant}`}>
+						コメント <span class="activity-count">({comments.length})</span>
+					</h2>
+					{#if changes.length > 0}
+						<div class="view-toggle" role="group" aria-label="コメント欄の表示">
+							<span class="view-toggle-label" aria-hidden="true">表示:</span>
+							<button
+								type="button"
+								aria-pressed={!commentsOnly}
+								onclick={() => setCommentsOnly(false)}
+							>
+								すべて表示
+							</button>
+							<button
+								type="button"
+								aria-pressed={commentsOnly}
+								onclick={() => setCommentsOnly(true)}
+							>
+								コメントのみ表示
+							</button>
 						</div>
-					</article>
-				{:else}
-					{@const c = e.c}
-					<article class="comment" id={`comment-${c.id}`}>
-						<span class="avatar" style:--c={colorFor(c.authorName)}>{c.authorName[0]}</span>
-						<div class="grid min-w-0 grid-cols-1 gap-1">
-							<div class="flex items-center gap-2">
-								<span class="font-medium">{c.authorName}</span>
-								<span class="text-xs text-muted-foreground">{formatDateTime(c.createdAt)}</span>
-								<div class="ml-auto flex items-center">
-									{#if perms.comment}
-										<ReactionPicker
-											align="end"
-											selected={c.reactions
-												.filter((g) => g.users.some((u) => u.id === me?.id))
-												.map((g) => g.emoji)}
-											onpick={(emoji) => react(c.id, emoji)}
-										/>
-									{/if}
-									{#if c.canModify}
-										<button
-											type="button"
-											class="icon-btn"
-											aria-label="コメントを編集"
-											title="コメントを編集"
-											aria-expanded={editingComment === c.id}
-											onclick={() => (editingComment = editingComment === c.id ? null : c.id)}
-										>
-											<Pencil />
-										</button>
-										<ConfirmAction
-											onconfirm={() => deleteComment(c.id)}
-											title="コメントの削除"
-											description="このコメントを削除してよろしいですか？&#10;この操作は元に戻せません。"
-											confirmLabel="コメントを削除する"
-											triggerClass="icon-btn danger-hover"
-											triggerLabel="コメントを削除"
-										>
-											{#snippet trigger()}<Trash2 />{/snippet}
-										</ConfirmAction>
-									{/if}
-								</div>
-							</div>
-							{#if editingComment === c.id}
-								{@const edit = updateComment.for(c.id)}
-								<form
-									class="grid gap-2"
-									{...edit.enhance(async ({ submit }) => {
-										try {
-											if (await submit()) editingComment = null;
-										} catch {
-											failed();
-										}
-									})}
-								>
-									{#each edit.fields.allIssues() ?? [] as i (i.message)}<FormAlert
-											message={i.message}
-										/>{/each}
-									<input {...edit.fields.key.as('hidden', ref.key)} />
-									<input {...edit.fields.number.as('hidden', ref.number)} />
-									<input {...edit.fields.commentId.as('hidden', c.id)} />
-									<MarkdownEditor
-										{...edit.fields.body.as('text', c.body)}
-										rows={4}
-										required
-										aria-label="コメントを編集"
-										label="コメントを編集"
-										projectKey={ref.key}
-										{mentionCandidates}
-									/>
-									<div class="flex justify-end gap-2">
-										<button
-											type="button"
-											class="btn btn-outline btn-sm"
-											onclick={() => (editingComment = null)}
-										>
-											キャンセル
-										</button>
-										<button type="submit" class="btn btn-primary btn-sm">更新</button>
+					{/if}
+				</div>
+				<div class="card activity-card">
+					{#each shownActivity as e (e.id)}
+						{#if e.kind === 'change'}
+							{@const h = e.h}
+							<article class="entry change" id={`change-${h.id}`}>
+								<span class="avatar" style:--c={colorFor(h.actorName)}>{h.actorName[0]}</span>
+								<div class="entry-main">
+									<div class="entry-head">
+										<div class="entry-meta">
+											<span class="entry-author">{h.actorName}</span>
+											<span class="entry-time">{formatDateTime(h.createdAt)}</span>
+										</div>
 									</div>
-								</form>
-							{:else}
-								<!-- eslint-disable-next-line svelte/no-at-html-tags -- markdown-it(html:false) で生成した HTML -->
-								<div class="markdown">{@html c.html}</div>
-							{/if}
-							<CommentReactions
-								id={`comment-${c.id}`}
-								reactions={c.reactions}
-								meId={me?.id}
-								canReact={perms.comment}
-								ontoggle={(emoji) => react(c.id, emoji)}
+									<ul class="change-list">
+										{#each h.changes as ch (ch.field)}
+											<li class:full={ch.field === 'description'}>
+												{#if ch.field === 'description' && ch.from !== null && ch.to !== null}
+													{@const before = ch.from}
+													{@const after = ch.to}
+													<details
+														class="desc-diff"
+														ontoggle={(e) =>
+															e.currentTarget.open ? openDiffs.add(h.id) : openDiffs.delete(h.id)}
+													>
+														<summary>本文を変更しました（差分を表示）</summary>
+														{#if openDiffs.has(h.id)}
+															{#await import('#lib/components/DescriptionDiff.svelte') then { default: DescriptionDiff }}
+																<DescriptionDiff {before} {after} />
+															{/await}
+														{/if}
+													</details>
+												{:else if ch.field === 'description'}
+													<!-- 差分の保存を始める前の履歴 -->
+													<span>本文を変更しました</span>
+												{:else}
+													<span class="change-field">{ISSUE_CHANGE_FIELD_LABEL[ch.field]}</span>
+													<span class="change-value">{ch.from ?? '未設定'}</span>
+													<span class="change-arrow" aria-label="から">→</span>
+													<span class="change-value">{ch.to ?? '未設定'}</span>
+												{/if}
+											</li>
+										{/each}
+									</ul>
+								</div>
+							</article>
+						{:else}
+							{@const c = e.c}
+							<article class="entry comment" id={`comment-${c.id}`}>
+								<span class="avatar" style:--c={colorFor(c.authorName)}>{c.authorName[0]}</span>
+								<div class="entry-main">
+									<div class="entry-head">
+										<div class="entry-meta">
+											<span class="entry-author">{c.authorName}</span>
+											<span class="entry-time">{formatDateTime(c.createdAt)}</span>
+										</div>
+										<div class="entry-actions">
+											{#if perms.comment}
+												<ReactionPicker
+													align="end"
+													selected={c.reactions
+														.filter((g) => g.users.some((u) => u.id === me?.id))
+														.map((g) => g.emoji)}
+													onpick={(emoji) => react(c.id, emoji)}
+												/>
+											{/if}
+											{#if c.canModify}
+												<button
+													type="button"
+													class="icon-btn"
+													aria-label="コメントを編集"
+													title="コメントを編集"
+													aria-expanded={editingComment === c.id}
+													onclick={() => (editingComment = editingComment === c.id ? null : c.id)}
+												>
+													<Pencil />
+												</button>
+												<ConfirmAction
+													onconfirm={() => deleteComment(c.id)}
+													title="コメントの削除"
+													description="このコメントを削除してよろしいですか？&#10;この操作は元に戻せません。"
+													confirmLabel="コメントを削除する"
+													triggerClass="icon-btn danger-hover"
+													triggerLabel="コメントを削除"
+												>
+													{#snippet trigger()}<Trash2 />{/snippet}
+												</ConfirmAction>
+											{/if}
+										</div>
+									</div>
+									{#if editingComment === c.id}
+										{@const edit = updateComment.for(c.id)}
+										<form
+											class="grid gap-2"
+											{...edit.enhance(async ({ submit }) => {
+												try {
+													if (await submit()) editingComment = null;
+												} catch {
+													failed();
+												}
+											})}
+										>
+											{#each edit.fields.allIssues() ?? [] as i (i.message)}<FormAlert
+													message={i.message}
+												/>{/each}
+											<input {...edit.fields.key.as('hidden', ref.key)} />
+											<input {...edit.fields.number.as('hidden', ref.number)} />
+											<input {...edit.fields.commentId.as('hidden', c.id)} />
+											<MarkdownEditor
+												{...edit.fields.body.as('text', c.body)}
+												rows={4}
+												required
+												aria-label="コメントを編集"
+												label="コメントを編集"
+												projectKey={ref.key}
+												{mentionCandidates}
+											/>
+											<div class="flex justify-end gap-2">
+												<button
+													type="button"
+													class="btn btn-outline btn-sm"
+													onclick={() => (editingComment = null)}
+												>
+													キャンセル
+												</button>
+												<button type="submit" class="btn btn-primary btn-sm">更新</button>
+											</div>
+										</form>
+									{:else}
+										<!-- eslint-disable-next-line svelte/no-at-html-tags -- markdown-it(html:false) で生成した HTML -->
+										<div class="markdown">{@html c.html}</div>
+									{/if}
+									<CommentReactions
+										id={`comment-${c.id}`}
+										reactions={c.reactions}
+										meId={me?.id}
+										canReact={perms.comment}
+										ontoggle={(emoji) => react(c.id, emoji)}
+									/>
+								</div>
+							</article>
+						{/if}
+					{/each}
+					{#each pendingComments as c (c.id)}
+						<article class="entry comment pending" aria-busy="true">
+							<span class="avatar" style:--c={colorFor(me?.name ?? '')}>{me?.name[0]}</span>
+							<div class="entry-main">
+								<div class="entry-head">
+									<div class="entry-meta">
+										<span class="entry-author">{me?.name}</span>
+										<span class="entry-time">送信中…</span>
+									</div>
+								</div>
+								<p class="pending-body">{c.body}</p>
+							</div>
+						</article>
+					{/each}
+					{#if shownActivity.length === 0 && pendingComments.length === 0 && !perms.comment}
+						<!-- 「コメントのみ表示」で編集履歴だけの課題を見たとき -->
+						<p class="activity-empty">コメントはありません</p>
+					{/if}
+					{#if perms.comment}
+						<form {...commentForm} class="new-comment">
+							<input {...post.fields.key.as('hidden', ref.key)} />
+							<input {...post.fields.number.as('hidden', ref.number)} />
+							<label class="label" for="new-comment">コメントを追加</label>
+							{#each post.fields.allIssues() ?? [] as i (i.message)}<FormAlert
+									message={i.message}
+								/>{/each}
+							<MarkdownEditor
+								id="new-comment"
+								{...post.fields.body.as('text')}
+								rows={3}
+								required
+								label="コメントを追加"
+								projectKey={ref.key}
+								{mentionCandidates}
 							/>
-						</div>
-					</article>
-				{/if}
-			{/each}
-			{#each pendingComments as c (c.id)}
-				<article class="comment pending" aria-busy="true">
-					<span class="avatar" style:--c={colorFor(me?.name ?? '')}>{me?.name[0]}</span>
-					<div class="grid min-w-0 grid-cols-1 gap-1">
-						<div class="flex items-center gap-2">
-							<span class="font-medium">{me?.name}</span>
-							<span class="text-xs text-muted-foreground">送信中…</span>
-						</div>
-						<p class="pending-body">{c.body}</p>
-					</div>
-				</article>
-			{/each}
-			{#if perms.comment}
-				<form {...commentForm} class="new-comment">
-					<input {...post.fields.key.as('hidden', ref.key)} />
-					<input {...post.fields.number.as('hidden', ref.number)} />
-					<label class="label" for="new-comment">コメントを追加</label>
-					{#each post.fields.allIssues() ?? [] as i (i.message)}<FormAlert
-							message={i.message}
-						/>{/each}
-					<MarkdownEditor
-						id="new-comment"
-						{...post.fields.body.as('text')}
-						rows={3}
-						required
-						label="コメントを追加"
-						projectKey={ref.key}
-						{mentionCandidates}
-					/>
-					<div class="flex items-center justify-end gap-2">
-						<button type="submit" class="btn btn-primary">コメントする</button>
-					</div>
-				</form>
-			{/if}
-		</section>
+							<div class="flex items-center justify-end gap-2">
+								<button type="submit" class="btn btn-primary">コメントする</button>
+							</div>
+						</form>
+					{/if}
+				</div>
+			</section>
+		{/if}
 	</div>
 
 	{#if variant === 'page'}
@@ -815,37 +874,144 @@
 			column-gap: 20px;
 		}
 	}
-	.comment,
-	.change {
-		scroll-margin-top: 80px;
+	/* コメント欄: 見出しの下に 1 枚のカードを置き、コメントと編集履歴を区切り線で並べる */
+	.activity {
 		display: grid;
-		grid-template-columns: 32px minmax(0, 1fr);
 		gap: 12px;
 	}
-	.comment:target {
-		outline: 2px solid var(--ring);
-		outline-offset: 4px;
-		border-radius: var(--radius-sm);
+	.activity-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px 16px;
 	}
-	.comment :global(.danger-hover:hover) {
+	.activity-count {
+		font-size: 0.875rem;
+		font-weight: 400;
+		color: var(--muted-foreground);
+	}
+	.view-toggle {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		margin-left: auto;
+		font-size: 0.8125rem;
+	}
+	.view-toggle-label {
+		margin-right: 4px;
+		color: var(--muted-foreground);
+	}
+	.view-toggle button {
+		height: 28px;
+		padding: 0 12px;
+		border: none;
+		border-radius: 999px;
+		background: transparent;
+		color: var(--muted-foreground);
+		font: inherit;
+		cursor: pointer;
+	}
+	.view-toggle button:hover {
+		background: var(--accent);
+		color: var(--foreground);
+	}
+	.view-toggle button[aria-pressed='true'] {
+		background: var(--primary);
+		color: var(--primary-foreground);
+		font-weight: 700;
+	}
+	.activity-card {
+		--inner-radius: calc(var(--radius-md) - 1px);
+		gap: 0;
+		padding: 0;
+	}
+	.activity-card > * + * {
+		border-top: 1px solid var(--border);
+	}
+	/* 先頭と末尾の行の背景（ハイライトやフォーム）がカードの角からはみ出ないようにする */
+	.activity-card > :first-child {
+		border-radius: var(--inner-radius) var(--inner-radius) 0 0;
+	}
+	.activity-card > :last-child {
+		border-bottom-right-radius: var(--inner-radius);
+		border-bottom-left-radius: var(--inner-radius);
+	}
+	.entry {
+		scroll-margin-top: 80px;
+		display: grid;
+		grid-template-columns: 36px minmax(0, 1fr);
+		gap: 14px;
+		padding: 18px 24px;
+	}
+	.entry .avatar {
+		--size: 36px;
+	}
+	.entry:target {
+		background: color-mix(in oklch, var(--primary-soft) 60%, transparent);
+	}
+	.entry-main {
+		display: grid;
+		gap: 10px;
+		min-width: 0;
+	}
+	.entry-head {
+		display: flex;
+		align-items: flex-start;
+		gap: 8px;
+		min-height: 36px;
+	}
+	.entry-meta {
+		display: grid;
+		gap: 2px;
+		min-width: 0;
+		line-height: 1.35;
+	}
+	.entry-author {
+		font-size: 0.875rem;
+		font-weight: 700;
+		overflow-wrap: anywhere;
+	}
+	.entry-time {
+		font-size: 0.75rem;
+		color: var(--muted-foreground);
+		font-variant-numeric: tabular-nums;
+	}
+	.entry-actions {
+		display: flex;
+		align-items: center;
+		margin-left: auto;
+	}
+	.entry :global(.danger-hover:hover) {
 		color: var(--destructive);
 	}
 	.change-list {
 		display: grid;
-		gap: 2px;
+		gap: 4px;
 		margin: 0;
-		padding: 8px 12px;
-		border-radius: var(--radius-md);
-		background: var(--muted);
+		padding: 0;
 		list-style: none;
 		font-size: 0.8125rem;
 	}
 	.change-list li {
+		position: relative;
 		display: flex;
 		flex-wrap: wrap;
 		align-items: baseline;
-		gap: 4px 6px;
+		gap: 2px 6px;
 		min-width: 0;
+		padding-left: 16px;
+	}
+	/* Backlog と同じく、変更した項目は白抜きの丸で並べる */
+	.change-list li::before {
+		content: '';
+		position: absolute;
+		top: calc(0.5lh - 4px);
+		left: 1px;
+		width: 8px;
+		height: 8px;
+		border: 1.5px solid var(--muted-foreground);
+		border-radius: 50%;
+		opacity: 0.6;
 	}
 	.change-list li.full {
 		display: block;
@@ -853,18 +1019,21 @@
 	.change-field {
 		color: var(--muted-foreground);
 	}
+	.change-field::after {
+		content: ':';
+	}
+	.change-arrow {
+		color: var(--muted-foreground);
+	}
+	.change-value {
+		overflow-wrap: anywhere;
+	}
 	.desc-diff summary {
 		width: fit-content;
 		cursor: pointer;
 	}
 	.desc-diff[open] summary {
 		margin-bottom: 6px;
-	}
-	.change-field::after {
-		content: ':';
-	}
-	.change-value {
-		overflow-wrap: anywhere;
 	}
 	.comment.pending {
 		opacity: 0.6;
@@ -874,11 +1043,35 @@
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 	}
+	.activity-empty {
+		margin: 0;
+		padding: 18px 24px;
+		font-size: 0.8125rem;
+		color: var(--muted-foreground);
+	}
 	.new-comment {
 		display: grid;
 		gap: 8px;
-		padding-top: 20px;
-		border-top: 1px solid var(--border);
+		padding: 18px 24px 20px;
+		background: var(--muted);
+	}
+	/* 狭い画面とシートでは左右の余白を詰める */
+	@media (max-width: 559px) {
+		.entry,
+		.activity-empty,
+		.new-comment {
+			padding-right: 16px;
+			padding-left: 16px;
+		}
+		.entry {
+			gap: 12px;
+		}
+	}
+	.sheet .entry,
+	.sheet .activity-empty,
+	.sheet .new-comment {
+		padding-right: 16px;
+		padding-left: 16px;
 	}
 	.parent-link {
 		display: flex;
@@ -892,6 +1085,11 @@
 	}
 	.parent-link:hover {
 		color: var(--foreground);
+	}
+	/* 子課題がないときは見出しと追加ボタンの 1 行だけになるので、上下の余白を詰める */
+	.children {
+		gap: 12px;
+		padding: 14px 24px;
 	}
 	.children ul {
 		display: grid;

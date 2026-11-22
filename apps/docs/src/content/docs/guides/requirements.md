@@ -7,8 +7,7 @@ description: デプロイの前に用意するアカウントと、手元の PC 
 
 | サービス | 必須 | 用途 | 費用 |
 |---|---|---|---|
-| [Cloudflare](https://dash.cloudflare.com/sign-up) | **必須** | アプリの実行環境（Workers） | **Workers Paid プランが必要**（下記「Workers のプラン」参照） |
-| [Turso](https://turso.tech) | **必須** | データベース（libSQL） | 無料プランあり |
+| [Cloudflare](https://dash.cloudflare.com/sign-up) | **必須** | アプリの実行環境（Workers）とデータベース（D1） | **Workers Paid プランが必要**（下記「Workers のプラン」参照） |
 | Cloudflare R2 | **必須** | 添付ファイルの保存 | 10GB まで無料。初回はダッシュボードの「R2」で利用を開始する |
 | Cloudflare Email Sending（推奨）、[SMTP2GO](https://www.smtp2go.com)、[Resend](https://resend.com) のどれか | 任意 | 招待メール・パスワードリセットメールの送信 | Email Sending は Workers Paid プランに月 3,000 通まで含まれる（送信元ドメインの DNS を Cloudflare で管理している場合）。SMTP2GO・Resend は無料枠あり（[メール送信の設定](/guides/mail/)） |
 
@@ -26,5 +25,5 @@ Cloudflare アカウントの作成が必要です。このツールは Cloudfla
 
 ## 手元の PC
 
-- [mise](https://mise.jdx.dev)（Node.js・pnpm・Turso CLI・sqld（ローカル DB サーバー）をそろえてインストールするため）
+- [mise](https://mise.jdx.dev)（Node.js と pnpm をそろえてインストールするため）
 - Git

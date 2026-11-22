@@ -19,28 +19,20 @@ import { Steps } from '@astrojs/starlight/components';
    pnpm install
    ```
 
-2. Turso にデータベースを作る
-
-   ```bash
-   turso auth signup        # 初回のみ。既にアカウントがあれば turso auth login
-   turso db create project-manager
-   turso db show project-manager --url      # libsql://... を控える
-   turso db tokens create project-manager   # トークンを控える
-   ```
-
-3. データベースにテーブルを作る
+2. Cloudflare にログインして、データベース（D1）を作る
 
    ```bash
    cd apps/web
-   TURSO_DATABASE_URL="libsql://..." TURSO_AUTH_TOKEN="..." pnpm db:migrate
+   pnpm exec wrangler login
+   pnpm exec wrangler d1 create project-manager --location apac   # --location は利用者に近い地域（日本なら apac）
+   pnpm db:migrate:remote                                         # テーブルを作る
    ```
 
-4. Cloudflare にログインしてシークレットを登録する
+   D1 は `apps/web/wrangler.jsonc` の `database_name`（`project-manager`）で結び付くので、表示される `database_id` を設定ファイルに書く必要はありません。設定ファイルへの追加を聞かれたら「いいえ」を選びます。別の名前で作る場合は、`database_name` も同じ名前に変えてください。
+
+3. シークレットを登録する
 
    ```bash
-   pnpm exec wrangler login
-   pnpm exec wrangler secret put TURSO_DATABASE_URL
-   pnpm exec wrangler secret put TURSO_AUTH_TOKEN
    pnpm exec wrangler secret put BETTER_AUTH_SECRET   # `openssl rand -base64 32` の出力
    pnpm exec wrangler secret put BETTER_AUTH_URL      # 公開 URL。例: https://project-manager.<サブドメイン>.workers.dev
    ```
@@ -54,10 +46,10 @@ import { Steps } from '@astrojs/starlight/components';
    メールを送る場合は `MAIL_PROVIDER` / `MAIL_FROM`（SMTP2GO・Resend では `MAIL_API_KEY` も）を登録します（[メール送信の設定](/guides/mail/)）。登録しなければ招待リンクは画面に表示されるので、手で相手に渡せます。
 
    :::note[初回のデプロイ前]
-   初回はまだ Worker が無いので、`secret put` が Worker の作成を確認してきたら「はい」を選びます。`BETTER_AUTH_URL` が分からない場合は、先に手順 5 でデプロイして URL を確認し、登録後にもう一度デプロイします。
+   初回はまだ Worker が無いので、`secret put` が Worker の作成を確認してきたら「はい」を選びます。`BETTER_AUTH_URL` が分からない場合は、先に手順 4 でデプロイして URL を確認し、登録後にもう一度デプロイします。
    :::
 
-5. デプロイする
+4. デプロイする
 
    ```bash
    pnpm deploy

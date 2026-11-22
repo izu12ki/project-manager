@@ -16,15 +16,14 @@
 
 ## 開発環境
 
-[mise](https://mise.jdx.dev/) で Node.js・pnpm・Turso CLI をそろえます。
+[mise](https://mise.jdx.dev/) で Node.js と pnpm をそろえます。DB はローカルの D1（wrangler が `.wrangler/state` に作る SQLite）なので、別のサーバーを起動する必要はありません。
 
 ```bash
 mise install
 pnpm install
 cd apps/web
 cp .dev.vars.example .dev.vars   # BETTER_AUTH_SECRET を書き換える
-pnpm db:local                    # 別ターミナルで起動したまま
-pnpm db:migrate
+pnpm db:migrate:local            # ローカルの D1 にテーブルを作る
 pnpm dev                         # http://localhost:5173
 ```
 
@@ -45,10 +44,23 @@ pnpm dev                         # http://localhost:5173
 ```bash
 cd apps/web
 pnpm db:generate --name <変更内容>
-pnpm db:migrate
+pnpm db:migrate:local
 ```
 
+`pnpm db:migrate:local`（本番は `pnpm db:migrate:remote`）は、`drizzle/` のマイグレーションを `wrangler d1 migrations apply` が読める形に変換して（`pnpm db:sync`、出力先は gitignore 済みの `.d1-migrations/`）から適用します。
+
 セルフホストしている利用者は、更新のたびにマイグレーションを自分で実行します。既存のデータが壊れないか、新しい列の既定値は適切かを確かめてください。
+
+### D1 の制約
+
+DB は Cloudflare D1 です。SQL は SQLite と同じですが、次の制約があります。単体テストの DB（`createTestDb`）は 1〜3 を再現していて、違反するとテストが失敗します。
+
+1. `db.transaction()` は使えません。まとめて成功・失敗させたい書き込みは `db.batch()` にします（batch は 1 つのトランザクションとして実行されます）。
+2. 1 つのクエリのバインド変数は 100 個までです。`IN` には `drizzle-orm` の `inArray` ではなく `apps/web/src/lib/server/db/limits.ts` の `inList` を使い（ESLint で強制しています）、複数行の insert は `insertChunks` で分けます。
+3. `db.batch()` に入れた select の結果は、列名をキーにした行で返ります。そのため、同じ名前の列（join した表の `id` や `name` など）があると値がずれます。batch の中で join するときは、列に別名（`` sql`${列}`.as('別名') ``）を付けます。
+4. LIKE のパターンは 50 バイトまでです。
+5. Workers の無料プランでは、1 回のリクエストで 50 クエリまでです（`db.batch()` は 1 回と数えます）。
+6. 外部キー制約を切れません。テーブルを作り直すマイグレーション（drizzle が `PRAGMA foreign_keys=OFF` を出すもの）では、`DROP TABLE` の時点で `ON DELETE CASCADE` の子の行が消えます。ほかのテーブルから参照されているテーブルは作り直さないでください。`pnpm db:sync` は `PRAGMA foreign_keys=OFF` を `PRAGMA defer_foreign_keys = on` に置き換えますが、これで防げるのは制約違反のエラーだけです。
 
 ### ドキュメント
 

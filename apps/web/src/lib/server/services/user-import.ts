@@ -1,4 +1,5 @@
-import { and, asc, gte, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, gte, isNull, sql } from 'drizzle-orm';
+import { inList, insertChunks } from '../db/limits';
 import * as v from 'valibot';
 import {
 	inviteAllowed,
@@ -92,7 +93,7 @@ async function buildPlan(ctx: AppContext, rows: BacklogUserRow[]): Promise<UserI
 						archivedAt: project.archivedAt
 					})
 					.from(project)
-					.where(inArray(project.key, keys))
+					.where(inList(project.key, keys))
 					.orderBy(asc(project.name));
 	const projectByKey = new Map(projects.map((p) => [p.key, p]));
 
@@ -102,7 +103,7 @@ async function buildPlan(ctx: AppContext, rows: BacklogUserRow[]): Promise<UserI
 			: await ctx.db
 					.select({ id: user.id, email: user.email, role: user.role, disabledAt: user.disabledAt })
 					.from(user)
-					.where(inArray(sql`lower(${user.email})`, emails));
+					.where(inList(sql`lower(${user.email})`, emails));
 	const userByEmail = new Map(users.map((u) => [u.email.toLowerCase(), u]));
 
 	const members =
@@ -112,7 +113,7 @@ async function buildPlan(ctx: AppContext, rows: BacklogUserRow[]): Promise<UserI
 					.select({ userId: projectMember.userId, projectId: projectMember.projectId })
 					.from(projectMember)
 					.where(
-						inArray(
+						inList(
 							projectMember.userId,
 							users.map((u) => u.id)
 						)
@@ -130,7 +131,7 @@ async function buildPlan(ctx: AppContext, rows: BacklogUserRow[]): Promise<UserI
 					.from(invitation)
 					.where(
 						and(
-							inArray(invitation.email, emails),
+							inList(invitation.email, emails),
 							isNull(invitation.acceptedAt),
 							gte(invitation.expiresAt, new Date())
 						)
@@ -245,7 +246,7 @@ async function write(
 			.select({ id: user.id, email: user.email })
 			.from(user)
 			.where(
-				inArray(
+				inList(
 					sql`lower(${user.email})`,
 					joins.map((j) => j.email)
 				)
@@ -254,7 +255,13 @@ async function write(
 		const values = joins.flatMap((j) =>
 			j.projects.map((p) => ({ projectId: p.id, userId: idByEmail.get(j.email) as string }))
 		);
-		await ctx.db.insert(projectMember).values(values).onConflictDoNothing();
+		const stmts = insertChunks(projectMember, values).map((part) =>
+			ctx.db.insert(projectMember).values(part).onConflictDoNothing()
+		);
+		if (stmts.length > 0) {
+			const [first, ...rest] = stmts;
+			await ctx.db.batch([first, ...rest]);
+		}
 	}
 
 	const created: { person: ImportPerson; mail: MailMessage }[] = [];

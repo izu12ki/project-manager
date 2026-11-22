@@ -1,4 +1,5 @@
-import { and, asc, eq, inArray, isNull, lt } from 'drizzle-orm';
+import { and, asc, eq, isNull, lt } from 'drizzle-orm';
+import { inList } from '../db/limits';
 import { uuidv7 } from 'uuidv7';
 import {
 	MAX_ATTACHMENT_BYTES,
@@ -85,7 +86,7 @@ export async function purgeStaleUploads(ctx: AppContext): Promise<void> {
 		);
 	if (rows.length === 0) return;
 	await ctx.db.delete(attachment).where(
-		inArray(
+		inList(
 			attachment.id,
 			rows.map((r) => r.id)
 		)

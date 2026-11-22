@@ -1,4 +1,5 @@
-import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, or, sql } from 'drizzle-orm';
+import { inList } from '../db/limits';
 import { alias, type SQLiteColumn } from 'drizzle-orm/sqlite-core';
 import type { AppContext } from '../context';
 import {
@@ -28,7 +29,7 @@ const deleter = alias(user, 'deleter');
 export async function getIssueDetailRows(ctx: AppContext, key: string, number: number) {
 	const { db } = ctx;
 	const projectId = db.select({ id: project.id }).from(project).where(eq(project.key, key));
-	const ofProject = (col: SQLiteColumn) => inArray(col, projectId);
+	const ofProject = (col: SQLiteColumn) => inList(col, projectId);
 	const [
 		projectRows,
 		issueRows,
@@ -74,7 +75,7 @@ export async function getIssueDetailRows(ctx: AppContext, key: string, number: n
 			.where(
 				and(
 					ofProject(issue.projectId),
-					inArray(
+					inList(
 						issue.parentId,
 						db
 							.select({ id: parent.id })
@@ -94,7 +95,7 @@ export async function getIssueDetailRows(ctx: AppContext, key: string, number: n
 					isNull(user.disabledAt),
 					or(
 						eq(user.role, 'admin'),
-						inArray(
+						inList(
 							user.id,
 							db
 								.select({ id: projectMember.userId })
@@ -146,7 +147,7 @@ export async function getIssueDetailRows(ctx: AppContext, key: string, number: n
 			: await db
 					.select({ id: user.id, name: user.name, role: user.role })
 					.from(user)
-					.where(inArray(user.id, ids));
+					.where(inList(user.id, ids));
 	const byId = new Map(people.map((u) => [u.id, u]));
 	const named = (assigneeIds: string[]): AssigneeRef[] =>
 		assigneeIds.flatMap((id) => {

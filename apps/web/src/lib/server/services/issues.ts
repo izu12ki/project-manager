@@ -1,17 +1,5 @@
-import {
-	and,
-	asc,
-	count,
-	desc,
-	eq,
-	inArray,
-	isNotNull,
-	isNull,
-	ne,
-	or,
-	sql,
-	type SQL
-} from 'drizzle-orm';
+import { and, asc, count, desc, eq, isNotNull, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
+import { inList } from '../db/limits';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
 import { uuidv7 } from 'uuidv7';
@@ -108,7 +96,7 @@ export async function withAssignees<T extends { assigneeIds: string[] }>(
 	const users =
 		ids.length === 0
 			? []
-			: await db.select({ id: user.id, name: user.name }).from(user).where(inArray(user.id, ids));
+			: await db.select({ id: user.id, name: user.name }).from(user).where(inList(user.id, ids));
 	const names = new Map(users.map((u) => [u.id, u.name]));
 	return rows.map((r) => ({
 		...r,
@@ -131,7 +119,7 @@ export async function withCategories<T extends { categoryIds: string[] }>(
 			: await db
 					.select({ id: category.id, name: category.name })
 					.from(category)
-					.where(inArray(category.id, ids))
+					.where(inList(category.id, ids))
 					.orderBy(asc(category.createdAt), asc(category.id));
 	return rows.map((r) => ({
 		...r,
@@ -239,7 +227,7 @@ export async function countOpenIssues(
 		.from(issue)
 		.where(
 			and(
-				inArray(issue.projectId, projectIds),
+				inList(issue.projectId, projectIds),
 				ne(issue.status, DONE_STATUS),
 				isNull(issue.deletedAt)
 			)

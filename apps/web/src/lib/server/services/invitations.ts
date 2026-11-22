@@ -1,4 +1,5 @@
-import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
+import { inList, insertChunks } from '../db/limits';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
 import { authorize, type Role } from '../authz';
@@ -29,7 +30,7 @@ async function projectsOf(db: DB, invitationIds: string[]) {
 		.select({ invitationId: invitationProject.invitationId, id: project.id, name: project.name })
 		.from(invitationProject)
 		.innerJoin(project, eq(project.id, invitationProject.projectId))
-		.where(inArray(invitationProject.invitationId, invitationIds))
+		.where(inList(invitationProject.invitationId, invitationIds))
 		.orderBy(asc(project.name));
 	const map = new Map<string, { id: string; name: string }[]>();
 	for (const r of rows) map.set(r.invitationId, [...(map.get(r.invitationId) ?? []), r]);
@@ -55,7 +56,7 @@ export async function createInvitation(
 			: await ctx.db
 					.select({ id: project.id, name: project.name })
 					.from(project)
-					.where(inArray(project.id, projectIds))
+					.where(inList(project.id, projectIds))
 					.orderBy(asc(project.name));
 	if (projects.length !== projectIds.length) {
 		throw new AppError('validation', 'プロジェクトが見つかりません', {
@@ -99,13 +100,10 @@ export async function createInvitation(
 			invitedBy: ctx.actor.id,
 			expiresAt: new Date(Date.now() + INVITE_TTL_MS)
 		}),
-		...(projects.length > 0
-			? [
-					ctx.db
-						.insert(invitationProject)
-						.values(projects.map((p) => ({ invitationId: id, projectId: p.id })))
-				]
-			: [])
+		...insertChunks(
+			invitationProject,
+			projects.map((p) => ({ invitationId: id, projectId: p.id }))
+		).map((part) => ctx.db.insert(invitationProject).values(part))
 	]);
 
 	const url = `${ctx.baseUrl}/invite/${token}`;
@@ -176,7 +174,7 @@ export async function listPendingInvitations(
 	const conds = [isNull(invitation.acceptedAt)];
 	if (filter.projectId) {
 		conds.push(
-			inArray(
+			inList(
 				invitation.id,
 				ctx.db
 					.select({ id: invitationProject.invitationId })

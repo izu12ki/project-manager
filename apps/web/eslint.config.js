@@ -46,6 +46,12 @@ export default defineConfig(
 							name: '$app/forms',
 							importNames: ['enhance'],
 							message: '二度押しを防ぐ #lib/forms.ts の enhance を使ってください'
+						},
+						{
+							name: 'drizzle-orm',
+							importNames: ['inArray'],
+							message:
+								'D1 はバインド変数が 100 個までなので、#lib/server/db/limits.ts の inList を使ってください'
 						}
 					]
 				}

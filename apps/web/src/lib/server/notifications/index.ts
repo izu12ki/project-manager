@@ -1,4 +1,5 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
+import { inList, insertChunks } from '../db/limits';
 import { uuidv7 } from 'uuidv7';
 import { extractMentionIds } from '#lib/mentions.ts';
 import type { Priority } from '#lib/labels.ts';
@@ -97,7 +98,7 @@ async function slackLinks(ctx: AppContext, userIds: string[]) {
 	const links = await ctx.db
 		.select({ userId: userIntegration.userId, externalId: userIntegration.externalId })
 		.from(userIntegration)
-		.where(and(eq(userIntegration.provider, 'slack'), inArray(userIntegration.userId, userIds)));
+		.where(and(eq(userIntegration.provider, 'slack'), inList(userIntegration.userId, userIds)));
 	return links.length > 0 ? { cfg, links } : null;
 }
 
@@ -154,14 +155,16 @@ export async function notify(ctx: AppContext, input: NotifyInput): Promise<void>
 			canReceive: (id) => facts.names.has(id)
 		});
 		if (planned.length > 0) {
-			await ctx.db.insert(notification).values(
+			const [first, ...rest] = insertChunks(
+				notification,
 				planned.map((n) => ({
 					id: uuidv7(),
 					actorId: ctx.actor.id,
 					issueId: input.issue.id,
 					...n
 				}))
-			);
+			).map((part) => ctx.db.insert(notification).values(part));
+			await ctx.db.batch([first, ...rest]);
 		}
 		await sendDirectMessages(ctx, input, facts.priority, planned);
 	} catch (e) {
@@ -197,11 +200,11 @@ export async function notifyBulk(ctx: AppContext, input: BulkNotifyInput): Promi
 			ctx.db
 				.select({ id: issue.id, reporterId: issue.reporterId, assigneeIds: issue.assigneeIds })
 				.from(issue)
-				.where(inArray(issue.id, ids)),
+				.where(inList(issue.id, ids)),
 			ctx.db
 				.selectDistinct({ issueId: comment.issueId, id: comment.authorId })
 				.from(comment)
-				.where(inArray(comment.issueId, ids)),
+				.where(inList(comment.issueId, ids)),
 			listAssignableUsers(ctx.db, input.project.id)
 		]);
 		const names = new Set(receivers.map((u) => u.id));
@@ -237,14 +240,16 @@ export async function notifyBulk(ctx: AppContext, input: BulkNotifyInput): Promi
 					? { userId, type: 'bulk_mentioned', count: t.mentioned }
 					: { userId, type: 'bulk_updated', count: t.notified }
 		);
-		await ctx.db.insert(notification).values(
+		const [first, ...rest] = insertChunks(
+			notification,
 			rows.map((r) => ({
 				id: uuidv7(),
 				actorId: ctx.actor.id,
 				projectId: input.project.id,
 				...r
 			}))
-		);
+		).map((part) => ctx.db.insert(notification).values(part));
+		await ctx.db.batch([first, ...rest]);
 		await sendBulkDirectMessages(ctx, input.project, rows);
 	} catch (e) {
 		console.error('[notify] bulk failed', e);

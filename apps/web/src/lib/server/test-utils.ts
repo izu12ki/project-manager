@@ -1,6 +1,6 @@
 // テスト専用。アプリのコードから import しないこと。
 // adapter-cloudflare が依存の解決を workerd に合わせるので、無指定だと Web 版になり :memory: を開けない
-import { createClient } from '@libsql/client/node';
+import { createClient, type Client, type InStatement } from '@libsql/client/node';
 import { drizzle } from 'drizzle-orm/libsql';
 import { migrate } from 'drizzle-orm/libsql/migrator';
 import { fileURLToPath } from 'node:url';
@@ -9,16 +9,52 @@ import { createMemoryStore } from './attachment-store';
 import type { Actor, Role } from './authz';
 import type { AppContext, BaseContext } from './context';
 import type { DB } from './db';
+import { D1_MAX_PARAMS } from './db/limits';
 import { project, projectMember, relations, user } from './db/schema';
 import type { MailMessage } from './mailer';
 import { defaultFieldInserts } from './services/issue-fields';
 
+/**
+ * 本番の D1 にある制約をテストでも再現する。違反するクエリはテストで失敗させる。
+ * - 途中で処理を挟むトランザクション（db.transaction）は使えない
+ * - 1 クエリのバインド変数は D1_MAX_PARAMS 個まで
+ */
+export function emulateD1(client: Client): Client {
+	const check = (stmt: InStatement) => {
+		const args = typeof stmt === 'string' ? [] : (stmt.args ?? []);
+		const n = Array.isArray(args) ? args.length : Object.keys(args).length;
+		if (n > D1_MAX_PARAMS)
+			throw new Error(`too many SQL variables: ${n} (D1 allows ${D1_MAX_PARAMS})`);
+	};
+	return new Proxy(client, {
+		get(target, prop, receiver) {
+			if (prop === 'transaction')
+				return () => {
+					throw new Error('D1 does not support interactive transactions. Use db.batch().');
+				};
+			if (prop === 'execute')
+				return (stmt: InStatement) => {
+					check(stmt);
+					return target.execute(stmt);
+				};
+			if (prop === 'batch')
+				return (stmts: InStatement[], mode?: Parameters<Client['batch']>[1]) => {
+					stmts.forEach(check);
+					return target.batch(stmts, mode);
+				};
+			const value = Reflect.get(target, prop, receiver);
+			return typeof value === 'function' ? value.bind(target) : value;
+		}
+	});
+}
+
 export async function createTestDb(): Promise<DB> {
-	const db = drizzle({ client: createClient({ url: ':memory:' }), relations });
-	await migrate(db, {
+	const client = createClient({ url: ':memory:' });
+	// drizzle の migrator は内部でトランザクションを使うので、制約をかける前の client で流す
+	await migrate(drizzle({ client }), {
 		migrationsFolder: fileURLToPath(new URL('../../../drizzle', import.meta.url))
 	});
-	return db as unknown as DB;
+	return drizzle({ client: emulateD1(client), relations }) as unknown as DB;
 }
 
 export function createTestBase(

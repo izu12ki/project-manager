@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { enhance } from '#lib/forms.ts';
+	import { enhance, withPasswordKeys } from '#lib/forms.ts';
 	import { Check, Copy, Eye } from '@lucide/svelte';
 	import ConfirmAction from '#lib/components/ConfirmAction.svelte';
 	import FormAlert from '#lib/components/FormAlert.svelte';
 	import PasswordInput from '#lib/components/PasswordInput.svelte';
+	import PasswordSubmit from '#lib/components/PasswordSubmit.svelte';
 	import { FONT_SIZES, fontSize } from '#lib/font-size.svelte.ts';
 	import { formatDate, formatDateTime } from '#lib/labels.ts';
 	import { toast } from '#lib/toast.svelte.ts';
@@ -109,7 +110,15 @@
 	</div>
 
 	{#if data.canModifyAccount}
-		<form method="POST" action="?/changePassword" use:enhance class="card">
+		<form
+			method="POST"
+			action="?/changePassword"
+			use:enhance={withPasswordKeys({
+				email: data.user?.email ?? '',
+				fields: [{ name: 'currentPassword' }, { name: 'newPassword' }]
+			})}
+			class="card"
+		>
 			<div class="card-head">
 				<h2 class="card-title">パスワード変更</h2>
 				<p class="card-desc">変更後は他の端末からログアウトされます</p>
@@ -132,12 +141,13 @@
 						autocomplete="new-password"
 						required
 						minlength={10}
+						maxlength={128}
 						aria-describedby="new-password-hint"
 					/>
 					<p class="hint" id="new-password-hint">10文字以上</p>
 				</div>
 			</div>
-			<div><button type="submit" class="btn btn-primary">保存</button></div>
+			<div><PasswordSubmit>保存</PasswordSubmit></div>
 		</form>
 
 		<div class="card">

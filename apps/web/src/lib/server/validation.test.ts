@@ -46,7 +46,12 @@ describe('validation', () => {
 	});
 	it('パスワードの鍵は小文字の 16 進 64 文字だけ受け付ける', () => {
 		expect(v.is(PasswordKeySchema, '0123456789abcdef'.repeat(4))).toBe(true);
-		for (const ng of ['0123456789ABCDEF'.repeat(4), 'a'.repeat(63), 'a'.repeat(65), 'password-1234']) {
+		for (const ng of [
+			'0123456789ABCDEF'.repeat(4),
+			'a'.repeat(63),
+			'a'.repeat(65),
+			'password-1234'
+		]) {
 			expect(v.is(PasswordKeySchema, ng), ng).toBe(false);
 		}
 	});

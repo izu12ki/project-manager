@@ -1045,7 +1045,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	const origin = { Origin: 'http://localhost:4173' };
 	const viaAction = await viewerPage.request.post('/account?/changePassword', {
 		headers: origin,
-		form: { currentPassword: PW, newPassword: 'changed-password-1' }
+		form: { currentPasswordKey: 'a'.repeat(64), newPasswordKey: 'b'.repeat(64) }
 	});
 	expect(viaAction.status()).toBe(404);
 	// better-auth の HTTP API は、パスワード再設定メールのリンク以外を受け付けない
@@ -1381,6 +1381,17 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.goto('/account');
 	await expect(page.getByRole('heading', { name: 'パスワード変更' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'API キー' })).toHaveCount(0);
+
+	// 14. パスワードを変更すると、新しいパスワードでログインできる
+	await page.getByLabel('現在のパスワード').fill(PW);
+	await page.getByLabel('新しいパスワード').fill('changed-password-1');
+	await page
+		.locator('form', { has: page.getByRole('heading', { name: 'パスワード変更' }) })
+		.getByRole('button', { name: '保存' })
+		.click();
+	await expect(page.getByText('パスワードを変更しました')).toBeVisible();
+	await logout(page);
+	await login(page, 'member@example.com', 'changed-password-1');
 
 	// 15. パスワード再設定のメールのリンクから、新しいパスワードにできる
 	await logout(page);

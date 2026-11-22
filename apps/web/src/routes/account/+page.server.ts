@@ -6,7 +6,7 @@ import { authorize, can } from '#lib/server/authz.ts';
 import { handleAction } from '#lib/server/errors.ts';
 import { createApiKey, listApiKeys, revokeApiKey } from '#lib/server/services/api-keys.ts';
 import { disableSlack, enableSlack, getSlackStatus } from '#lib/server/services/integrations.ts';
-import { formObject, NameSchema, parse } from '#lib/server/validation.ts';
+import { formObject, NameSchema, parse, PasswordKeySchema } from '#lib/server/validation.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -47,13 +47,18 @@ export const actions: Actions = {
 		const input = formObject(await request.formData());
 		return handleAction(async () => {
 			authorize(appContext(locals).actor, 'account:modify');
+			// 閲覧者は値によらず 404 にするため、authorize の後で確かめる
 			const data = parse(
-				v.object({ currentPassword: v.string(), newPassword: v.string() }),
+				v.object({ currentPasswordKey: PasswordKeySchema, newPasswordKey: PasswordKeySchema }),
 				input
 			);
 			try {
 				await locals.auth.api.changePassword({
-					body: { ...data, revokeOtherSessions: true },
+					body: {
+						currentPassword: data.currentPasswordKey,
+						newPassword: data.newPasswordKey,
+						revokeOtherSessions: true
+					},
 					headers: request.headers
 				});
 			} catch (e) {

@@ -14,6 +14,15 @@ export class AppError extends Error {
 	}
 }
 
+/** DB のエラー（cause をたどる）が、一意インデックス column（「表.列」の形）に当たったものか */
+export function isUniqueViolation(e: unknown, column: string): boolean {
+	for (let x = e; x; x = (x as { cause?: unknown }).cause) {
+		const message = x instanceof Error ? x.message : String(x);
+		if (message.includes('UNIQUE constraint failed') && message.includes(column)) return true;
+	}
+	return false;
+}
+
 const FAIL_STATUS = { validation: 400, conflict: 409, rate_limited: 429 } as const;
 
 export async function handleAction<T>(fn: () => Promise<T>) {

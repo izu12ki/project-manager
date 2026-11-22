@@ -1,16 +1,16 @@
-import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
 import { authorize, type Role } from '../authz';
 import type { AppContext, BaseContext } from '../context';
 import type { DB } from '../db';
 import { invitation, invitationProject, project, projectMember, user } from '../db/schema';
-import { AppError } from '../errors';
+import { AppError, isUniqueViolation } from '../errors';
 import type { MailMessage } from '../mailer';
 import { invitationMail } from '../mailer/templates';
 import { randomToken, sha256Hex } from '../tokens';
 import { EmailSchema, NameSchema, parse, PasswordSchema } from '../validation';
-import { insertCredentialUser } from './credentials';
+import { credentialUserInserts } from './credentials';
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const INVALID_INVITE = '招待リンクが無効か、期限切れです。管理者に再発行を依頼してください';
@@ -237,32 +237,42 @@ export async function acceptInvitation(
 	const data = parse(AcceptInput, input);
 	const inv = await findValidByToken(base.db, data.token);
 	if (!inv) throw new AppError('not_found', INVALID_INVITE);
+	const duplicate = new AppError('conflict', 'このメールアドレスのユーザーは既に登録されています');
+	const [dup] = await base.db.select({ id: user.id }).from(user).where(eq(user.email, inv.email));
+	if (dup) throw duplicate;
 	const passwordHash = await base.hashPassword(data.password);
 
-	await base.db.transaction(async (tx) => {
-		const claimed = await tx
-			.update(invitation)
-			.set({ acceptedAt: new Date() })
-			.where(and(eq(invitation.id, inv.id), isNull(invitation.acceptedAt)))
-			.returning({ id: invitation.id });
-		if (claimed.length === 0) throw new AppError('not_found', INVALID_INVITE);
-		const [dup] = await tx.select({ id: user.id }).from(user).where(eq(user.email, inv.email));
-		if (dup) throw new AppError('conflict', 'このメールアドレスのユーザーは既に登録されています');
-		const userId = await insertCredentialUser(tx, {
-			name: data.name,
-			email: inv.email,
-			role: inv.role,
-			passwordHash
-		});
-		const targets = await tx
-			.select({ projectId: invitationProject.projectId })
-			.from(invitationProject)
-			.where(eq(invitationProject.invitationId, inv.id));
-		if (targets.length > 0) {
-			await tx
-				.insert(projectMember)
-				.values(targets.map((t) => ({ projectId: t.projectId, userId })));
-		}
+	// D1 はトランザクションを使えないので、先に招待を使用済みにし（条件付き update で 1 回だけ成功する）、
+	// ユーザーの作成に失敗したら未使用に戻す
+	const claimed = await base.db
+		.update(invitation)
+		.set({ acceptedAt: new Date() })
+		.where(and(eq(invitation.id, inv.id), isNull(invitation.acceptedAt)))
+		.returning({ id: invitation.id });
+	if (claimed.length === 0) throw new AppError('not_found', INVALID_INVITE);
+	const { id: userId, statements } = credentialUserInserts(base.db, {
+		name: data.name,
+		email: inv.email,
+		role: inv.role,
+		passwordHash
 	});
+	try {
+		await base.db.batch([
+			...statements,
+			base.db.insert(projectMember).select(
+				base.db
+					.select({
+						projectId: invitationProject.projectId,
+						userId: sql<string>`${userId}`.as('userId')
+					})
+					.from(invitationProject)
+					.where(eq(invitationProject.invitationId, inv.id))
+			)
+		]);
+	} catch (e) {
+		await base.db.update(invitation).set({ acceptedAt: null }).where(eq(invitation.id, inv.id));
+		if (isUniqueViolation(e, 'user.email')) throw duplicate;
+		throw e;
+	}
 	return { email: inv.email };
 }

@@ -8,4 +8,3 @@ export function createDb(env: { TURSO_DATABASE_URL: string; TURSO_AUTH_TOKEN?: s
 }
 
 export type DB = ReturnType<typeof createDb>;
-export type Tx = Parameters<Parameters<DB['transaction']>[0]>[0];

@@ -79,14 +79,16 @@
 		const { key, number } = ref;
 		untrack(() => void readIssueNotifications({ key, number }).catch(() => {}));
 	});
-	// 2つの query は同時に取得を始め、コメントの更新では課題側を取り直さない
+	// query は分けておき、コメントの更新では課題側を取り直さない
 	const detailQuery = $derived(getIssueDetail(ref));
 	const commentsQuery = $derived(getComments(ref));
 	const changesQuery = $derived(getChanges(ref));
 	const attachmentsQuery = $derived(getAttachments(ref));
-	const detail = $derived(await detailQuery);
-	const comments = $derived(await commentsQuery);
-	const changes = $derived(await changesQuery);
+	// 4 つを同時に取得する。$derived(await …) を並べると、前の await が終わるまで次の query が作られず 1 つずつになる。
+	// Promise.all も各 query の then を同期的に読むので、どれかを取り直したときもここが更新される
+	const [detail, comments, changes, attachments] = $derived(
+		await Promise.all([detailQuery, commentsQuery, changesQuery, attachmentsQuery])
+	);
 	// コメントと編集履歴を時刻順に並べる
 	const activity = $derived(
 		[
@@ -94,7 +96,6 @@
 			...changes.map((h) => ({ kind: 'change' as const, id: h.id, at: h.createdAt, h }))
 		].sort((a, b) => a.at.getTime() - b.at.getTime() || a.id.localeCompare(b.id))
 	);
-	const attachments = $derived(await attachmentsQuery);
 	const mentionCandidates = $derived(
 		detail.assignees.filter((u) => !u.disabled).map(({ id, name }) => ({ id, name }))
 	);

@@ -1,4 +1,12 @@
-import { expect, test, type BrowserContext, type Locator, type Page } from '@playwright/test';
+import {
+	expect,
+	test,
+	type BrowserContext,
+	type Locator,
+	type Page,
+	type Request,
+	type Response
+} from '@playwright/test';
 
 // 1x1 の透明 PNG
 const PNG = Buffer.from(
@@ -89,6 +97,35 @@ async function dragBy(page: Page, target: Locator, dx: number) {
 	await page.mouse.down();
 	await page.mouse.move(b.x + b.width / 2 + dx, b.y + b.height / 2, { steps: 8 });
 	await page.mouse.up();
+}
+
+const ISSUE_QUERIES = ['getAttachments', 'getChanges', 'getComments', 'getIssueDetail'];
+
+/**
+ * 課題の詳細を開く操作で、本文・コメント・履歴・添付の 4 つの query を同時に取りにいくこと。
+ * 1 つずつ待つと、往復が長い環境（日本から米国の拠点に入る場合など）では待ちが 4 倍になる
+ */
+async function expectIssueQueriesInParallel(page: Page, open: () => Promise<void>) {
+	const events: string[] = [];
+	const name = (url: string) => ISSUE_QUERIES.find((q) => new URL(url).pathname.endsWith(`/${q}`));
+	const onRequest = (r: Request) => {
+		const q = name(r.url());
+		if (q) events.push(`request ${q}`);
+	};
+	const onResponse = (r: Response) => {
+		const q = name(r.url());
+		if (q) events.push(`response ${q}`);
+	};
+	page.on('request', onRequest);
+	page.on('response', onResponse);
+	await open();
+	await expect
+		.poll(() => events.filter((e) => e.startsWith('response')).length)
+		.toBe(ISSUE_QUERIES.length);
+	page.off('request', onRequest);
+	page.off('response', onResponse);
+	const firstResponse = events.findIndex((e) => e.startsWith('response'));
+	expect(events.slice(0, firstResponse).sort()).toEqual(ISSUE_QUERIES.map((q) => `request ${q}`));
 }
 
 test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 → コメント', async ({
@@ -550,8 +587,8 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page.getByTestId('column-in_progress').getByTestId('card-1')).toBeVisible();
 	await page.reload();
 	await expect(page.getByTestId('column-in_progress').getByTestId('card-1')).toBeVisible();
-	// カードのクリックで右側のシートに詳細を出す（ページは遷移しない）
-	await page.getByTestId('card-1').click();
+	// カードのクリックで右側のシートに詳細を出す（ページは遷移しない）。詳細の取得は同時に始める
+	await expectIssueQueriesInParallel(page, () => page.getByTestId('card-1').click());
 	const boardSheet = page.getByRole('complementary', { name: 'ACME-1' });
 	await expect(boardSheet.getByRole('heading', { name: 'ログインできない' })).toBeVisible();
 	await expect(page).toHaveURL(/\/projects\/ACME\/board$/);

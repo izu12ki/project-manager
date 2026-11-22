@@ -5,7 +5,8 @@ import {
 	type Locator,
 	type Page,
 	type Request,
-	type Response
+	type Response,
+	type Route
 } from '@playwright/test';
 
 // 1x1 の透明 PNG
@@ -29,6 +30,56 @@ async function login(page: Page, email: string) {
 	await page.getByLabel('パスワード').fill(PW);
 	await page.getByRole('button', { name: 'ログイン' }).click();
 	await expect(page).toHaveURL(HOME);
+}
+
+/** 遠い回線を真似て、一致した通信を ms だけ遅らせる。戻り値で元に戻す */
+async function slowDown(page: Page, url: string | RegExp, ms: number) {
+	const handler = async (route: Route) => {
+		await new Promise((f) => setTimeout(f, ms));
+		await route.continue();
+	};
+	await page.route(url, handler);
+	return () => page.unroute(url, handler);
+}
+
+/** スクリプトの読み込み前（ハイドレーション前）に入力しても、読み込み後に入力が消えずにログインできる */
+async function loginBeforeHydration(page: Page, email: string) {
+	const restore = await slowDown(page, '**/_app/immutable/**/*.js', 1000);
+	await page.goto('/login', { waitUntil: 'domcontentloaded' });
+	await page.getByLabel('メールアドレス').fill(email);
+	await page.getByLabel('パスワード').fill(PW);
+	await page.waitForLoadState('networkidle');
+	await restore();
+	await expect(page.getByLabel('メールアドレス')).toHaveValue(email);
+	await expect(page.getByLabel('パスワード')).toHaveValue(PW);
+	await page.getByRole('button', { name: 'ログイン' }).click();
+	await expect(page).toHaveURL(HOME);
+}
+
+/**
+ * 課題の取得が遅くても、待っている間に画面が止まらず（ページ遷移のアニメーションで固めない）、
+ * 読み込み中のバーが出ること。open で課題のページへ移る。
+ * 一度開いた課題の query はキャッシュに残ることがある（いつ消えるかは GC 次第）ので、呼ぶ前に再読み込みしておく
+ */
+async function expectProgressWhileIssueLoads(page: Page, open: () => Promise<void>) {
+	const restore = await slowDown(
+		page,
+		/\/_app\/remote\/[^/]+\/get(IssueDetail|Comments|Changes|Attachments)\b/,
+		1500
+	);
+	await open();
+	// 遷移のコードを読み込む間などはアニメーションが始まっていないので、少し待ってから確かめる
+	await page.waitForTimeout(400);
+	await expect
+		.poll(() =>
+			page.evaluate(
+				() => document.activeViewTransition === null && !!document.querySelector('.nav-progress')
+			)
+		)
+		.toBe(true);
+	// 遅らせている通信が終わってから戻す（途中で戻すと、待っていた通信の continue が失敗する）
+	await expect(page.locator('.nav-progress')).toHaveCount(0);
+	await restore();
 }
 
 async function acceptInvite(page: Page, url: string, name: string) {
@@ -562,7 +613,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await logout(page);
 
 	// 7. ゲストがカンバンで進行中へ移動
-	await login(page, 'guest@example.com');
+	await loginBeforeHydration(page, 'guest@example.com');
 
 	// 7a. ゲストに「担当」と「メンション」の 2 件が届いている
 	const badge = page.getByTestId('unread-badge');
@@ -876,7 +927,12 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.getByRole('button', { name: '起票する' }).first().dblclick();
 	await expect(page).toHaveURL(/\/projects\/ACME\/issues\/\d+$/);
 	await expect(page.getByRole('link', { name: /ACME-1/ })).toBeVisible();
-	await page.goto('/projects/ACME/issues/1');
+	// 子課題から親課題へ移る。取得が遅くても、待つ間は読み込み中のバーが見える
+	await page.reload();
+	await expectProgressWhileIssueLoads(page, () =>
+		page.getByRole('link', { name: /ACME-1/ }).click()
+	);
+	await expect(page).toHaveURL(/\/projects\/ACME\/issues\/1$/);
 	const children = page.getByRole('region', { name: '子課題' });
 	await expect(children.getByRole('link', { name: 'ログイン画面の文言修正' })).toBeVisible();
 	await expect(children.getByText('0 / 1 完了')).toBeVisible();

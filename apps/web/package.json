@@ -16,8 +16,9 @@
 		"gen": "wrangler types",
 		"holidays:fetch": "node scripts/fetch-holidays.ts",
 		"db:generate": "drizzle-kit generate",
-		"db:migrate": "drizzle-kit migrate",
-		"db:local": "turso dev --db-file local.db --port 8080",
+		"db:sync": "node scripts/d1-migrations.ts",
+		"db:migrate:local": "pnpm db:sync && wrangler d1 migrations apply DB --local",
+		"db:migrate:remote": "pnpm db:sync && wrangler d1 migrations apply DB --remote",
 		"deploy": "pnpm build && wrangler deploy"
 	},
 	"devDependencies": {

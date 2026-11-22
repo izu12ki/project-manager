@@ -28,3 +28,6 @@ worker-configuration.d.ts
 local.db*
 e2e.db*
 .e2e.vars
+
+# wrangler d1 migrations apply 用に drizzle/ から生成する（pnpm db:sync）
+/.d1-migrations

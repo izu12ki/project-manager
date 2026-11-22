@@ -24,10 +24,15 @@
 		if (!document.startViewTransition) return;
 		if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 		return new Promise((resolve) => {
-			document.startViewTransition(async () => {
+			const transition = document.startViewTransition(async () => {
 				resolve();
 				await navigation.complete;
 			});
+			// 次の遷移に中断されると、これらは reject されてアニメーションが飛ばされる。それでよいので未処理の例外にしない。
+			// コールバックの中で中断を握りつぶすと、飛ばされるはずのアニメーションが残り、直後のドラッグを横取りする
+			transition.ready.catch(() => {});
+			transition.updateCallbackDone.catch(() => {});
+			transition.finished.catch(() => {});
 		});
 	});
 

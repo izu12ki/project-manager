@@ -19,7 +19,9 @@
 	let mobileOpen = $state(false);
 	afterNavigate(() => (mobileOpen = false));
 
-	// データ取得後（DOM 更新直前）に呼ばれるので、待ち時間中に画面が固まることはない
+	// load のデータ取得後（DOM 更新直前）に呼ばれる。ただし描画中に取得する（remote functions の query を
+	// await する）ページでは、その取得が終わるまで遷移が完了しない。アニメーションの間ブラウザは画面を止めるので、
+	// 待つ間に読み込み中のバーも出ず、操作も効かなくなる。すぐ終わらない遷移ではアニメーションをやめて画面を戻す
 	onNavigate((navigation) => {
 		if (!document.startViewTransition) return;
 		if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -28,6 +30,10 @@
 				resolve();
 				await navigation.complete;
 			});
+			// 読み込み中のバー（NavProgress）が出始めるのと同じ 120ms
+			const skip = setTimeout(() => transition.skipTransition(), 120);
+			const done = () => clearTimeout(skip);
+			transition.updateCallbackDone.then(done, done);
 			// 次の遷移に中断されると、これらは reject されてアニメーションが飛ばされる。それでよいので未処理の例外にしない。
 			// コールバックの中で中断を握りつぶすと、飛ばされるはずのアニメーションが残り、直後のドラッグを横取りする
 			transition.ready.catch(() => {});

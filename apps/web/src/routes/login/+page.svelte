@@ -16,6 +16,7 @@
 		{#if form?.message}<FormAlert title="ログインできませんでした" message={form.message} />{/if}
 		<div class="field">
 			<label class="label" for="email">メールアドレス</label>
+			<!-- value= だとハイドレーションで値を入れ直し、スクリプトの読み込み前に打った内容が消える -->
 			<input
 				class="input"
 				id="email"
@@ -24,7 +25,7 @@
 				autocomplete="email"
 				placeholder="you@example.com"
 				required
-				value={form?.email ?? ''}
+				defaultValue={form?.email ?? ''}
 			/>
 		</div>
 		<div class="field">

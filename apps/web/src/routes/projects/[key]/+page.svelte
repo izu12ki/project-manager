@@ -192,13 +192,14 @@
 		<div
 			class="grid-table"
 			style:--key-col={keyColumnWidth}
-			style="--cols: var(--key-col) minmax(240px, 1fr) 120px 80px 140px 140px 88px 88px var(--stamp-col) var(--stamp-col)"
+			style="--cols: var(--key-col) minmax(240px, 1fr) 120px 80px 128px 128px 76px 76px var(--stamp-col) var(--stamp-col)"
 		>
-			<!-- キー列が 96px より広がった分だけ、表の最小幅も広げる -->
+			<!-- 列の幅の合計と行の左右の余白（16px）。キー列が 96px より広がった分だけ、表の最小幅も広げる。
+			     サイドバーを開いた 1440px 幅の画面で、横にスクロールせずに収まる -->
 			<div
 				role="table"
 				aria-label="課題一覧"
-				style="min-width: calc(var(--key-col) + 892px + 2 * var(--stamp-col))"
+				style="min-width: calc(var(--key-col) + 864px + 2 * var(--stamp-col))"
 			>
 				<div role="row" class="grid-table-head">
 					{@render sortHeader('number', 'キー')}
@@ -326,7 +327,7 @@
 	}
 	/* 登録日・更新日（2026/11/22）の列。文字サイズの設定に合わせて広げる */
 	.grid-table {
-		--stamp-col: 6.5rem;
+		--stamp-col: 6rem;
 	}
 	.sort {
 		display: inline-flex;

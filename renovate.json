@@ -25,6 +25,12 @@
 			"matchPackageNames": ["better-auth", "@better-auth/**"]
 		},
 		{
+			"description": "認証は、壊れても CI で気づきにくい変更（Cookie の属性など）がありうるので、minor は人が見てからマージする。patch は自動マージ",
+			"matchPackageNames": ["better-auth", "@better-auth/**"],
+			"matchUpdateTypes": ["minor"],
+			"automerge": false
+		},
+		{
 			"description": "まとめて上げないと壊れるもの。RC 版なので自動マージしない",
 			"groupName": "drizzle",
 			"matchPackageNames": ["drizzle-orm", "drizzle-kit"],

@@ -31,13 +31,14 @@
 			</div>
 			<div class="field">
 				<label class="label" for="name">名前</label>
+				<!-- value= だとハイドレーションで値を入れ直し、スクリプトの読み込み前に直した名前が戻る -->
 				<input
 					class="input"
 					id="name"
 					name="name"
 					required
 					maxlength={50}
-					value={data.invitation.name ?? ''}
+					defaultValue={data.invitation.name ?? ''}
 				/>
 			</div>
 			<div class="field">

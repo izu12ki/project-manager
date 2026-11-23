@@ -1,7 +1,9 @@
+import { and, eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ISSUE_SORT_KEYS, type IssueSort } from '#lib/issue-sort.ts';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
+import { issue } from '../db/schema';
 import {
 	createTestBase,
 	createTestDb,
@@ -32,6 +34,7 @@ describe('getIssueListRows', () => {
 	let db: DB;
 	let base: ReturnType<typeof createTestBase>;
 	let admin: Actor, member: Actor, guest: Actor, outsider: Actor;
+	let acmeId: string;
 	const as = (a: Actor) => ctxOf(base, a);
 
 	beforeEach(async () => {
@@ -41,7 +44,7 @@ describe('getIssueListRows', () => {
 		member = await seedUser(db, 'member', 'Member');
 		guest = await seedUser(db, 'guest', 'Guest');
 		outsider = await seedUser(db, 'member', 'Outsider');
-		await seedProject(db, { key: 'ACME', members: [member, guest] });
+		({ id: acmeId } = await seedProject(db, { key: 'ACME', members: [member, guest] }));
 		// 同じ番号の課題や同じ名前のカテゴリーがある別のプロジェクト。混ざらないこと
 		await seedProject(db, { key: 'OTHER', members: [outsider] });
 		for (const key of ['OTHER', 'ACME']) {
@@ -91,34 +94,63 @@ describe('getIssueListRows', () => {
 		const [ms] = await listMilestones(as(admin), 'ACME');
 		const [, bugType] = await listIssueTypes(as(admin), 'ACME');
 		const sort: IssueSort = { key: 'number', order: 'desc' };
-		const cases: IssueFilters[] = [
-			{},
-			{ status: 'in_progress' },
-			{ priority: 'high' },
-			{ assigneeId: member.id },
-			{ assigneeId: 'none' },
-			{ categoryId: cat.id },
-			{ categoryId: 'none' },
-			{ typeId: bugType.id },
-			{ milestoneId: ms.id },
-			{ milestoneId: 'none' },
-			{ q: '一覧' },
-			{ q: 'ACME-3' },
-			{ q: '#1' }
+		// listIssues も同じ issueListQuery を使うので、課題の番号は期待値を直接書いて確かめる
+		const cases: [IssueFilters, number[]][] = [
+			[{}, [3, 2, 1]],
+			[{ status: 'in_progress' }, [2]],
+			[{ priority: 'high' }, [1]],
+			[{ assigneeId: member.id }, [3, 1]],
+			[{ assigneeId: 'none' }, [2]],
+			[{ categoryId: cat.id }, [1]],
+			[{ categoryId: 'none' }, [3, 2]],
+			[{ typeId: bugType.id }, [1]],
+			[{ milestoneId: ms.id }, [1]],
+			[{ milestoneId: 'none' }, [3, 2]],
+			[{ q: '一覧' }, [2]],
+			[{ q: 'ACME-3' }, [3]],
+			[{ q: '#1' }, [1]]
 		];
-		for (const filters of cases) {
+		for (const [filters, numbers] of cases) {
 			const rows = await getIssueListRows(as(member), 'ACME', filters, sort);
+			expect(
+				rows.issues.map((i) => i.number),
+				JSON.stringify(filters)
+			).toEqual(numbers);
 			expect(rows, JSON.stringify(filters)).toEqual(await expected(member, filters, sort));
 		}
 	});
 
 	it('returns the same rows as the single-purpose functions for each sort', async () => {
+		// 登録日・更新日が同じミリ秒に重ならないよう、ずらして入れる
+		const at = (day: number) => new Date(Date.UTC(2026, 0, day));
+		for (const [number, created, updated] of [
+			[1, 3, 1],
+			[2, 1, 3],
+			[3, 2, 2]
+		]) {
+			await db
+				.update(issue)
+				.set({ createdAt: at(created), updatedAt: at(updated) })
+				.where(and(eq(issue.projectId, acmeId), eq(issue.number, number)));
+		}
+		// listIssues も同じ issueListQuery を使うので、課題の並びは期待値を直接書いて確かめる
+		const numbers: Record<IssueSort['key'], Record<IssueSort['order'], number[]>> = {
+			number: { asc: [1, 2, 3], desc: [3, 2, 1] },
+			// 開始日・期限が空の課題は、どちらの向きでも末尾（その中はキーの降順）
+			start: { asc: [1, 3, 2], desc: [1, 3, 2] },
+			due: { asc: [2, 1, 3], desc: [1, 2, 3] },
+			created: { asc: [2, 3, 1], desc: [1, 3, 2] },
+			updated: { asc: [1, 3, 2], desc: [2, 3, 1] }
+		};
 		for (const key of ISSUE_SORT_KEYS) {
 			for (const order of ['asc', 'desc'] as const) {
 				const sort = { key, order };
-				expect(await getIssueListRows(as(guest), 'ACME', {}, sort)).toEqual(
-					await expected(guest, {}, sort)
-				);
+				const rows = await getIssueListRows(as(guest), 'ACME', {}, sort);
+				expect(
+					rows.issues.map((i) => i.number),
+					`${key} ${order}`
+				).toEqual(numbers[key][order]);
+				expect(rows).toEqual(await expected(guest, {}, sort));
 			}
 		}
 		expect(await getIssueListRows(as(admin), 'ACME', {}, { key: 'number', order: 'asc' })).toEqual(

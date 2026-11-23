@@ -52,6 +52,15 @@ c.vars = { ...c.vars, MAIL_PROVIDER: "console" };
 c.preview_urls = false;
 fs.writeFileSync(process.argv[4], JSON.stringify(c, null, "\t"));
 ' "$NAME" "$DB_NAME" "$BUCKET" "$CONFIG"
+# 書き込む前に、作った設定が検証用の名前だけを指していることを確かめる
+node -e '
+const c = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+const names = [c.name, ...c.d1_databases.map((d) => d.database_name), ...c.r2_buckets.map((b) => b.bucket_name)];
+if (!names.every((n) => n.endsWith("-free-check") || n.endsWith("-free-check-attachments"))) {
+	console.error("検証用でない名前があります: " + names.join(", "));
+	process.exit(1);
+}
+' "$CONFIG"
 
 # D1 は毎回空にする（E2E は空の DB の初期セットアップから始まる）。消して作り直すと、直後の deploy が消した DB の ID を
 # 引いて失敗することがあるので、DB と表は残して行を消す（外部キーの検査はまとめて最後に行われるので、順番は問わない）
@@ -73,6 +82,18 @@ SQL="PRAGMA defer_foreign_keys = on;"
 for t in $TABLES; do SQL="$SQL DELETE FROM \"$t\";"; done
 pnpm exec wrangler d1 execute DB --remote --config "$CONFIG" --command "$SQL" >/dev/null
 pnpm exec wrangler r2 bucket create "$BUCKET" >/dev/null 2>&1 || true
+
+# 途中で止めた・失敗したときも Worker を残さない（E2E のアカウントのパスワードは公開されている）。--keep なら残す
+KEEP_ARG="${1:-}"
+TAIL=
+cleanup() {
+	[ -n "$TAIL" ] && kill "$TAIL" 2>/dev/null
+	if [ "$KEEP_ARG" != "--keep" ]; then
+		pnpm exec wrangler delete --name "$NAME" --force >/dev/null 2>&1 ||
+			echo "Worker を消せませんでした。--delete で消してください" >&2
+	fi
+}
+trap cleanup EXIT
 
 # 無料プランのアカウントでは CPU の上限を設定できない（code 100328）。その場合は上限を外して出す（無料プランの 10ms がそのまま効く）
 if ! pnpm exec wrangler deploy --config "$CONFIG" >"$OUT/deploy.log" 2>&1; then
@@ -99,7 +120,6 @@ done
 
 pnpm exec wrangler tail "$NAME" --format json >"$OUT/tail.json" 2>"$OUT/tail.err" &
 TAIL=$!
-trap 'kill $TAIL 2>/dev/null || true' EXIT
 sleep 5
 
 STATUS=0
@@ -107,9 +127,6 @@ E2E_BASE_URL="$URL" E2E_D1_ARGS="--remote --config $CONFIG" pnpm exec playwright
 
 sleep 10
 kill $TAIL 2>/dev/null || true
-if [ "${1:-}" != "--keep" ]; then
-	pnpm exec wrangler delete --name "$NAME" --force >/dev/null || echo "Worker を消せませんでした。--delete で消してください" >&2
-fi
 node scripts/tail-cpu.ts "$OUT/tail.json" | tee "$OUT/summary.txt"
 echo "E2E: $([ $STATUS = 0 ] && echo 成功 || echo "失敗（${STATUS}）")。Worker: $URL"
 exit $STATUS

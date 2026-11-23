@@ -5,8 +5,9 @@ import adapter from '@sveltejs/adapter-cloudflare';
 import { sveltekit } from '@sveltejs/kit/vite';
 
 // SvelteKit の runtime/server の一部はモジュールの評価時に node:fs・node:util などを読み込む。
-// Worker の起動（グローバルスコープ）でその分の CPU を使うので、最初に使うときまで遅らせる
-const KIT_LAZY_BUILTINS: { file: RegExp; replace: [string, string][] }[] = [
+// Worker の起動（グローバルスコープ）でその分の CPU を使うので、最初に使うときまで遅らせる。
+// 置き換えは元と同じ行数にし、新しい関数はファイルの末尾に足す（元の行の位置が変わらないので、ソースマップをそのまま使える）
+const KIT_LAZY_BUILTINS: { file: RegExp; replace: [string, string][]; append?: string }[] = [
 	{
 		// エラーのスタックを直すとき（fix_stack_trace の初回）に読み込む
 		file: /[\\/]@sveltejs[\\/]kit[\\/]src[\\/]runtime[\\/]server[\\/]sourcemaps\.js$/,
@@ -21,7 +22,22 @@ const cwd = globalThis.process?.cwd?.();
 
 /** @type {(file: string) => string} */
 const relative = cwd ? (file) => path.relative(cwd, file) : (file) => file;`,
-				`let fs, url, path, module, cwd, relative;
+				`let fs;
+let url;
+let path;
+let module;
+
+let cwd;
+
+/** @type {(file: string) => string} */
+let relative;`
+			],
+			[
+				'export let fix_stack_trace = (error) => {',
+				'export let fix_stack_trace = (error) => { load_builtins();'
+			]
+		],
+		append: `
 let builtins_loaded = false;
 function load_builtins() {
 	if (builtins_loaded) return;
@@ -32,13 +48,8 @@ function load_builtins() {
 	module = globalThis.process?.getBuiltinModule?.('node:module');
 	cwd = globalThis.process?.cwd?.();
 	relative = cwd ? (file) => path.relative(cwd, file) : (file) => file;
-}`
-			],
-			[
-				'export let fix_stack_trace = (error) => {',
-				'export let fix_stack_trace = (error) => {\n\tload_builtins();'
-			]
-		]
+}
+`
 	},
 	{
 		// リクエストのログを整形するとき（format_response の初回）に読み込む
@@ -51,13 +62,19 @@ function load_builtins() {
 	/** @type {(format: unknown, text: string) => string} */ ((_format, text) => text);`,
 				`let style_text;
 const styleText = (format, text) =>
-	(style_text ??=
-		globalThis.process?.getBuiltinModule?.('node:util')?.styleText ??
+	(style_text ??= globalThis.process?.getBuiltinModule?.('node:util')?.styleText ??
 		((_format, text) => text))(format, text);`
 			]
 		]
 	}
 ];
+
+const lineCount = (s: string) => s.split('\n').length;
+for (const { file, replace } of KIT_LAZY_BUILTINS) {
+	for (const [from, to] of replace) {
+		if (lineCount(from) !== lineCount(to)) throw new Error(`${file}: 置き換えの行数が元と違う`);
+	}
+}
 
 function lazyKitBuiltins(): Plugin {
 	return {
@@ -71,7 +88,9 @@ function lazyKitBuiltins(): Plugin {
 					this.warn(`${id} が変わったので、node: モジュールの読み込みを遅らせられない`);
 					return;
 				}
-				return patch.replace.reduce((out, [from, to]) => out.replace(from, to), code);
+				const out = patch.replace.reduce((acc, [from, to]) => acc.replace(from, to), code);
+				// 元の行は位置が変わらず、足した行は末尾にだけあるので、それまでのソースマップをそのまま使う
+				return { code: out + (patch.append ?? ''), map: null };
 			}
 		}
 	};

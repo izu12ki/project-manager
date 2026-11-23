@@ -101,7 +101,10 @@ async function connect(inspector: string) {
 	const targets: { webSocketDebuggerUrl?: string }[] = await (
 		await fetch(`${inspector}/json`)
 	).json();
-	const target = targets.find((t) => t.webSocketDebuggerUrl);
+	// 一覧には D1・R2 などの内部の Worker も並ぶ。アプリの Worker は core:user:<name>（miniflare の内部のものを除く）
+	const target = targets.find((t) =>
+		/\/core:user:(?!miniflare-)/.test(t.webSocketDebuggerUrl ?? '')
+	);
 	if (!target?.webSocketDebuggerUrl) throw new Error('inspector target not found');
 	// workerd は Origin の無い接続を受け付けない
 	const ws = new WebSocket(target.webSocketDebuggerUrl, {
@@ -118,9 +121,20 @@ async function connect(inspector: string) {
 		pending.get(d.id)?.(d.result);
 		pending.delete(d.id);
 	};
+	// wrangler dev が Worker を読み込み直している最中は応答が来ないことがあるので、待ち続けずに失敗させる
 	const send = <T>(method: string, params: object = {}) =>
-		new Promise<T>((resolve) => {
-			pending.set(++id, resolve as (r: unknown) => void);
+		new Promise<T>((resolve, reject) => {
+			const timer = setTimeout(
+				() =>
+					reject(
+						new Error(`${method}: インスペクタから応答がありません。もう一度実行してください`)
+					),
+				30_000
+			);
+			pending.set(++id, (r) => {
+				clearTimeout(timer);
+				resolve(r as T);
+			});
 			ws.send(JSON.stringify({ id, method, params }));
 		});
 	return { send, close: () => ws.close() };

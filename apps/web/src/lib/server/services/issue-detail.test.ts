@@ -90,6 +90,23 @@ describe('getIssueDetailRows', () => {
 		expect(got.children).toEqual([]);
 	});
 
+	it('子課題だけの担当者も名前を引く（別プロジェクトの同じ番号の課題の担当者は混ざらない）', async () => {
+		await createIssue(as(outsider), 'OTHER', {
+			title: '別プロジェクトの子 2',
+			parentNumber: 1,
+			assigneeIds: [outsider.id]
+		});
+		await createIssue(as(member), 'ACME', { title: '親', assigneeIds: [guest.id] });
+		await createIssue(as(member), 'ACME', {
+			title: '子',
+			parentNumber: 1,
+			assigneeIds: [member.id]
+		});
+		const got = await getIssueDetailRows(as(member), 'ACME', 1);
+		expect(got.issue.assignees).toEqual([{ id: guest.id, name: 'Guest' }]);
+		expect(got.children.map((c) => c.assignees)).toEqual([[{ id: member.id, name: 'Member' }]]);
+	});
+
 	it('無効化された担当者は、名前を出したまま選択肢の末尾に disabled で残す', async () => {
 		await createIssue(as(member), 'ACME', { title: 'A', assigneeIds: [guest.id] });
 		await db.update(userTable).set({ disabledAt: new Date() }).where(eq(userTable.id, guest.id));

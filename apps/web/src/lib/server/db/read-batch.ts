@@ -5,10 +5,19 @@
 //
 // 読み取り専用。db.batch は 1 つのトランザクションとして実行され、1 文が失敗すると同じまとまりの呼び出しはすべて失敗する。
 // 書き込みを混ぜると、無関係な読み取りの失敗で書き込みが取り消されるので、書き込みは ctx.db.batch で送ること
-import type { BatchItem } from 'drizzle-orm/batch';
+import type { BatchItem, BatchResponse } from 'drizzle-orm/batch';
 import type { DB } from '.';
 
-export type ReadBatch = DB['batch'];
+/**
+ * 読み取りの文（select と db.query）。insert・update・delete の文は `_.table`（書き込む先）を持つので、型で受け付けない。
+ * `.returning()` の付いた書き込みも同じ
+ */
+type ReadItem = BatchItem<'sqlite'> & { readonly _: { readonly table?: never } };
+
+/** db.batch と同じ形で、読み取りの文だけを受け付ける */
+export type ReadBatch = <U extends ReadItem, T extends Readonly<[U, ...U[]]>>(
+	batch: T
+) => Promise<BatchResponse<T>>;
 
 type Pending = {
 	items: BatchItem<'sqlite'>[];

@@ -486,7 +486,6 @@ async function applyPatch(
 	]);
 }
 
-/** 編集履歴（古い順）。課題が存在しない場合は空配列 */
 /** 課題の ID と削除日時（コメント・添付の一覧で、課題の有無と書き込めるかを確かめる）。batch にも入れられる */
 export function issueStateQuery(db: DB, of: ProjectCond, number: number) {
 	return db

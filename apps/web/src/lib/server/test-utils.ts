@@ -22,7 +22,7 @@ import { defaultFieldInserts } from './services/issue-fields';
  * - db.batch() の結果は列名をキーにした行で返る（drizzle はその値の並びを列の並びとして読む）ので、
  *   同じ名前の列（join した表の id・name など）があると値がずれる。batch の select では別名を付けること
  */
-export function emulateD1(client: Client): Client {
+export function emulateD1(client: Client, trips: { n: number } = { n: 0 }): Client {
 	const check = (stmt: InStatement) => {
 		const args = typeof stmt === 'string' ? [] : (stmt.args ?? []);
 		const n = Array.isArray(args) ? args.length : Object.keys(args).length;
@@ -44,11 +44,13 @@ export function emulateD1(client: Client): Client {
 				};
 			if (prop === 'execute')
 				return (stmt: InStatement) => {
+					trips.n++;
 					check(stmt);
 					return target.execute(stmt);
 				};
 			if (prop === 'batch')
 				return async (stmts: InStatement[], mode?: Parameters<Client['batch']>[1]) => {
+					trips.n++;
 					stmts.forEach(check);
 					const results = await target.batch(stmts, mode);
 					for (const r of results) {
@@ -66,13 +68,28 @@ export function emulateD1(client: Client): Client {
 	});
 }
 
+const tripCounters = new WeakMap<DB, { n: number }>();
+
 export async function createTestDb(): Promise<DB> {
 	const client = createClient({ url: ':memory:' });
 	// drizzle の migrator は内部でトランザクションを使うので、制約をかける前の client で流す
 	await migrate(drizzle({ client }), {
 		migrationsFolder: fileURLToPath(new URL('../../../drizzle', import.meta.url))
 	});
-	return drizzle({ client: emulateD1(client), relations }) as unknown as DB;
+	const trips = { n: 0 };
+	const db = drizzle({ client: emulateD1(client, trips), relations }) as unknown as DB;
+	tripCounters.set(db, trips);
+	return db;
+}
+
+/**
+ * createTestDb() の DB へこれまでに送った回数（1 つのクエリも 1 回の batch も 1 回）。
+ * D1 では 1 往復ごとに CPU 時間がかかるので、画面 1 つ分の読み取りが何往復かをテストで固定するのに使う
+ */
+export function roundTrips(db: DB): number {
+	const trips = tripCounters.get(db);
+	if (!trips) throw new Error('roundTrips: createTestDb() で作った DB ではありません');
+	return trips.n;
 }
 
 export function createTestBase(

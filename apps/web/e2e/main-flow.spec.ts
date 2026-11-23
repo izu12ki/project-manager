@@ -18,7 +18,11 @@ const PNG = Buffer.from(
 );
 
 const PW = 'password-1234';
-const HOME = /localhost:4173\/$/;
+// 接続先。既定は scripts/e2e-server.sh が起動する手元の wrangler dev。
+// E2E_BASE_URL で別の環境（scripts/free-plan-check.sh の検証用 Worker）に向けられる
+const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:4173';
+const ORIGIN = new URL(BASE_URL).origin;
+const HOME = new RegExp(`^${ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/$`);
 
 async function logout(page: Page) {
 	await page.getByTestId('user-menu-trigger').click();
@@ -34,14 +38,15 @@ async function login(page: Page, email: string, password = PW) {
 	await expect(page).toHaveURL(HOME);
 }
 
-/** E2E のサーバーが使うローカル D1（scripts/e2e-server.sh の --persist-to）で SQL を流し、結果の行を返す */
+/**
+ * E2E のサーバーが使う D1 で SQL を流し、結果の行を返す。既定は手元の D1（scripts/e2e-server.sh の --persist-to）。
+ * E2E_D1_ARGS で wrangler d1 execute に渡す引数を変えられる（検証用 Worker の D1 なら --remote --config …）
+ */
+const D1_ARGS = (process.env.E2E_D1_ARGS ?? '--local --persist-to .wrangler/e2e-state').split(' ');
 function d1Local(sql: string): Record<string, unknown>[] {
 	const out = execFileSync(
 		'pnpm',
-		[
-			...['exec', 'wrangler', 'd1', 'execute', 'DB', '--local'],
-			...['--persist-to', '.wrangler/e2e-state', '--json', '--command', sql]
-		],
+		[...['exec', 'wrangler', 'd1', 'execute', 'DB', ...D1_ARGS], ...['--json', '--command', sql]],
 		{ encoding: 'utf8', env: { ...process.env, WRANGLER_SEND_METRICS: 'false' } }
 	);
 	return JSON.parse(out)[0].results;
@@ -292,7 +297,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await logout(page);
 	// スクリプトなしで送られた（ブラウザで作る鍵が無い）ログインは、生のパスワードが正しくても受け付けない
 	const noKey = await page.request.post('/login', {
-		headers: { Origin: 'http://localhost:4173' },
+		headers: { Origin: ORIGIN },
 		form: { email: 'admin@example.com', password: PW }
 	});
 	expect(noKey.status()).toBe(400);
@@ -394,7 +399,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 
 	// 5b. 添付 API: アップロード → 配信ヘッダ（HTML は必ずダウンロード）→ 存在しない ID は 404
 	const up = await page.request.post('/projects/ACME/attachments', {
-		headers: { Origin: 'http://localhost:4173', Accept: 'application/json' },
+		headers: { Origin: ORIGIN, Accept: 'application/json' },
 		multipart: {
 			file: {
 				name: '仕様書.html',
@@ -481,10 +486,13 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(myComment.locator('.markdown')).toHaveText('@顧客 太郎 確認お願いします');
 	// 絵文字でリアクションし、ホバーで誰が付けたかを出す。もう一度押すと外れる
 	await myComment.getByLabel('リアクションを追加').first().click();
+	// 画面は保存を待たずに先に表示を変えるので、再読み込みの前に保存の応答を待つ（遠い環境では再読み込みが送信を打ち切る）
+	const reacted = page.waitForResponse((r) => r.url().includes('/reactToComment'));
 	await myComment
 		.getByRole('group', { name: 'リアクション' })
 		.getByRole('button', { name: '🎉' })
 		.click();
+	await reacted;
 	const party = myComment.locator('button.reaction', { hasText: '🎉' });
 	await expect(party).toHaveAttribute('aria-pressed', 'true');
 	await expect(party).toContainText('1');
@@ -511,10 +519,12 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	).toBeVisible();
 	await page.goto(issueUrl);
 	await myComment.getByLabel('リアクションを追加').first().click();
+	const shipped = page.waitForResponse((r) => r.url().includes('/reactToComment'));
 	await myComment
 		.getByRole('group', { name: 'リアクション' })
 		.getByRole('button', { name: ':ship_it:' })
 		.click();
+	await shipped;
 	const shipIt = myComment.locator('button.reaction[aria-label^=":ship_it:"]');
 	await expect(shipIt).toHaveAttribute('aria-pressed', 'true');
 	await expect(shipIt.locator('img')).toHaveAttribute('src', /^\/emoji\/[0-9a-f-]{36}$/);
@@ -1048,7 +1058,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await viewerPage.goto('/notifications');
 	await expect(viewerPage.getByRole('heading', { name: '通知' })).toBeVisible();
 	await expect(viewerPage.getByRole('button', { name: 'すべて既読にする' })).toHaveCount(0);
-	const origin = { Origin: 'http://localhost:4173' };
+	const origin = { Origin: ORIGIN };
 	const viaAction = await viewerPage.request.post('/account?/changePassword', {
 		headers: origin,
 		form: { currentPasswordKey: 'a'.repeat(64), newPasswordKey: 'b'.repeat(64) }
@@ -1426,7 +1436,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	// 17. パスワード変更で現在のパスワードを 5 回間違えると、しばらく試せない（盗んだセッションでの総当たり対策）
 	const changeWith = (currentPasswordKey: string) =>
 		page.request.post('/account?/changePassword', {
-			headers: { Origin: 'http://localhost:4173' },
+			headers: { Origin: ORIGIN },
 			form: { currentPasswordKey, newPasswordKey: 'b'.repeat(64) }
 		});
 	for (let i = 0; i < 4; i++) {

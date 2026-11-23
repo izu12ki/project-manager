@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { hashPassword } from 'better-auth/crypto';
 import {
 	expect,
 	test,
@@ -33,23 +34,28 @@ async function login(page: Page, email: string, password = PW) {
 	await expect(page).toHaveURL(HOME);
 }
 
-/**
- * いちばん新しいパスワード再設定のトークン。E2E のメールは送らずログに出すだけなので、
- * E2E のサーバーが使うローカル D1（scripts/e2e-server.sh の --persist-to）から読む
- */
-function latestResetToken(): string {
+/** E2E のサーバーが使うローカル D1（scripts/e2e-server.sh の --persist-to）で SQL を流し、結果の行を返す */
+function d1Local(sql: string): Record<string, unknown>[] {
 	const out = execFileSync(
 		'pnpm',
 		[
 			...['exec', 'wrangler', 'd1', 'execute', 'DB', '--local'],
-			...['--persist-to', '.wrangler/e2e-state', '--json', '--command'],
-			"SELECT identifier FROM verification WHERE identifier LIKE 'reset-password:%' ORDER BY created_at DESC LIMIT 1"
+			...['--persist-to', '.wrangler/e2e-state', '--json', '--command', sql]
 		],
 		{ encoding: 'utf8', env: { ...process.env, WRANGLER_SEND_METRICS: 'false' } }
 	);
-	const identifier: string = JSON.parse(out)[0].results[0].identifier;
-	return identifier.slice('reset-password:'.length);
+	return JSON.parse(out)[0].results;
 }
+
+/** いちばん新しいパスワード再設定のトークン。E2E のメールは送らずログに出すだけなので、D1 から読む */
+function latestResetToken(): string {
+	const [row] = d1Local(
+		"SELECT identifier FROM verification WHERE identifier LIKE 'reset-password:%' ORDER BY created_at DESC LIMIT 1"
+	);
+	return String(row.identifier).slice('reset-password:'.length);
+}
+
+const MEMBER_ID = `(SELECT id FROM "user" WHERE email = 'member@example.com')`;
 
 /** 遠い回線を真似て、一致した通信を ms だけ遅らせる。戻り値で元に戻す */
 async function slowDown(page: Page, url: string | RegExp, ms: number) {
@@ -1405,6 +1411,17 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.getByRole('button', { name: 'パスワードを再設定' }).click();
 	await expect(page).toHaveURL(/\/login$/);
 	await login(page, 'member@example.com', 'reset-password-1');
+
+	// 16. 移行期間: 旧形式（better-auth の scrypt）のハッシュの人もログインでき、新しい形式に保存し直される
+	await logout(page);
+	const legacyHash = await hashPassword('legacy-password-1');
+	d1Local(`UPDATE account SET password = '${legacyHash}' WHERE user_id = ${MEMBER_ID}`);
+	await login(page, 'member@example.com', 'legacy-password-1');
+	expect(
+		String(d1Local(`SELECT password FROM account WHERE user_id = ${MEMBER_ID}`)[0].password)
+	).toMatch(/^pbkdf2-sha256\$600000\$/);
+	await logout(page);
+	await login(page, 'member@example.com', 'legacy-password-1');
 
 	expect(problems).toEqual([]);
 });

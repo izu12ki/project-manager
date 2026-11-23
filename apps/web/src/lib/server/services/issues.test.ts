@@ -5,7 +5,14 @@ import { eq, sql } from 'drizzle-orm';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { project as projectTable, issue as issueTable, user as userTable } from '../db/schema';
-import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
+import {
+	createTestBase,
+	createTestDb,
+	ctxOf,
+	roundTrips,
+	seedProject,
+	seedUser
+} from '../test-utils';
 import {
 	createIssue,
 	deleteIssue,
@@ -21,7 +28,7 @@ import {
 import { getIssueDetailRows } from './issue-detail';
 import { createCategory, listCategories, listIssueTypes } from './issue-fields';
 import { categoryIdsValue } from './issue-input';
-import { setProjectArchived } from './projects';
+import { requireProject, setProjectArchived } from './projects';
 
 describe('issues', () => {
 	let db: DB;
@@ -689,6 +696,69 @@ describe('issues', () => {
 			await expect(listTimeline(as(outsider), 'ACME')).rejects.toMatchObject({
 				code: 'not_found'
 			});
+		});
+	});
+
+	describe('一覧の担当者名とカテゴリー名', () => {
+		async function insertRaw(
+			number: number,
+			values: { assigneeIds?: string[]; categoryIds?: string[] }
+		) {
+			const p = await requireProject(as(admin), 'ACME');
+			await db.insert(issueTable).values({
+				id: `raw-${number}`,
+				projectId: p.id,
+				number,
+				title: `raw ${number}`,
+				reporterId: admin.id,
+				position: `a${number}`,
+				...values
+			});
+		}
+
+		it('listIssues keeps assignee order and names of disabled users', async () => {
+			await createIssue(as(member), 'ACME', { title: 'A', assigneeIds: [guest.id, member.id] });
+			await db.update(userTable).set({ disabledAt: new Date() }).where(eq(userTable.id, guest.id));
+			await insertRaw(2, { assigneeIds: [member.id, 'gone'] });
+			const byNumber = new Map(
+				(await listIssues(as(member), 'ACME')).map((i) => [i.number, i.assignees])
+			);
+			expect(byNumber.get(1)).toEqual([
+				{ id: guest.id, name: 'guest' },
+				{ id: member.id, name: 'member' }
+			]);
+			expect(byNumber.get(2)).toEqual([{ id: member.id, name: 'member' }]);
+		});
+
+		it('listIssues lists categories in project order and drops deleted ones', async () => {
+			await createCategory(as(admin), 'ACME', { name: 'X' });
+			await createCategory(as(admin), 'ACME', { name: 'Y' });
+			const [x, y] = await listCategories(as(admin), 'ACME');
+			await insertRaw(1, { categoryIds: ['gone', y.id, x.id] });
+			const [row] = await listIssues(as(member), 'ACME');
+			expect(row.categories).toEqual([
+				{ id: x.id, name: 'X' },
+				{ id: y.id, name: 'Y' }
+			]);
+			expect(row.categoryIds).toEqual(['gone', y.id, x.id]);
+		});
+
+		it('listIssues reads issues in one round trip after the project lookup', async () => {
+			await createCategory(as(admin), 'ACME', { name: 'X' });
+			const [x] = await listCategories(as(admin), 'ACME');
+			await createIssue(as(member), 'ACME', {
+				title: 'A',
+				assigneeIds: [member.id],
+				categoryIds: [x.id]
+			});
+			// リクエスト内のキャッシュ（memo）があるとき、プロジェクトの行は引き直さない
+			const ctx = { ...as(member), memo: new Map() };
+			await requireProject(ctx, 'ACME');
+			const before = roundTrips(db);
+			const [row] = await listIssues(ctx, 'ACME');
+			expect(roundTrips(db) - before).toBe(1);
+			expect(row.assignees).toEqual([{ id: member.id, name: 'member' }]);
+			expect(row.categories).toEqual([{ id: x.id, name: 'X' }]);
 		});
 	});
 });

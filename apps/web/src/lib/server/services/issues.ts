@@ -7,6 +7,7 @@ import * as v from 'valibot';
 import {
 	DONE_STATUS,
 	INITIAL_STATUS,
+	type ColorName,
 	type IssueChangeItem,
 	type Priority,
 	type Status,
@@ -59,13 +60,23 @@ const parent = alias(issue, 'parent');
 const reporter = alias(user, 'reporter');
 const deleter = alias(user, 'deleter');
 
+/**
+ * 担当者の名前（assigneeIds の順。存在しない ID は除く）とカテゴリーの名前（プロジェクトのカテゴリー順。
+ * 削除したものは除く）を JSON の配列で同じ文に入れる。別の問い合わせにすると D1 への往復が増えるため
+ */
+const assigneesJson = sql<string>`(select json_group_array(json_object('id', ${user.id}, 'name', ${user.name}) order by j.key)
+	from json_each(${issue.assigneeIds}) as j join ${user} on ${user.id} = j.value)`;
+const categoriesJson = sql<string>`(select json_group_array(json_object('id', ${category.id}, 'name', ${category.name}) order by ${category.createdAt}, ${category.id})
+	from ${category} where ${category.id} in (select value from json_each(${issue.categoryIds})))`;
+
+// batch に入れても列名が重ならないよう、join した表の列と式には別名を付ける（D1 の batch は同じ名前の列をまとめてしまう）
 const listColumns = {
 	id: issue.id,
 	number: issue.number,
 	title: issue.title,
 	typeId: issue.typeId,
-	typeName: issueType.name,
-	typeColor: issueType.color,
+	typeName: sql<string | null>`${issueType.name}`.as('type_name'),
+	typeColor: sql<ColorName | null>`${issueType.color}`.as('type_color'),
 	status: issue.status,
 	resolution: issue.resolution,
 	priority: issue.priority,
@@ -74,16 +85,18 @@ const listColumns = {
 	position: issue.position,
 	assigneeIds: issue.assigneeIds,
 	parentId: issue.parentId,
-	parentNumber: parent.number,
+	parentNumber: sql<number | null>`${parent.number}`.as('parent_number'),
 	categoryIds: issue.categoryIds,
 	milestoneId: issue.milestoneId,
-	milestoneName: milestone.name,
+	milestoneName: sql<string | null>`${milestone.name}`.as('milestone_name'),
 	reporterId: issue.reporterId,
 	createdAt: issue.createdAt,
-	updatedAt: issue.updatedAt
+	updatedAt: issue.updatedAt,
+	assigneesJson: assigneesJson.as('assignees_json'),
+	categoriesJson: categoriesJson.as('categories_json')
 };
 
-export type IssueListItem = Awaited<ReturnType<typeof selectIssues>>[number];
+export type IssueListItem = ReturnType<typeof toIssueListItems>[number];
 export type AssigneeRef = { id: string; name: string };
 export type CategoryRef = { id: string; name: string };
 
@@ -127,8 +140,9 @@ export async function withCategories<T extends { categoryIds: string[] }>(
 	}));
 }
 
-async function selectIssues(db: DB, where: SQL | undefined, order: SQL[]) {
-	const rows = await db
+/** 課題の一覧の select。batch にも入れられる。結果は toIssueListItems で直す */
+export function issueListQuery(db: DB, where: SQL | undefined, order: SQL[]) {
+	return db
 		.select(listColumns)
 		.from(issue)
 		.leftJoin(parent, eq(issue.parentId, parent.id))
@@ -136,11 +150,21 @@ async function selectIssues(db: DB, where: SQL | undefined, order: SQL[]) {
 		.leftJoin(milestone, eq(issue.milestoneId, milestone.id))
 		.where(where)
 		.orderBy(...order);
-	const [named, categorized] = await Promise.all([
-		withAssignees(db, rows),
-		withCategories(db, rows)
-	]);
-	return named.map((r, i) => ({ ...r, categories: categorized[i].categories }));
+}
+
+type IssueListRow = Awaited<ReturnType<typeof issueListQuery>>[number];
+
+/** issueListQuery の行の JSON の列を assignees・categories に直す */
+export function toIssueListItems(rows: IssueListRow[]) {
+	return rows.map(({ assigneesJson, categoriesJson, ...r }) => ({
+		...r,
+		assignees: JSON.parse(assigneesJson) as AssigneeRef[],
+		categories: JSON.parse(categoriesJson) as CategoryRef[]
+	}));
+}
+
+async function selectIssues(db: DB, where: SQL | undefined, order: SQL[]) {
+	return toIssueListItems(await issueListQuery(db, where, order));
 }
 
 /** ID の配列の列で絞る。'none' は空配列、それ以外はその ID を含む課題 */

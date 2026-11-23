@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, isNotNull, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 import { inList } from '../db/limits';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
@@ -263,26 +263,6 @@ export async function listIssues(
 ) {
 	const p = await requireProject(ctx, key);
 	return selectIssues(ctx.db, filterConds(p.key, byProjectId(p.id), filters), sortOrder(sort));
-}
-
-/** プロジェクトごとの未完了（完了以外）の課題数。projectIds は呼び出し側で閲覧可能なものに限ること。 */
-export async function countOpenIssues(
-	ctx: AppContext,
-	projectIds: string[]
-): Promise<Record<string, number>> {
-	if (projectIds.length === 0) return {};
-	const rows = await ctx.db
-		.select({ projectId: issue.projectId, n: count() })
-		.from(issue)
-		.where(
-			and(
-				inList(issue.projectId, projectIds),
-				ne(issue.status, DONE_STATUS),
-				isNull(issue.deletedAt)
-			)
-		)
-		.groupBy(issue.projectId);
-	return Object.fromEntries(rows.map((r) => [r.projectId, r.n]));
 }
 
 /**

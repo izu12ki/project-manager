@@ -4,13 +4,14 @@
 	import FormAlert from '#lib/components/FormAlert.svelte';
 	import RolePill from '#lib/components/RolePill.svelte';
 	import {
+		formatImportFailure,
 		formatImportPreview,
 		formatImportResult,
-		IMPORT_CHUNK,
 		inviteAllowed,
 		MAX_IMPORT_USERS,
 		mergeImportResults,
 		readBacklogUsers,
+		sendImportChunks,
 		SKIP_LABEL,
 		type BacklogUserRow,
 		type ImportRole,
@@ -37,6 +38,8 @@
 	let pending = $state(false);
 	let message = $state('');
 	let result = $state('');
+	/** 取り込みの進み具合（送り終えた人数と、送る人数）。取り込み中だけ値を持つ */
+	let progress = $state<{ sent: number; total: number } | null>(null);
 
 	/** 処理対象になる行か。招待は選んだロールで参加プロジェクトなしでも招待できるかが変わる */
 	const importable = (r: PlanRow) =>
@@ -109,8 +112,9 @@
 		if (!preview) return;
 		pending = true;
 		message = '';
+		result = '';
 		const { plan, rows } = preview;
-		// 取り込まない行は送らずにここで理由を数え（確認画面の内訳と同じ）、取り込む行を IMPORT_CHUNK 人ずつ送る。
+		// 取り込まない行は送らずにここで理由を数え（確認画面の内訳と同じ）、取り込む行を sendImportChunks で分けて送る。
 		// Workers の無料プランでは 1 リクエストの D1 への問い合わせと招待メールの送信が 50 回までのため
 		const unsent: UserImportResult = {
 			invited: 0,
@@ -125,22 +129,27 @@
 			if (skip) unsent.skipped[skip] = (unsent.skipped[skip] ?? 0) + 1;
 			else targets.push({ ...row, include: true, role: roleOf[row.rowNumber] });
 		});
-		const parts = [unsent];
+		progress = { sent: 0, total: targets.length };
 		try {
-			for (let i = 0; i < targets.length; i += IMPORT_CHUNK) {
-				parts.push(await runUserImport({ rows: targets.slice(i, i + IMPORT_CHUNK) }));
-			}
-			close();
-			result = formatImportResult(mergeImportResults(parts));
-			await invalidateAll();
-		} catch (err) {
-			message = failure(
-				err,
-				'途中で失敗しました。一部の人は招待や参加の追加が済んでいる可能性があります。CSV を読み込み直して確認してください'
+			const outcome = await sendImportChunks(
+				targets,
+				(rows) => runUserImport({ rows }),
+				(n) => (progress = { sent: n, total: targets.length })
 			);
-			// 途中まで招待できているかもしれないので、招待中の一覧を読み直す
+			const done = formatImportResult(mergeImportResults([unsent, ...outcome.results]));
+			if (outcome.ok) {
+				close();
+				result = done;
+			} else {
+				const cause = failure(outcome.error, '取り込みの途中で失敗しました');
+				message = formatImportFailure(cause, targets.length, outcome.sent);
+				// 済んだ回があれば、その分の結果も出す
+				if (outcome.sent > 0) result = `途中までの結果: ${done}`;
+			}
+			// 途中で失敗しても、それまでの分は招待できているので、招待中の一覧を読み直す
 			await invalidateAll();
 		} finally {
+			progress = null;
 			pending = false;
 		}
 	}
@@ -319,6 +328,11 @@
 					やめる
 				</button>
 			</div>
+			{#if progress}
+				<p role="status" class="m-0 text-[0.8125rem] text-muted-foreground">
+					取り込み中… {progress.sent} / {progress.total} 人
+				</p>
+			{/if}
 		</div>
 	{/if}
 </div>

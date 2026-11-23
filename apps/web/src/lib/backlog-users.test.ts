@@ -1,12 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+	formatImportFailure,
 	formatImportPreview,
 	formatImportResult,
+	IMPORT_CHUNK,
 	inviteAllowed,
 	mergeImportResults,
 	readBacklogUsers,
 	roleFromBacklog,
+	sendImportChunks,
 	type BacklogUserRow
 } from '#lib/backlog-users.ts';
 import { decodeCsv } from '#lib/csv.ts';
@@ -220,5 +223,58 @@ describe('mergeImportResults', () => {
 			inviteFailed: [a],
 			mailFailed: [b]
 		});
+	});
+});
+
+describe('sendImportChunks', () => {
+	const ok = (n: number) => ({
+		invited: n,
+		joined: 0,
+		skipped: {},
+		inviteFailed: [],
+		mailFailed: []
+	});
+	const people = Array.from({ length: IMPORT_CHUNK * 2 + 3 }, (_, i) => i);
+
+	it('IMPORT_CHUNK 人ずつ順に送り、送り終えた人数を知らせる', async () => {
+		const sentRows: number[][] = [];
+		const progress: number[] = [];
+		const got = await sendImportChunks(
+			people,
+			async (rows) => {
+				sentRows.push(rows);
+				return ok(rows.length);
+			},
+			(n) => progress.push(n)
+		);
+		expect(sentRows.map((r) => r.length)).toEqual([IMPORT_CHUNK, IMPORT_CHUNK, 3]);
+		expect(sentRows.flat()).toEqual(people);
+		expect(progress).toEqual([IMPORT_CHUNK, IMPORT_CHUNK * 2, people.length]);
+		expect(got).toEqual({ ok: true, results: [ok(IMPORT_CHUNK), ok(IMPORT_CHUNK), ok(3)] });
+	});
+
+	it('途中で失敗したら残りは送らず、送り終えた回の結果と人数を返す', async () => {
+		const error = new Error('boom');
+		let calls = 0;
+		const got = await sendImportChunks(people, async (rows) => {
+			if (++calls === 2) throw error;
+			return ok(rows.length);
+		});
+		expect(calls).toBe(2);
+		expect(got).toEqual({ ok: false, results: [ok(IMPORT_CHUNK)], sent: IMPORT_CHUNK, error });
+	});
+});
+
+describe('formatImportFailure', () => {
+	it('済んだ人数と、どこから済んでいないかもしれないかを伝える', () => {
+		expect(formatImportFailure('途中で失敗しました', 20, 8)).toBe(
+			'途中で失敗しました。20 人のうち 8 人までは済みました。9 人目からは、済んでいないか一部だけ済んでいる可能性があります。CSV を読み込み直して確認してください'
+		);
+	});
+
+	it('最初の回で失敗したときは人数を出さない', () => {
+		expect(formatImportFailure('途中で失敗しました', 20, 0)).toBe(
+			'途中で失敗しました。招待や参加の追加は済んでいないか、一部だけ済んでいる可能性があります。CSV を読み込み直して確認してください'
+		);
 	});
 });

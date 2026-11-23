@@ -165,3 +165,39 @@ export function mergeImportResults(parts: UserImportResult[]): UserImportResult 
 		mailFailed: parts.flatMap((p) => p.mailFailed)
 	};
 }
+
+/**
+ * 取り込む行を IMPORT_CHUNK 人ずつ順に送る。1 回送り終えるたびに onProgress に送り終えた人数を渡す。
+ * 途中で失敗したら、それまでに送り終えた回の結果と人数を返す（失敗した回の人は、一部だけ済んでいる可能性がある）
+ */
+export async function sendImportChunks<T>(
+	targets: readonly T[],
+	send: (rows: T[]) => Promise<UserImportResult>,
+	onProgress: (sent: number) => void = () => {}
+): Promise<
+	| { ok: true; results: UserImportResult[] }
+	| { ok: false; results: UserImportResult[]; sent: number; error: unknown }
+> {
+	const results: UserImportResult[] = [];
+	let sent = 0;
+	while (sent < targets.length) {
+		const rows = targets.slice(sent, sent + IMPORT_CHUNK);
+		try {
+			results.push(await send(rows));
+		} catch (error) {
+			return { ok: false, results, sent, error };
+		}
+		sent += rows.length;
+		onProgress(sent);
+	}
+	return { ok: true, results };
+}
+
+/** 途中で失敗したときの文言。cause は失敗の理由、total は送る予定だった人数、sent は送り終えた人数 */
+export function formatImportFailure(cause: string, total: number, sent: number): string {
+	const rest =
+		sent === 0
+			? '招待や参加の追加は済んでいないか、一部だけ済んでいる可能性があります'
+			: `${total} 人のうち ${sent} 人までは済みました。${sent + 1} 人目からは、済んでいないか一部だけ済んでいる可能性があります`;
+	return `${cause}。${rest}。CSV を読み込み直して確認してください`;
+}

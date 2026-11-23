@@ -211,7 +211,9 @@ function keywordCond(projectKey: string, q: string | undefined): SQL | undefined
 	// LIKE は使わない（D1 は LIKE のパターンが 50 バイトまでで、日本語 17 文字ほどで失敗する）。
 	// instr なら長さの制限がなく、% や _ も文字のまま比べる。lower は LIKE と同じく英字だけを小文字にする
 	const title = sql`instr(lower(${issue.title}), lower(${kw})) > 0`;
-	const m = kw.match(new RegExp(`^(?:${projectKey}-|#)?(\\d{1,9})$`, 'i'));
+	// キーは URL から来ることがある（一覧の batch はプロジェクトの行を待たない）。正規表現の記号は文字として扱う
+	const key = projectKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	const m = kw.match(new RegExp(`^(?:${key}-|#)?(\\d{1,9})$`, 'i'));
 	return m ? or(title, eq(issue.number, Number(m[1]))) : title;
 }
 

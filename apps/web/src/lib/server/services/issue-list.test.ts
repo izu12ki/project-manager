@@ -136,6 +136,17 @@ describe('getIssueListRows', () => {
 		});
 	});
 
+	it('treats a project key from the URL as plain text in the keyword search', async () => {
+		const sort: IssueSort = { key: 'number', order: 'desc' };
+		// 正規表現として解釈すると、構文エラーになったり（A(）、照合に指数関数的な時間がかかったり（(a+)+）する
+		await expect(getIssueListRows(as(admin), 'A(', { q: '12' }, sort)).rejects.toMatchObject({
+			code: 'not_found'
+		});
+		await expect(
+			getIssueListRows(as(admin), '(a+)+', { q: `${'a'.repeat(28)}!` }, sort)
+		).rejects.toMatchObject({ code: 'not_found' });
+	});
+
 	it('reads everything in one round trip', async () => {
 		const before = roundTrips(db);
 		await getIssueListRows(as(member), 'ACME', { q: 'ACME-1' }, { key: 'due', order: 'asc' });

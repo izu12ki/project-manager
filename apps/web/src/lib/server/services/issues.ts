@@ -22,7 +22,13 @@ import { AppError } from '../errors';
 import { notify } from '../notifications';
 import { emptyToNull, parse } from '../validation';
 import { linkAttachments } from './attachment-links';
-import { listStatusesOf } from './issue-fields';
+import {
+	categoriesQuery,
+	milestonesQuery,
+	statusesQuery,
+	type CategoryRow,
+	type MilestoneRow
+} from './issue-fields';
 import {
 	StatusSchema,
 	assertStatusIn,
@@ -38,8 +44,20 @@ import {
 	updateEventsOf,
 	withCategoryGuard
 } from './issue-input';
-import { byProjectId, type ProjectCond } from './project-access';
-import { assertWritable, forgetProject, requireProject, type ProjectRow } from './projects';
+import {
+	byProjectId,
+	checkProjectAccess,
+	ofProject,
+	projectAccessQuery,
+	type ProjectCond
+} from './project-access';
+import {
+	assertWritable,
+	assignableUsersQuery,
+	forgetProject,
+	requireProject,
+	type ProjectRow
+} from './projects';
 
 const STALE = '並び順が古くなっています。画面を再読み込みしてください';
 
@@ -267,49 +285,76 @@ export async function countOpenIssues(
 	return Object.fromEntries(rows.map((r) => [r.projectId, r.n]));
 }
 
-/** 列はプロジェクトのステータス順。絞り込んだ場合も、カード間の並び順は全体の position を保つ。 */
+/**
+ * カンバン（remote query の getBoard）に要るもの。1 回の batch（D1 への 1 往復）で引く。
+ * 列はプロジェクトのステータス順。絞り込んだ場合も、カード間の並び順は全体の position を保つ。
+ */
 export async function listBoard(
 	ctx: AppContext,
 	key: string,
 	filters: Omit<IssueFilters, 'status'> = {}
-): Promise<{ statuses: StatusDef[]; columns: Record<Status, IssueListItem[]> }> {
-	const p = await requireProject(ctx, key);
-	const [statuses, rows] = await Promise.all([
-		listStatusesOf(ctx.db, p.id),
-		selectIssues(ctx.db, filterConds(p.key, byProjectId(p.id), { ...filters, status: undefined }), [
+): Promise<{
+	statuses: StatusDef[];
+	columns: Record<Status, IssueListItem[]>;
+	milestones: MilestoneRow[];
+}> {
+	const { db } = ctx;
+	const of = ofProject(db, key);
+	const [access, statuses, rows, milestones] = await db.batch([
+		projectAccessQuery(ctx, key),
+		statusesQuery(db, of),
+		issueListQuery(db, filterConds(key, of, { ...filters, status: undefined }), [
 			asc(issue.position),
 			asc(issue.number)
-		])
+		]),
+		milestonesQuery(db, of)
 	]);
+	checkProjectAccess(ctx, access);
 	const columns: Record<Status, IssueListItem[]> = Object.fromEntries(
 		statuses.map((s) => [s.key, [] as IssueListItem[]])
 	);
 	// 定義が消えたステータスの課題は初期ステータスの列に出す
-	for (const r of rows) (columns[r.status] ?? columns[INITIAL_STATUS])?.push(r);
-	return { statuses, columns };
+	for (const r of toIssueListItems(rows)) (columns[r.status] ?? columns[INITIAL_STATUS])?.push(r);
+	return { statuses, columns, milestones };
 }
 
 export type TimelineItem = IssueListItem & { canEdit: boolean };
 
 /**
- * タイムライン用。日付のある課題はすべて（完了を含む）、日付のない課題は未完了のものだけ返す。
+ * タイムライン（remote query の getTimeline）に要るもの。1 回の batch（D1 への 1 往復）で引く。
+ * 日付のある課題はすべて（完了を含む）、日付のない課題は未完了のものだけ返す。
  * 表示範囲では絞らない（範囲外の課題にも行を出すため）。並べ替え・グループ化はクライアント側で行う。
  */
 export async function listTimeline(
 	ctx: AppContext,
 	key: string
-): Promise<{ scheduled: TimelineItem[]; unscheduled: TimelineItem[] }> {
-	const p = await requireProject(ctx, key);
-	const rows = await selectIssues(ctx.db, filterConds(p.key, byProjectId(p.id), {}), [
-		asc(issue.number)
+): Promise<{
+	scheduled: TimelineItem[];
+	unscheduled: TimelineItem[];
+	milestones: MilestoneRow[];
+	categories: CategoryRow[];
+	assignees: Awaited<ReturnType<typeof assignableUsersQuery>>;
+}> {
+	const { db } = ctx;
+	const of = ofProject(db, key);
+	const [access, rows, milestones, categories, assignees] = await db.batch([
+		projectAccessQuery(ctx, key),
+		issueListQuery(db, filterConds(key, of, {}), [asc(issue.number)]),
+		milestonesQuery(db, of),
+		categoriesQuery(db, of),
+		assignableUsersQuery(db, of)
 	]);
-	const items = rows.map((r) => ({
+	const p = checkProjectAccess(ctx, access);
+	const items = toIssueListItems(rows).map((r) => ({
 		...r,
 		canEdit: !p.archivedAt && can(ctx.actor, 'issue:edit', { reporterId: r.reporterId })
 	}));
 	return {
 		scheduled: items.filter((i) => i.startDate || i.dueDate),
-		unscheduled: items.filter((i) => !i.startDate && !i.dueDate && i.status !== DONE_STATUS)
+		unscheduled: items.filter((i) => !i.startDate && !i.dueDate && i.status !== DONE_STATUS),
+		milestones,
+		categories,
+		assignees
 	};
 }
 

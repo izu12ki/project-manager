@@ -26,9 +26,15 @@ import {
 	updateIssue
 } from './issues';
 import { getIssueDetailRows } from './issue-detail';
-import { createCategory, listCategories, listIssueTypes } from './issue-fields';
+import {
+	createCategory,
+	createMilestone,
+	listCategories,
+	listIssueTypes,
+	listMilestones
+} from './issue-fields';
 import { categoryIdsValue } from './issue-input';
-import { requireProject, setProjectArchived } from './projects';
+import { listAssignableUsers, requireProject, setProjectArchived } from './projects';
 
 describe('issues', () => {
 	let db: DB;
@@ -759,6 +765,44 @@ describe('issues', () => {
 			expect(roundTrips(db) - before).toBe(1);
 			expect(row.assignees).toEqual([{ id: member.id, name: 'member' }]);
 			expect(row.categories).toEqual([{ id: x.id, name: 'X' }]);
+		});
+	});
+
+	describe('カンバンとガントは 1 往復', () => {
+		beforeEach(async () => {
+			await createCategory(as(admin), 'ACME', { name: 'X' });
+			await createMilestone(as(admin), 'ACME', { name: 'v1', releaseDate: '2026-12-01' });
+			await seedProject(db, { key: 'OTHER' });
+			await createMilestone(as(admin), 'OTHER', { name: '別プロジェクト' });
+			await createIssue(as(member), 'ACME', { title: 'A', dueDate: '2026-12-01' });
+			await createIssue(as(member), 'ACME', { title: 'B', status: 'done' });
+		});
+
+		it('listBoard returns the milestones too, in one round trip', async () => {
+			const [ms] = await listMilestones(as(member), 'ACME');
+			const before = roundTrips(db);
+			const board = await listBoard(as(member), 'ACME', { milestoneId: ms.id });
+			expect(roundTrips(db) - before).toBe(1);
+			expect(board.milestones).toEqual(await listMilestones(as(member), 'ACME'));
+			expect(board.columns.todo).toEqual([]);
+		});
+
+		it('listTimeline returns milestones, categories and assignable users too, in one round trip', async () => {
+			const before = roundTrips(db);
+			const t = await listTimeline(as(guest), 'ACME');
+			expect(roundTrips(db) - before).toBe(1);
+			const p = await requireProject(as(guest), 'ACME');
+			expect(t.milestones).toEqual(await listMilestones(as(guest), 'ACME'));
+			expect(t.categories).toEqual(await listCategories(as(guest), 'ACME'));
+			expect(t.assignees).toEqual(await listAssignableUsers(db, p.id));
+			expect(t.scheduled.map((i) => i.title)).toEqual(['A']);
+		});
+
+		it('listBoard hides projects the actor has not joined', async () => {
+			const outsider = await seedUser(db, 'member', 'outsider');
+			await expect(listBoard(as(outsider), 'ACME')).rejects.toMatchObject({
+				code: 'not_found'
+			});
 		});
 	});
 });

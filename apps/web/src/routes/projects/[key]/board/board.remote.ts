@@ -1,7 +1,6 @@
 import * as v from 'valibot';
 import { command, query } from '$app/server';
 import { remoteContext, runCommand, runQuery } from '#lib/server/remote-helpers.ts';
-import { listMilestones } from '#lib/server/services/issue-fields.ts';
 import { listBoard, moveIssue } from '#lib/server/services/issues.ts';
 
 /** milestone: 絞り込むマイルストーン ID（'none' は未設定、'' は絞り込みなし） */
@@ -9,13 +8,7 @@ const BoardRef = v.object({ key: v.string(), milestone: v.string() });
 
 export const getBoard = query(BoardRef, ({ key, milestone }) => {
 	const ctx = remoteContext();
-	return runQuery(async () => {
-		const [{ statuses, columns }, milestones] = await Promise.all([
-			listBoard(ctx, key, { milestoneId: milestone || undefined }),
-			listMilestones(ctx, key)
-		]);
-		return { statuses, columns, milestones };
-	});
+	return runQuery(() => listBoard(ctx, key, { milestoneId: milestone || undefined }));
 });
 
 export const moveCard = command(

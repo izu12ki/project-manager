@@ -13,10 +13,9 @@
 		<h1>ログイン</h1>
 		<p>メールアドレスとパスワードを入力してください</p>
 	</div>
-	<!-- 移行期間: 旧形式のハッシュを照合できるよう、生のパスワードも送る（keepRaw） -->
 	<form
 		method="POST"
-		use:enhance={withPasswordKeys({ fields: [{ name: 'password', keepRaw: true }] })}
+		use:enhance={withPasswordKeys({ fields: [{ name: 'password' }] })}
 		class="auth-form"
 	>
 		{#if form?.message}<FormAlert title="ログインできませんでした" message={form.message} />{/if}

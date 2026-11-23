@@ -16,7 +16,7 @@ export const NO_PASSWORD_KEY =
 export async function derivePasswordKey(email: string, password: string): Promise<string> {
 	const enc = new TextEncoder();
 	const salt = enc.encode(`project-manager:password:${email.trim().toLowerCase()}`);
-	// 旧形式（better-auth の scrypt）と同じく NFKC で正規化する。全角と半角、濁点の合成・分解の違いで
+	// NFKC で正規化する（better-auth の既定の scrypt と同じ）。全角と半角、濁点の合成・分解の違いで
 	// 別のパスワードにならないように。保存した鍵が変わるので、あとから変えないこと
 	const material = await crypto.subtle.importKey(
 		'raw',

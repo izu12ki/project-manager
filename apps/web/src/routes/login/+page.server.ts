@@ -4,7 +4,6 @@ import * as v from 'valibot';
 import { NO_PASSWORD_KEY } from '#lib/password-key.ts';
 import { isLoginBlocked, recordLoginFailure, recordLoginSuccess } from '#lib/server/ratelimit.ts';
 import { safeRedirect } from '#lib/server/redirect.ts';
-import { upgradeLegacyPassword } from '#lib/server/services/legacy-password.ts';
 import { needsSetup } from '#lib/server/services/setup.ts';
 import { isDisabledEmail } from '#lib/server/services/users.ts';
 import { PasswordKeySchema } from '#lib/server/validation.ts';
@@ -41,11 +40,6 @@ export const actions: Actions = {
 			await recordLoginFailure(db, ip, email);
 			return fail(400, { message: INVALID, email });
 		}
-		// 移行期間: 旧形式（scrypt）のハッシュなら生のパスワードで照合し、鍵の形式に保存し直す。
-		// scrypt の総当たりに使わせないよう、レート制限の確認の後に置く
-		const password = String(fd.get('password') ?? '');
-		if (password) await upgradeLegacyPassword(db, { email }, password, passwordKey);
-
 		try {
 			await locals.auth.api.signInEmail({
 				body: { email, password: passwordKey },

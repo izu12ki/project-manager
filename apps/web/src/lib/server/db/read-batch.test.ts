@@ -23,6 +23,22 @@ describe('createReadBatcher', () => {
 		expect(count).toEqual([{ n: 1 }]);
 	});
 
+	it('accepts only reads in its type', async () => {
+		const db = await createTestDb();
+		const read = createReadBatcher(db);
+		// 型だけを確かめる（呼ばない）
+		const typeOnly = () => {
+			// @ts-expect-error insert は渡せない
+			void read([db.insert(user).values({ id: 'x', name: 'x', email: 'x@example.com' })]);
+			// @ts-expect-error update は渡せない（returning 付きでも）
+			void read([db.update(user).set({ name: 'x' }).returning()]);
+			// @ts-expect-error delete は渡せない
+			void read([db.select().from(user), db.delete(user)]);
+			void read([db.select().from(user), db.query.user.findFirst()]);
+		};
+		expect(typeOnly).toBeTypeOf('function');
+	});
+
 	it('starts a new batch for calls made after an await', async () => {
 		const db = await createTestDb();
 		await seedUser(db, 'member', 'Alice');

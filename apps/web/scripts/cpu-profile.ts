@@ -44,17 +44,12 @@ if (routes.length === 0) {
 let passwordKey: string | undefined;
 async function login(): Promise<string> {
 	passwordKey ??= await derivePasswordKey(opts.email, opts.password);
-	const post = (fields: Record<string, string>) =>
-		fetch(`${base}/login`, {
-			method: 'POST',
-			redirect: 'manual',
-			headers: { origin: base, 'x-sveltekit-action': 'true', ...IDENTITY },
-			body: new URLSearchParams({ email: opts.email, passwordKey: passwordKey!, ...fields })
-		});
-	let res = await post({});
-	// 旧形式（scrypt）のハッシュのままのデータでは鍵だけでは通らないので、生のパスワードも送って新形式に保存し直させる。
-	// ふだんは送らない（旧形式の人が残っている間は、送るとログインのたびに scrypt が走り、CPU 時間が 50ms ほど増える）
-	if (res.status === 400) res = await post({ password: opts.password });
+	const res = await fetch(`${base}/login`, {
+		method: 'POST',
+		redirect: 'manual',
+		headers: { origin: base, 'x-sveltekit-action': 'true', ...IDENTITY },
+		body: new URLSearchParams({ email: opts.email, passwordKey: passwordKey! })
+	});
 	await res.arrayBuffer();
 	const cookie = res.headers
 		.getSetCookie()

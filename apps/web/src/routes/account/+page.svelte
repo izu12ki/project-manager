@@ -110,13 +110,12 @@
 	</div>
 
 	{#if data.canModifyAccount}
-		<!-- 移行期間: 旧形式のハッシュを照合できるよう、現在のパスワードは生の値も送る（keepRaw） -->
 		<form
 			method="POST"
 			action="?/changePassword"
 			use:enhance={withPasswordKeys({
 				email: data.user?.email ?? '',
-				fields: [{ name: 'currentPassword', keepRaw: true }, { name: 'newPassword' }]
+				fields: [{ name: 'currentPassword' }, { name: 'newPassword' }]
 			})}
 			class="card"
 		>

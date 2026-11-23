@@ -1,5 +1,4 @@
 import { execFileSync } from 'node:child_process';
-import { hashPassword } from 'better-auth/crypto';
 import {
 	expect,
 	test,
@@ -59,8 +58,6 @@ function latestResetToken(): string {
 	);
 	return String(row.identifier).slice('reset-password:'.length);
 }
-
-const MEMBER_ID = `(SELECT id FROM "user" WHERE email = 'member@example.com')`;
 
 /** 遠い回線を真似て、一致した通信を ms だけ遅らせる。戻り値で元に戻す */
 async function slowDown(page: Page, url: string | RegExp, ms: number) {
@@ -1422,18 +1419,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page).toHaveURL(/\/login$/);
 	await login(page, 'member@example.com', 'reset-password-1');
 
-	// 16. 移行期間: 旧形式（better-auth の scrypt）のハッシュの人もログインでき、新しい形式に保存し直される
-	await logout(page);
-	const legacyHash = await hashPassword('legacy-password-1');
-	d1Local(`UPDATE account SET password = '${legacyHash}' WHERE user_id = ${MEMBER_ID}`);
-	await login(page, 'member@example.com', 'legacy-password-1');
-	expect(
-		String(d1Local(`SELECT password FROM account WHERE user_id = ${MEMBER_ID}`)[0].password)
-	).toMatch(/^pbkdf2-sha256\$600000\$/);
-	await logout(page);
-	await login(page, 'member@example.com', 'legacy-password-1');
-
-	// 17. パスワード変更で現在のパスワードを 5 回間違えると、しばらく試せない（盗んだセッションでの総当たり対策）
+	// 16. パスワード変更で現在のパスワードを 5 回間違えると、しばらく試せない（盗んだセッションでの総当たり対策）
 	const changeWith = (currentPasswordKey: string) =>
 		page.request.post('/account?/changePassword', {
 			headers: { Origin: ORIGIN },

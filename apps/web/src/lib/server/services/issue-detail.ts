@@ -6,12 +6,15 @@ import { issue, user } from '../db/schema';
 import { AppError } from '../errors';
 import { categoriesQuery, issueTypesQuery, milestonesQuery, statusesQuery } from './issue-fields';
 import type { AssigneeRef } from './issues';
-import { checkProjectAccess, ofProject, projectAccessQuery, projectIdOf } from './project-access';
+import { checkProjectAccess, ofProject, projectAccessQuery } from './project-access';
 import { assignableUsersQuery } from './projects';
 
 const parent = alias(issue, 'parent');
 const reporter = alias(user, 'reporter');
 const deleter = alias(user, 'deleter');
+/** 担当者名の副問い合わせで開く課題（この課題と子課題）と、子課題を探すためのこの課題 */
+const assigned = alias(issue, 'assigned');
+const self = alias(issue, 'self');
 
 /**
  * 課題の詳細画面に要る行をまとめて引く。
@@ -82,10 +85,11 @@ export async function getIssueDetailRows(ctx: AppContext, key: string, number: n
 			.select({ id: user.id, name: user.name, role: user.role })
 			.from(user)
 			.where(
-				sql`${user.id} in (select j.value from ${issue} as named, json_each(named.assignee_ids) as j
-						where named.project_id in ${projectIdOf(db, key)}
-						and (named.number = ${number} or named.parent_id in (
-							select p.id from ${issue} as p where p.project_id in ${projectIdOf(db, key)} and p.number = ${number})))`
+				sql`${user.id} in (select j.value from ${issue} as ${assigned}, json_each(${assigned.assigneeIds}) as j
+						where ${ofThis(assigned.projectId)} and (${assigned.number} = ${number} or ${assigned.parentId} in ${db
+							.select({ id: self.id })
+							.from(self)
+							.where(and(ofThis(self.projectId), eq(self.number, number)))}))`
 			)
 	]);
 

@@ -12,7 +12,6 @@ import {
 } from '#lib/server/ratelimit.ts';
 import { createApiKey, listApiKeys, revokeApiKey } from '#lib/server/services/api-keys.ts';
 import { disableSlack, enableSlack, getSlackStatus } from '#lib/server/services/integrations.ts';
-import { upgradeLegacyPassword } from '#lib/server/services/legacy-password.ts';
 import { formObject, NameSchema, parse, PasswordKeySchema } from '#lib/server/validation.ts';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -63,23 +62,13 @@ export const actions: Actions = {
 			const data = parse(
 				v.object({
 					currentPasswordKey: PasswordKeySchema,
-					newPasswordKey: PasswordKeySchema,
-					// 移行期間: 旧形式（scrypt）のハッシュを照合するための生の現在のパスワード
-					currentPassword: v.optional(v.string())
+					newPasswordKey: PasswordKeySchema
 				}),
 				input
 			);
-			// 旧形式の照合（scrypt）より前に止める
+			// ロック中は現在のパスワードを照合しない
 			const lockedFor = await passwordChangeLockedFor(db, actor.id);
 			if (lockedFor > 0) return fail(429, { message: lockedMessage(lockedFor), fields: {} });
-			if (data.currentPassword) {
-				await upgradeLegacyPassword(
-					db,
-					{ userId: actor.id },
-					data.currentPassword,
-					data.currentPasswordKey
-				);
-			}
 			try {
 				await locals.auth.api.changePassword({
 					body: {

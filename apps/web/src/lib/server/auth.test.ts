@@ -5,7 +5,6 @@ import { account, verification } from './db/schema';
 import { PASSWORD_HASH_PREFIX } from './password';
 import { createTestBase, createTestDb, seedUser } from './test-utils';
 import { createFirstAdmin } from './services/setup';
-import { upgradeLegacyPassword } from './services/legacy-password';
 import { hashPassword } from 'better-auth/crypto';
 
 /** ブラウザで作る鍵（16 進 64 文字）の代わり */
@@ -75,7 +74,7 @@ describe('createAuth', () => {
 		expect(base.sent[0].text).toContain('/api/auth/reset-password/');
 	});
 
-	it('旧形式（scrypt）の人は、保存し直すまで鍵でログインできない', async () => {
+	it('旧形式（better-auth の既定の scrypt）のハッシュの人は鍵でログインできない（再設定が要る）', async () => {
 		const db = await createTestDb();
 		const base = createTestBase(db);
 		const auth = createAuth(env, db, { mailer: base.mailer, waitUntil: base.waitUntil });
@@ -84,11 +83,6 @@ describe('createAuth', () => {
 		const signIn = () =>
 			auth.api.signInEmail({ body: { email: 'a@example.com', password: 'b'.repeat(64) } });
 		await expect(signIn()).rejects.toThrow();
-		// createFirstAdmin は鍵を scrypt にかけて保存したので、その鍵が「旧形式の生のパスワード」になる
-		expect(await upgradeLegacyPassword(db, { email: 'a@example.com' }, KEY, 'b'.repeat(64))).toBe(
-			true
-		);
-		expect((await signIn()).user.email).toBe('a@example.com');
 	});
 
 	describe('パスワードの再設定', () => {

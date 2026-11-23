@@ -72,7 +72,9 @@ export async function listProjectsWithOpenCounts(ctx: AppContext): Promise<{
 	archived: ProjectRow[];
 }> {
 	const openCount = sql<number>`(select count(*) from ${issue}
-		where ${issue.projectId} = ${project.id} and ${issue.status} != ${DONE_STATUS} and ${issue.deletedAt} is null)`;
+		where ${issue.projectId} = ${project.id} and ${issue.status} != ${DONE_STATUS} and ${issue.deletedAt} is null)`.as(
+		'open_count'
+	);
 	const query = ctx.db.select({ project, openCount }).from(project).$dynamic();
 	const [rows] = await ctx.readBatch([
 		(ctx.actor.role === 'admin'

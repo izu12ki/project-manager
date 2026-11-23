@@ -22,9 +22,14 @@ export const byProjectId =
 	(col) =>
 		eq(col, id);
 
+/** プロジェクトの ID を引く副問い合わせ */
+export function projectIdOf(db: DB, key: string) {
+	return db.select({ id: project.id }).from(project).where(eq(project.key, key));
+}
+
 /** プロジェクトのキーで絞る（ID を引く副問い合わせ）。ID を待たずに同じ batch に入れられる */
 export function ofProject(db: DB, key: string): ProjectCond {
-	const id = db.select({ id: project.id }).from(project).where(eq(project.key, key));
+	const id = projectIdOf(db, key);
 	return (col) => inList(col, id);
 }
 

@@ -3,9 +3,24 @@ import type { Actor } from '../authz';
 import type { DB } from '../db';
 import { eq } from 'drizzle-orm';
 import { commentReaction, issue as issueTable } from '../db/schema';
-import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
-import { addComment, deleteComment, editComment, listComments, toggleReaction } from './comments';
-import { createIssue, deleteIssue } from './issues';
+import {
+	createTestBase,
+	createTestDb,
+	ctxOf,
+	roundTrips,
+	seedProject,
+	seedUser
+} from '../test-utils';
+import {
+	addComment,
+	deleteComment,
+	editComment,
+	getCommentRows,
+	listComments,
+	toggleReaction
+} from './comments';
+import { createIssue, deleteIssue, getIssue } from './issues';
+import { setProjectArchived } from './projects';
 
 describe('comments', () => {
 	let db: DB;
@@ -129,6 +144,46 @@ describe('comments', () => {
 			await toggleReaction(as(member), 'ACME', 1, commentId, { emoji: '👍' });
 			await deleteComment(as(guest), 'ACME', 1, commentId);
 			expect(await db.select().from(commentReaction)).toHaveLength(0);
+		});
+	});
+
+	describe('getCommentRows', () => {
+		beforeEach(async () => {
+			await addComment(as(guest), 'ACME', 1, { body: 'first' });
+			const [c] = await listComments(as(member), 'ACME', 1);
+			await toggleReaction(as(member), 'ACME', 1, c.id, { emoji: '👍' });
+			await addComment(as(member), 'ACME', 1, { body: 'second' });
+			await seedProject(db, { key: 'OTHER' });
+			await createIssue(as(admin), 'OTHER', { title: '別プロジェクトの 1' });
+			await addComment(as(admin), 'OTHER', 1, { body: '混ざらないこと' });
+		});
+
+		it('returns the same project, issue state and comments as getIssue and listComments', async () => {
+			await deleteIssue(as(member), 'ACME', 1);
+			await setProjectArchived(as(admin), 'ACME', true);
+			for (const actor of [guest, admin]) {
+				const { project, issue } = await getIssue(as(actor), 'ACME', 1);
+				const rows = await getCommentRows(as(actor), 'ACME', 1);
+				expect(rows.project).toEqual(project);
+				expect(rows.issue.deletedAt).toEqual(issue.deletedAt);
+				expect(rows.comments).toEqual(await listComments(as(actor), 'ACME', 1));
+			}
+		});
+
+		it('hides projects the actor has not joined and missing issues', async () => {
+			const outsider = await seedUser(db, 'member', 'outsider');
+			await expect(getCommentRows(as(outsider), 'ACME', 1)).rejects.toMatchObject({
+				code: 'not_found'
+			});
+			await expect(getCommentRows(as(member), 'ACME', 99)).rejects.toMatchObject({
+				code: 'not_found'
+			});
+		});
+
+		it('reads everything in one round trip', async () => {
+			const before = roundTrips(db);
+			await getCommentRows(as(member), 'ACME', 1);
+			expect(roundTrips(db) - before).toBe(1);
 		});
 	});
 });

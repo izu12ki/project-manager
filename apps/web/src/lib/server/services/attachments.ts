@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, lt } from 'drizzle-orm';
+import { and, asc, eq, isNull, lt, type SQL } from 'drizzle-orm';
 import { inList } from '../db/limits';
 import { uuidv7 } from 'uuidv7';
 import {
@@ -9,9 +9,10 @@ import {
 } from '#lib/attachment-rules.ts';
 import { authorize } from '../authz';
 import type { AppContext } from '../context';
-import { attachment, user } from '../db/schema';
+import { attachment, issue as issueTable, user } from '../db/schema';
 import { AppError } from '../errors';
-import { getIssue } from './issues';
+import { getIssue, issueStateQuery } from './issues';
+import { checkProjectAccess, ofProject, projectAccessQuery } from './project-access';
 import { assertWritable, requireProject, requireProjectById } from './projects';
 
 /** 仮置きのまま残す期間 */
@@ -94,9 +95,8 @@ export async function purgeStaleUploads(ctx: AppContext): Promise<void> {
 	await ctx.bucket.delete(rows.map((r) => r.r2Key));
 }
 
-/** 課題に紐付いた添付（説明・コメントの両方）を古い順に返す */
-export async function listAttachments(ctx: AppContext, key: string, number: number) {
-	const { issue } = await getIssue(ctx, key, number);
+/** 課題（issueId の条件で絞る）に紐付いた添付を古い順に。batch にも入れられる */
+function attachmentsQuery(ctx: AppContext, ofIssue: SQL) {
 	return ctx.db
 		.select({
 			id: attachment.id,
@@ -109,8 +109,40 @@ export async function listAttachments(ctx: AppContext, key: string, number: numb
 		})
 		.from(attachment)
 		.innerJoin(user, eq(user.id, attachment.uploaderId))
-		.where(eq(attachment.issueId, issue.id))
+		.where(ofIssue)
 		.orderBy(asc(attachment.createdAt), asc(attachment.id));
+}
+
+/** 課題に紐付いた添付（説明・コメントの両方）を古い順に返す */
+export async function listAttachments(ctx: AppContext, key: string, number: number) {
+	const { issue } = await getIssue(ctx, key, number);
+	return attachmentsQuery(ctx, eq(attachment.issueId, issue.id));
+}
+
+/**
+ * 課題の詳細画面の添付欄に要るもの（プロジェクト・課題の削除日時・添付）。1 回の batch（D1 への 1 往復）で引く。
+ * 参加していないプロジェクト・無い課題は not_found
+ */
+export async function getAttachmentRows(ctx: AppContext, key: string, number: number) {
+	const of = ofProject(ctx.db, key);
+	const [access, issues, attachments] = await ctx.db.batch([
+		projectAccessQuery(ctx, key),
+		issueStateQuery(ctx.db, of, number),
+		attachmentsQuery(
+			ctx,
+			inList(
+				attachment.issueId,
+				ctx.db
+					.select({ id: issueTable.id })
+					.from(issueTable)
+					.where(and(of(issueTable.projectId), eq(issueTable.number, number)))
+			)
+		)
+	]);
+	const project = checkProjectAccess(ctx, access);
+	const [issue] = issues;
+	if (!issue) throw new AppError('not_found', '課題が見つかりません');
+	return { project, issue, attachments };
 }
 
 /**

@@ -5,17 +5,16 @@ import { can } from '#lib/server/authz.ts';
 import { renderMarkdown } from '#lib/server/markdown.ts';
 import { getUnreadCount } from '#lib/notifications.remote.ts';
 import { remoteContext, runCommand, runForm, runQuery } from '#lib/server/remote-helpers.ts';
-import { deleteAttachment, listAttachments } from '#lib/server/services/attachments.ts';
+import { deleteAttachment, getAttachmentRows } from '#lib/server/services/attachments.ts';
 import {
 	addComment,
 	deleteComment,
 	editComment,
-	listComments,
+	getCommentRows,
 	toggleReaction
 } from '#lib/server/services/comments.ts';
 import { getIssueDetailRows } from '#lib/server/services/issue-detail.ts';
 import {
-	getIssue,
 	listIssueChanges,
 	listParentCandidates,
 	updateIssue
@@ -69,10 +68,7 @@ export const getParentCandidates = query(IssueRef, ({ key, number }) => {
 export const getComments = query(IssueRef, ({ key, number }) => {
 	const ctx = remoteContext();
 	return runQuery(async () => {
-		const [{ project, issue }, comments] = await Promise.all([
-			getIssue(ctx, key, number),
-			listComments(ctx, key, number)
-		]);
+		const { project, issue, comments } = await getCommentRows(ctx, key, number);
 		return comments.map((c) => ({
 			...c,
 			html: renderMarkdown(c.body),
@@ -92,11 +88,8 @@ export const getChanges = query(IssueRef, ({ key, number }) => {
 export const getAttachments = query(IssueRef, ({ key, number }) => {
 	const ctx = remoteContext();
 	return runQuery(async () => {
-		const [{ project, issue }, rows] = await Promise.all([
-			getIssue(ctx, key, number),
-			listAttachments(ctx, key, number)
-		]);
-		return rows.map((a) => ({
+		const { project, issue, attachments } = await getAttachmentRows(ctx, key, number);
+		return attachments.map((a) => ({
 			...a,
 			url: attachmentUrl(project.key, a.id),
 			isImage: isSafeImage(a.contentType),

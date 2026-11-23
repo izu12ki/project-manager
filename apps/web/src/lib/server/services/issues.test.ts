@@ -805,4 +805,17 @@ describe('issues', () => {
 			});
 		});
 	});
+
+	it('listIssueChanges reads in one round trip and hides projects the actor has not joined', async () => {
+		await createIssue(as(member), 'ACME', { title: 'A' });
+		await updateIssue(as(member), 'ACME', 1, { title: 'B' });
+		const before = roundTrips(db);
+		const changes = await listIssueChanges(as(guest), 'ACME', 1);
+		expect(roundTrips(db) - before).toBe(1);
+		expect(changes.map((c) => c.changes)).toEqual([[{ field: 'title', from: 'A', to: 'B' }]]);
+		const outsider = await seedUser(db, 'member', 'outsider');
+		await expect(listIssueChanges(as(outsider), 'ACME', 1)).rejects.toMatchObject({
+			code: 'not_found'
+		});
+	});
 });

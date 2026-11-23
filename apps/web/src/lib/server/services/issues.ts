@@ -500,21 +500,36 @@ async function applyPatch(
 }
 
 /** 編集履歴（古い順）。課題が存在しない場合は空配列 */
+/** 課題の ID と削除日時（コメント・添付の一覧で、課題の有無と書き込めるかを確かめる）。batch にも入れられる */
+export function issueStateQuery(db: DB, of: ProjectCond, number: number) {
+	return db
+		.select({ id: issue.id, deletedAt: issue.deletedAt })
+		.from(issue)
+		.where(and(of(issue.projectId), eq(issue.number, number)));
+}
+
+/** 課題の変更履歴（古い順）。アクセス権の確認と合わせて 1 往復 */
 export async function listIssueChanges(ctx: AppContext, key: string, number: number) {
-	const p = await requireProject(ctx, key);
-	return ctx.db
-		.select({
-			id: issueChange.id,
-			actorId: issueChange.actorId,
-			actorName: user.name,
-			changes: issueChange.changes,
-			createdAt: issueChange.createdAt
-		})
-		.from(issueChange)
-		.innerJoin(user, eq(user.id, issueChange.actorId))
-		.innerJoin(issue, eq(issue.id, issueChange.issueId))
-		.where(and(eq(issue.projectId, p.id), eq(issue.number, number)))
-		.orderBy(asc(issueChange.createdAt), asc(issueChange.id));
+	const { db } = ctx;
+	const of = ofProject(db, key);
+	const [access, rows] = await db.batch([
+		projectAccessQuery(ctx, key),
+		db
+			.select({
+				id: issueChange.id,
+				actorId: issueChange.actorId,
+				actorName: user.name,
+				changes: issueChange.changes,
+				createdAt: issueChange.createdAt
+			})
+			.from(issueChange)
+			.innerJoin(user, eq(user.id, issueChange.actorId))
+			.innerJoin(issue, eq(issue.id, issueChange.issueId))
+			.where(and(of(issue.projectId), eq(issue.number, number)))
+			.orderBy(asc(issueChange.createdAt), asc(issueChange.id))
+	]);
+	checkProjectAccess(ctx, access);
+	return rows;
 }
 
 /** 未送信（undefined）の項目は変更しない。値が変わった項目だけ権限を確認する。 */

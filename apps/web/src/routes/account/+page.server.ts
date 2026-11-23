@@ -6,6 +6,7 @@ import { authorize, can } from '#lib/server/authz.ts';
 import { handleAction } from '#lib/server/errors.ts';
 import { createApiKey, listApiKeys, revokeApiKey } from '#lib/server/services/api-keys.ts';
 import { disableSlack, enableSlack, getSlackStatus } from '#lib/server/services/integrations.ts';
+import { upgradeLegacyPassword } from '#lib/server/services/legacy-password.ts';
 import { formObject, NameSchema, parse, PasswordKeySchema } from '#lib/server/validation.ts';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -46,12 +47,26 @@ export const actions: Actions = {
 	changePassword: async ({ request, locals }) => {
 		const input = formObject(await request.formData());
 		return handleAction(async () => {
-			authorize(appContext(locals).actor, 'account:modify');
+			const { actor, db } = appContext(locals);
+			authorize(actor, 'account:modify');
 			// 閲覧者は値によらず 404 にするため、authorize の後で確かめる
 			const data = parse(
-				v.object({ currentPasswordKey: PasswordKeySchema, newPasswordKey: PasswordKeySchema }),
+				v.object({
+					currentPasswordKey: PasswordKeySchema,
+					newPasswordKey: PasswordKeySchema,
+					// 移行期間: 旧形式（scrypt）のハッシュを照合するための生の現在のパスワード
+					currentPassword: v.optional(v.string())
+				}),
 				input
 			);
+			if (data.currentPassword) {
+				await upgradeLegacyPassword(
+					db,
+					{ userId: actor.id },
+					data.currentPassword,
+					data.currentPasswordKey
+				);
+			}
 			try {
 				await locals.auth.api.changePassword({
 					body: {

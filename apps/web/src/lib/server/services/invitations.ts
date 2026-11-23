@@ -10,7 +10,7 @@ import { AppError, isUniqueViolation } from '../errors';
 import type { MailMessage } from '../mailer';
 import { invitationMail } from '../mailer/templates';
 import { randomToken, sha256Hex } from '../tokens';
-import { EmailSchema, NameSchema, parse, PasswordSchema } from '../validation';
+import { EmailSchema, NameSchema, parse, PasswordKeySchema } from '../validation';
 import { credentialUserInserts } from './credentials';
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -226,7 +226,11 @@ export async function getInvitationByToken(db: DB, token: string) {
 	};
 }
 
-const AcceptInput = v.object({ token: v.string(), name: NameSchema, password: PasswordSchema });
+const AcceptInput = v.object({
+	token: v.string(),
+	name: NameSchema,
+	passwordKey: PasswordKeySchema
+});
 
 export async function acceptInvitation(
 	base: BaseContext,
@@ -238,7 +242,7 @@ export async function acceptInvitation(
 	const duplicate = new AppError('conflict', 'このメールアドレスのユーザーは既に登録されています');
 	const [dup] = await base.db.select({ id: user.id }).from(user).where(eq(user.email, inv.email));
 	if (dup) throw duplicate;
-	const passwordHash = await base.hashPassword(data.password);
+	const passwordHash = await base.hashPassword(data.passwordKey);
 
 	// D1 はトランザクションを使えないので、先に招待を使用済みにし（条件付き update で 1 回だけ成功する）、
 	// ユーザーの作成に失敗したら未使用に戻す

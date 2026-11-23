@@ -1,4 +1,5 @@
 import * as v from 'valibot';
+import { NO_PASSWORD_KEY } from '../password-key';
 import { AppError } from './errors';
 
 export function parse<S extends v.GenericSchema>(schema: S, input: unknown): v.InferOutput<S> {
@@ -54,8 +55,10 @@ export const NameSchema = v.pipe(
 	v.minLength(1, '名前を入力してください'),
 	v.maxLength(50, '名前は50文字以内で入力してください')
 );
-export const PasswordSchema = v.pipe(
-	v.string(),
-	v.minLength(10, 'パスワードは10文字以上にしてください'),
-	v.maxLength(128, 'パスワードは128文字以内にしてください')
+/**
+ * ブラウザで作ったパスワードの鍵（derivePasswordKey）。生のパスワードの長さ（10〜128 文字）はブラウザで確かめる
+ */
+export const PasswordKeySchema = v.pipe(
+	v.string(NO_PASSWORD_KEY),
+	v.regex(/^[0-9a-f]{64}$/, NO_PASSWORD_KEY)
 );

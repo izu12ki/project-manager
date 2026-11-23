@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { enhance } from '#lib/forms.ts';
+	import { enhance, withPasswordKeys } from '#lib/forms.ts';
 	import FormAlert from '#lib/components/FormAlert.svelte';
 	import PasswordInput from '#lib/components/PasswordInput.svelte';
+	import PasswordSubmit from '#lib/components/PasswordSubmit.svelte';
 	import type { PageProps } from './$types';
 
 	let { form }: PageProps = $props();
@@ -12,7 +13,11 @@
 		<h1>初期セットアップ</h1>
 		<p>最初の管理者アカウントを作成します</p>
 	</div>
-	<form method="POST" use:enhance class="auth-form">
+	<form
+		method="POST"
+		use:enhance={withPasswordKeys({ fields: [{ name: 'password' }] })}
+		class="auth-form"
+	>
 		{#if form?.message}<FormAlert message={form.message} />{/if}
 		<div class="field">
 			<label class="label" for="name">名前</label>
@@ -30,10 +35,11 @@
 				autocomplete="new-password"
 				required
 				minlength={10}
+				maxlength={128}
 				aria-describedby="password-hint"
 			/>
 			<p class="hint" id="password-hint">10文字以上</p>
 		</div>
-		<button type="submit" class="btn btn-primary">セットアップを完了</button>
+		<PasswordSubmit>セットアップを完了</PasswordSubmit>
 	</form>
 </div>

@@ -3,7 +3,9 @@ import { account, user } from '../db/schema';
 import { createTestBase, createTestDb } from '../test-utils';
 import { createFirstAdmin, needsSetup } from './setup';
 
-const input = { name: '管理者', email: 'Admin@Example.com', password: 'password-1234' };
+/** ブラウザで作る鍵（16 進 64 文字）の代わり */
+const KEY = 'a'.repeat(64);
+const input = { name: '管理者', email: 'Admin@Example.com', passwordKey: KEY };
 
 describe('setup', () => {
 	it('ユーザーが 0 人なら admin を作り、credential アカウントにハッシュを保存する', async () => {
@@ -20,7 +22,7 @@ describe('setup', () => {
 		expect(a).toMatchObject({
 			providerId: 'credential',
 			accountId: u.id,
-			password: 'test-hash:password-1234'
+			password: `test-hash:${KEY}`
 		});
 		expect(await needsSetup(db)).toBe(false);
 	});
@@ -50,10 +52,14 @@ describe('setup', () => {
 		expect(await db.$count(account)).toBe(1);
 	});
 
-	it('短いパスワードは validation', async () => {
+	it('鍵でない値（生のパスワード）は validation', async () => {
 		const db = await createTestDb();
 		await expect(
-			createFirstAdmin(createTestBase(db), { ...input, password: 'short' })
+			createFirstAdmin(createTestBase(db), {
+				name: '管理者',
+				email: 'admin@example.com',
+				password: 'password-1234'
+			})
 		).rejects.toMatchObject({
 			code: 'validation'
 		});

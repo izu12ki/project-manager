@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process';
+import { hashPassword } from 'better-auth/crypto';
 import {
 	expect,
 	test,
@@ -24,13 +26,36 @@ async function logout(page: Page) {
 	await expect(page).toHaveURL(/\/login/);
 }
 
-async function login(page: Page, email: string) {
+async function login(page: Page, email: string, password = PW) {
 	await page.goto('/login');
 	await page.getByLabel('メールアドレス').fill(email);
-	await page.getByLabel('パスワード').fill(PW);
+	await page.getByLabel('パスワード').fill(password);
 	await page.getByRole('button', { name: 'ログイン' }).click();
 	await expect(page).toHaveURL(HOME);
 }
+
+/** E2E のサーバーが使うローカル D1（scripts/e2e-server.sh の --persist-to）で SQL を流し、結果の行を返す */
+function d1Local(sql: string): Record<string, unknown>[] {
+	const out = execFileSync(
+		'pnpm',
+		[
+			...['exec', 'wrangler', 'd1', 'execute', 'DB', '--local'],
+			...['--persist-to', '.wrangler/e2e-state', '--json', '--command', sql]
+		],
+		{ encoding: 'utf8', env: { ...process.env, WRANGLER_SEND_METRICS: 'false' } }
+	);
+	return JSON.parse(out)[0].results;
+}
+
+/** いちばん新しいパスワード再設定のトークン。E2E のメールは送らずログに出すだけなので、D1 から読む */
+function latestResetToken(): string {
+	const [row] = d1Local(
+		"SELECT identifier FROM verification WHERE identifier LIKE 'reset-password:%' ORDER BY created_at DESC LIMIT 1"
+	);
+	return String(row.identifier).slice('reset-password:'.length);
+}
+
+const MEMBER_ID = `(SELECT id FROM "user" WHERE email = 'member@example.com')`;
 
 /** 遠い回線を真似て、一致した通信を ms だけ遅らせる。戻り値で元に戻す */
 async function slowDown(page: Page, url: string | RegExp, ms: number) {
@@ -48,6 +73,8 @@ async function loginBeforeHydration(page: Page, email: string) {
 	await page.goto('/login', { waitUntil: 'domcontentloaded' });
 	await page.getByLabel('メールアドレス').fill(email);
 	await page.getByLabel('パスワード').fill(PW);
+	// 読み込み前に送ると鍵が付かないので、送信ボタンは押せない
+	await expect(page.getByRole('button', { name: 'ログイン' })).toBeDisabled();
 	await page.waitForLoadState('networkidle');
 	await restore();
 	await expect(page.getByLabel('メールアドレス')).toHaveValue(email);
@@ -263,6 +290,13 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await addIn('マイルストーン名').click();
 	await expect(page.getByRole('listitem').filter({ hasText: 'v1.0' })).toBeVisible();
 	await logout(page);
+	// スクリプトなしで送られた（ブラウザで作る鍵が無い）ログインは、生のパスワードが正しくても受け付けない
+	const noKey = await page.request.post('/login', {
+		headers: { Origin: 'http://localhost:4173' },
+		form: { email: 'admin@example.com', password: PW }
+	});
+	expect(noKey.status()).toBe(400);
+	expect(await noKey.text()).toContain('パスワードを受け取れませんでした');
 
 	// 5. ゲストが登録して起票
 	await acceptInvite(page, guestUrl, '顧客 太郎');
@@ -1017,7 +1051,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	const origin = { Origin: 'http://localhost:4173' };
 	const viaAction = await viewerPage.request.post('/account?/changePassword', {
 		headers: origin,
-		form: { currentPassword: PW, newPassword: 'changed-password-1' }
+		form: { currentPasswordKey: 'a'.repeat(64), newPasswordKey: 'b'.repeat(64) }
 	});
 	expect(viaAction.status()).toBe(404);
 	// better-auth の HTTP API は、パスワード再設定メールのリンク以外を受け付けない
@@ -1353,6 +1387,61 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.goto('/account');
 	await expect(page.getByRole('heading', { name: 'パスワード変更' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'API キー' })).toHaveCount(0);
+
+	// 14. パスワードを変更すると、新しいパスワードでログインできる
+	await page.getByLabel('現在のパスワード').fill(PW);
+	await page.getByLabel('新しいパスワード').fill('changed-password-1');
+	await page
+		.locator('form', { has: page.getByRole('heading', { name: 'パスワード変更' }) })
+		.getByRole('button', { name: '保存' })
+		.click();
+	await expect(page.getByText('パスワードを変更しました')).toBeVisible();
+	await logout(page);
+	await login(page, 'member@example.com', 'changed-password-1');
+
+	// 15. パスワード再設定のメールのリンクから、新しいパスワードにできる
+	await logout(page);
+	await page.goto('/forgot-password');
+	await page.getByLabel('メールアドレス').fill('member@example.com');
+	await page.getByRole('button', { name: '再設定メールを送信' }).click();
+	await expect(page.getByText('再設定用のリンクを送信しました')).toBeVisible();
+	await page.goto(`/reset-password?token=${latestResetToken()}`);
+	await expect(page.getByLabel('メールアドレス')).toHaveValue('member@example.com');
+	await page.getByLabel('パスワード', { exact: true }).fill('reset-password-1');
+	await page.getByRole('button', { name: 'パスワードを再設定' }).click();
+	await expect(page).toHaveURL(/\/login$/);
+	await login(page, 'member@example.com', 'reset-password-1');
+
+	// 16. 移行期間: 旧形式（better-auth の scrypt）のハッシュの人もログインでき、新しい形式に保存し直される
+	await logout(page);
+	const legacyHash = await hashPassword('legacy-password-1');
+	d1Local(`UPDATE account SET password = '${legacyHash}' WHERE user_id = ${MEMBER_ID}`);
+	await login(page, 'member@example.com', 'legacy-password-1');
+	expect(
+		String(d1Local(`SELECT password FROM account WHERE user_id = ${MEMBER_ID}`)[0].password)
+	).toMatch(/^pbkdf2-sha256\$600000\$/);
+	await logout(page);
+	await login(page, 'member@example.com', 'legacy-password-1');
+
+	// 17. パスワード変更で現在のパスワードを 5 回間違えると、しばらく試せない（盗んだセッションでの総当たり対策）
+	const changeWith = (currentPasswordKey: string) =>
+		page.request.post('/account?/changePassword', {
+			headers: { Origin: 'http://localhost:4173' },
+			form: { currentPasswordKey, newPasswordKey: 'b'.repeat(64) }
+		});
+	for (let i = 0; i < 4; i++) {
+		const wrong = await changeWith('a'.repeat(64));
+		expect(wrong.status()).toBe(400);
+		expect(await wrong.text()).toContain('現在のパスワードが違います');
+	}
+	// 5 回目の間違いで、ロックしたことと解けるまでの時間を伝える。ロック中は正しくても試せない
+	for (let i = 0; i < 2; i++) {
+		const locked = await changeWith('a'.repeat(64));
+		expect(locked.status()).toBe(429);
+		expect(await locked.text()).toMatch(
+			/現在のパスワードを5回間違えたため、パスワードの変更を一時的にロックしています。\d+分後に/
+		);
+	}
 
 	expect(problems).toEqual([]);
 });

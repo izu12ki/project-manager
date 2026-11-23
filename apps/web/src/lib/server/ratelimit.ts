@@ -13,6 +13,11 @@ export const LOGIN_FAILURE_LIMIT: Limit = { windowMs: 15 * 60_000, max: 5 };
 export const LOGIN_IP_FAILURE_LIMIT: Limit = { windowMs: 15 * 60_000, max: 30 };
 export const RESET_LIMIT: Limit = { windowMs: 15 * 60_000, max: 3 };
 export const SIGNUP_LIMIT: Limit = { windowMs: 15 * 60_000, max: 10 };
+/**
+ * パスワード変更で「現在のパスワード」を間違えた回数の上限（ユーザー単位）。盗んだセッションでの総当たり対策。
+ * 照合はサーバーでは SHA-256 だけで安く、上限が無いとブラウザの鍵導出の速さだけで試せてしまう
+ */
+export const PASSWORD_CHANGE_FAILURE_LIMIT: Limit = { windowMs: 15 * 60_000, max: 5 };
 
 /** 固定窓のレート制限。キーは better-auth と衝突しないよう呼び出し側で `app:` を付ける。lastRequest は窓の開始時刻。 */
 export async function consumeRateLimit(
@@ -70,4 +75,33 @@ export async function recordLoginFailure(
 /** 成功したら、そのメールアドレスの失敗回数を消す（IP 全体の回数は残す）。 */
 export async function recordLoginSuccess(db: DB, ip: string, email: string): Promise<void> {
 	await db.delete(rateLimit).where(eq(rateLimit.key, loginKey(ip, email)));
+}
+
+const passwordChangeKey = (userId: string) => `app:password-change-fail:${userId}`;
+
+/** パスワード変更のロックが解けるまでの時間（ms）。ロックされていなければ 0 */
+export async function passwordChangeLockedFor(
+	db: DB,
+	userId: string,
+	now: number = Date.now()
+): Promise<number> {
+	const limit = PASSWORD_CHANGE_FAILURE_LIMIT;
+	const [row] = await db
+		.select()
+		.from(rateLimit)
+		.where(eq(rateLimit.key, passwordChangeKey(userId)));
+	if (!row || row.count < limit.max) return 0;
+	return Math.max(0, row.lastRequest + limit.windowMs - now);
+}
+
+export async function recordPasswordChangeFailure(
+	db: DB,
+	userId: string,
+	now: number = Date.now()
+): Promise<void> {
+	await consumeRateLimit(db, passwordChangeKey(userId), PASSWORD_CHANGE_FAILURE_LIMIT, now);
+}
+
+export async function recordPasswordChangeSuccess(db: DB, userId: string): Promise<void> {
+	await db.delete(rateLimit).where(eq(rateLimit.key, passwordChangeKey(userId)));
 }

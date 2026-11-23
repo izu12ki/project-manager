@@ -7,9 +7,9 @@ description: デプロイの前に用意するアカウントと、手元の PC 
 
 | サービス | 必須 | 用途 | 費用 |
 |---|---|---|---|
-| [Cloudflare](https://dash.cloudflare.com/sign-up) | **必須** | アプリの実行環境（Workers）とデータベース（D1） | **Workers Paid プランが必要**（下記「Workers のプラン」参照） |
+| [Cloudflare](https://dash.cloudflare.com/sign-up) | **必須** | アプリの実行環境（Workers）とデータベース（D1） | 無料プランで動く（下記「Workers のプラン」参照） |
 | Cloudflare R2 | **必須** | 添付ファイルの保存 | 10GB まで無料。初回はダッシュボードの「R2」で利用を開始する |
-| Cloudflare Email Sending（推奨）、[SMTP2GO](https://www.smtp2go.com)、[Resend](https://resend.com) のどれか | 任意 | 招待メール・パスワードリセットメールの送信 | Email Sending は Workers Paid プランに月 3,000 通まで含まれる（送信元ドメインの DNS を Cloudflare で管理している場合）。SMTP2GO・Resend は無料枠あり（[メール送信の設定](/guides/mail/)） |
+| [SMTP2GO](https://www.smtp2go.com)、[Resend](https://resend.com)、Cloudflare Email Sending のどれか | 任意 | 招待メール・パスワードリセットメールの送信 | SMTP2GO・Resend は無料枠あり。Email Sending は Workers Paid プランのみ（月 3,000 通まで含まれる。送信元ドメインの DNS を Cloudflare で管理している場合）（[メール送信の設定](/guides/mail/)） |
 
 :::note
 Cloudflare アカウントの作成が必要です。このツールは Cloudflare Workers 上でのみ動作します。
@@ -17,11 +17,22 @@ Cloudflare アカウントの作成が必要です。このツールは Cloudfla
 
 ## Workers のプラン
 
-:::caution[Workers Paid プラン（月額 5 ドル〜）が必要です]
-無料プランのままだと、ログインやアカウント登録が「Worker exceeded CPU time limit」エラーで失敗することがあります。
-:::
+小規模なチームなら、Workers の無料プランで動きます。無料プランの主な上限は次のとおりです（2026-11 時点。最新の値は Cloudflare の [Workers](https://developers.cloudflare.com/workers/platform/limits/)・[D1](https://developers.cloudflare.com/d1/platform/limits/) の上限のページで確認してください）。
 
-パスワードのハッシュ化（scrypt）は CPU を多く使います。無料プランの CPU 時間の上限は 1 リクエストあたり 10ms ですが、実測（2026-10、ログイン・ログアウトを繰り返した計測）では P50 が 29.75ms、P99 が 373ms で、上限を大きく超えました。
+| 上限 | 無料プラン |
+|---|---|
+| リクエスト数 | 1 日 10 万回 |
+| 1 リクエストの CPU 時間 | 10ms |
+| D1 の容量 | 1 つの DB で 500MB |
+| D1 の読み書き | 1 日に読み取り 500 万行、書き込み 10 万行 |
+
+CPU 時間は、パスワードの重い計算をブラウザで行い、1 つの画面の読み取りを DB への 1〜2 回の往復にまとめて、ふだんの画面がおおむね 10ms に収まるようにしています。課題の詳細画面を開いたとき、取り込み、起動したばかりの Worker への最初のリクエストなどは 10ms を超えますが、Cloudflare はたまに超える分は許します。無料プランのアカウントで E2E テストの全操作（ログイン、課題の起票・編集、コメント、招待、Backlog からの取り込み、パスワードの再設定など）を流した確認（2026-11）では、上限超過のエラー（1102）は出ませんでした。
+
+次のどれかに当てはまるなら、Workers Paid プラン（月額 5 ドル〜）にしてください。
+
+- Cloudflare Email Sending でメールを送りたい（[メール送信の設定](/guides/mail/)）
+- 利用者が多く、1 日のリクエスト数や D1 の読み書きが上限に近い
+- 「Worker exceeded resource limits」（エラー 1102）が出る
 
 ## 手元の PC
 

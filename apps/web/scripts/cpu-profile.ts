@@ -10,7 +10,7 @@
 //   wrangler の 9230 番（プロキシ）は CDP の応答を返さないので、workerd 自身のインスペクタに繋ぐ（自動で探す。--inspector で指定も可）。
 // - 応答は圧縮させない（accept-encoding: identity）。手元の workerd は gzip の圧縮を Worker の CPU 時間に含めるが、
 //   本番ではエッジで圧縮されて CPU 時間に入らないため（2026-11 の計測: 課題一覧が手元 10.6ms → 7.9ms、本番は差なし）。
-// - 手元は本番より速い（小さいリクエストで約 2 倍、重いページで約 1.3 倍）。無料プランの 10ms に余裕を持たせるなら手元で 5ms 以下が目安。
+// - 手元は本番より速い（本番の CPU 時間は手元の 1.5〜2 倍ほど）。無料プランの 10ms に余裕を持たせるなら手元で 5ms 以下が目安。
 // - D1 の往復は wrangler dev の Local Explorer が記録するトレース（d1_* の span）を、route ごとに 1 回だけ実行して数える。
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';

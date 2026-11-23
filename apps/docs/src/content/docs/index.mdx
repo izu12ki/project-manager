@@ -69,15 +69,15 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 		管理者が発行する API キーで、課題の一括起票・一括修正やスケジュールの作成ができます。Claude Code 用の Skill を同梱しています。
 	</Card>
 	<Card title="招待メール / パスワードリセット" icon="email">
-		Cloudflare Email Sending（Workers Paid プランに月 3,000 通まで含まれる）、SMTP2GO、Resend のどれかで送信します。メール設定なしでも招待リンクを手渡しできます（[メール送信の設定](/guides/mail/)）。
+		SMTP2GO、Resend、Cloudflare Email Sending（Workers Paid プランのみ）のどれかで送信します。メール設定なしでも招待リンクを手渡しできます（[メール送信の設定](/guides/mail/)）。
 	</Card>
 </CardGrid>
 
 ## 使い始める
 
-利用者ごとに自分の Cloudflare アカウントへデプロイして使います（SaaS としての提供はありません）。Cloudflare は Workers Paid プラン（月額 5 ドル〜）が必要です。
+利用者ごとに自分の Cloudflare アカウントへデプロイして使います（SaaS としての提供はありません）。小規模なチームなら Cloudflare の Workers の無料プランで動きます。
 
 <CardGrid>
-	<LinkCard title="必要なもの" description="用意するアカウントと、Workers Paid プランが必要な理由" href="/guides/requirements/" />
+	<LinkCard title="必要なもの" description="用意するアカウントと、Workers の無料プランの上限" href="/guides/requirements/" />
 	<LinkCard title="デプロイ手順" description="ソースの取得から初期セットアップ画面を開くまで" href="/guides/deploy/" />
 </CardGrid>

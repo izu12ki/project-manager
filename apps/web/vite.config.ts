@@ -4,9 +4,15 @@ import { defineConfig } from 'vitest/config';
 import adapter from '@sveltejs/adapter-cloudflare';
 import { sveltekit } from '@sveltejs/kit/vite';
 
-// SvelteKit の runtime/server/sourcemaps.js はモジュールの評価時に node:fs・node:url・node:path・node:module を読み込む。
-// Worker の起動（グローバルスコープ）でその分の CPU を使うので、エラーのスタックを直すとき（fix_stack_trace の初回）まで遅らせる
-const KIT_SOURCEMAPS_EAGER = `const fs = globalThis.process?.getBuiltinModule?.('node:fs');
+// SvelteKit の runtime/server の一部はモジュールの評価時に node:fs・node:util などを読み込む。
+// Worker の起動（グローバルスコープ）でその分の CPU を使うので、最初に使うときまで遅らせる
+const KIT_LAZY_BUILTINS: { file: RegExp; replace: [string, string][] }[] = [
+	{
+		// エラーのスタックを直すとき（fix_stack_trace の初回）に読み込む
+		file: /[\\/]@sveltejs[\\/]kit[\\/]src[\\/]runtime[\\/]server[\\/]sourcemaps\.js$/,
+		replace: [
+			[
+				`const fs = globalThis.process?.getBuiltinModule?.('node:fs');
 const url = globalThis.process?.getBuiltinModule?.('node:url');
 const path = globalThis.process?.getBuiltinModule?.('node:path');
 const module = globalThis.process?.getBuiltinModule?.('node:module');
@@ -14,8 +20,8 @@ const module = globalThis.process?.getBuiltinModule?.('node:module');
 const cwd = globalThis.process?.cwd?.();
 
 /** @type {(file: string) => string} */
-const relative = cwd ? (file) => path.relative(cwd, file) : (file) => file;`;
-const KIT_SOURCEMAPS_LAZY = `let fs, url, path, module, cwd, relative;
+const relative = cwd ? (file) => path.relative(cwd, file) : (file) => file;`,
+				`let fs, url, path, module, cwd, relative;
 let builtins_loaded = false;
 function load_builtins() {
 	if (builtins_loaded) return;
@@ -26,22 +32,46 @@ function load_builtins() {
 	module = globalThis.process?.getBuiltinModule?.('node:module');
 	cwd = globalThis.process?.cwd?.();
 	relative = cwd ? (file) => path.relative(cwd, file) : (file) => file;
-}`;
-const KIT_FIX_STACK_TRACE = 'export let fix_stack_trace = (error) => {';
+}`
+			],
+			[
+				'export let fix_stack_trace = (error) => {',
+				'export let fix_stack_trace = (error) => {\n\tload_builtins();'
+			]
+		]
+	},
+	{
+		// リクエストのログを整形するとき（format_response の初回）に読み込む
+		file: /[\\/]@sveltejs[\\/]kit[\\/]src[\\/]runtime[\\/]server[\\/]internal\.js$/,
+		replace: [
+			[
+				`const styleText =
+	// eslint-disable-next-line n/prefer-global/process
+	globalThis.process?.getBuiltinModule?.('node:util')?.styleText ??
+	/** @type {(format: unknown, text: string) => string} */ ((_format, text) => text);`,
+				`let style_text;
+const styleText = (format, text) =>
+	(style_text ??=
+		globalThis.process?.getBuiltinModule?.('node:util')?.styleText ??
+		((_format, text) => text))(format, text);`
+			]
+		]
+	}
+];
 
-function lazyKitSourcemaps(): Plugin {
+function lazyKitBuiltins(): Plugin {
 	return {
-		name: 'lazy-kit-sourcemaps',
+		name: 'lazy-kit-builtins',
 		transform: {
-			filter: { id: /[\\/]@sveltejs[\\/]kit[\\/]src[\\/]runtime[\\/]server[\\/]sourcemaps\.js$/ },
-			handler(code) {
-				if (!code.includes(KIT_SOURCEMAPS_EAGER) || !code.includes(KIT_FIX_STACK_TRACE)) {
-					this.warn('sourcemaps.js が変わったので、node: モジュールの読み込みを遅らせられない');
+			filter: { id: KIT_LAZY_BUILTINS.map((p) => p.file) },
+			handler(code, id) {
+				const patch = KIT_LAZY_BUILTINS.find((p) => p.file.test(id));
+				if (!patch) return;
+				if (!patch.replace.every(([from]) => code.includes(from))) {
+					this.warn(`${id} が変わったので、node: モジュールの読み込みを遅らせられない`);
 					return;
 				}
-				return code
-					.replace(KIT_SOURCEMAPS_EAGER, KIT_SOURCEMAPS_LAZY)
-					.replace(KIT_FIX_STACK_TRACE, `${KIT_FIX_STACK_TRACE}\n\tload_builtins();`);
+				return patch.replace.reduce((out, [from, to]) => out.replace(from, to), code);
 			}
 		}
 	};
@@ -49,7 +79,7 @@ function lazyKitSourcemaps(): Plugin {
 
 export default defineConfig({
 	plugins: [
-		lazyKitSourcemaps(),
+		lazyKitBuiltins(),
 		tailwindcss(),
 		sveltekit({
 			experimental: { remoteFunctions: true },

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createAuth, resetPasswordEmail } from './auth';
-import { account } from './db/schema';
+import { eq } from 'drizzle-orm';
+import { account, verification } from './db/schema';
 import { PASSWORD_HASH_PREFIX } from './password';
 import { createTestBase, createTestDb, seedUser } from './test-utils';
 import { createFirstAdmin } from './services/setup';
@@ -104,7 +105,7 @@ describe('createAuth', () => {
 			await new Promise((r) => setTimeout(r, 10));
 			const token = base.sent[0].text.match(/\/api\/auth\/reset-password\/([^?\s]+)/)?.[1];
 			if (!token) throw new Error('reset token not found in mail');
-			return { auth, token };
+			return { auth, token, db };
 		}
 
 		it('有効なトークンなら、その人のメールアドレスがわかる', async () => {
@@ -115,6 +116,15 @@ describe('createAuth', () => {
 		it('知らないトークンなら null', async () => {
 			const { auth } = await requestReset();
 			expect(await resetPasswordEmail(auth, 'unknown')).toBeNull();
+		});
+
+		it('期限切れのトークンなら null（better-auth は期限切れの行も返すので、こちらで確かめる）', async () => {
+			const { auth, token, db } = await requestReset();
+			await db
+				.update(verification)
+				.set({ expiresAt: new Date(Date.now() - 1000) })
+				.where(eq(verification.identifier, `reset-password:${token}`));
+			expect(await resetPasswordEmail(auth, token)).toBeNull();
 		});
 
 		it('新しい鍵で再設定するとその鍵でログインでき、使ったトークンは null になる', async () => {

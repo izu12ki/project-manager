@@ -1,20 +1,12 @@
 import { and, asc, eq, isNull, or, sql } from 'drizzle-orm';
 import { inList } from '../db/limits';
-import { alias, type SQLiteColumn } from 'drizzle-orm/sqlite-core';
+import { alias } from 'drizzle-orm/sqlite-core';
 import type { AppContext } from '../context';
-import {
-	category,
-	issue,
-	issueStatus,
-	issueType,
-	milestone,
-	project,
-	projectMember,
-	user
-} from '../db/schema';
+import { issue, projectMember, user } from '../db/schema';
 import { AppError } from '../errors';
+import { categoriesQuery, issueTypesQuery, milestonesQuery, statusesQuery } from './issue-fields';
 import type { AssigneeRef } from './issues';
-import type { ProjectRow } from './projects';
+import { checkProjectAccess, ofProject, projectAccessQuery } from './project-access';
 
 const parent = alias(issue, 'parent');
 const reporter = alias(user, 'reporter');
@@ -28,115 +20,75 @@ const deleter = alias(user, 'deleter');
  */
 export async function getIssueDetailRows(ctx: AppContext, key: string, number: number) {
 	const { db } = ctx;
-	const projectId = db.select({ id: project.id }).from(project).where(eq(project.key, key));
-	const ofProject = (col: SQLiteColumn) => inList(col, projectId);
-	const [
-		projectRows,
-		issueRows,
-		children,
-		assignable,
-		statuses,
-		issueTypes,
-		categories,
-		milestones
-	] = await db.batch([
-		// requireProject と同じ判定に使う（参加者か管理者でなければ見せない）
-		db
-			.select({ project, memberId: projectMember.userId })
-			.from(project)
-			.leftJoin(
-				projectMember,
-				and(eq(projectMember.projectId, project.id), eq(projectMember.userId, ctx.actor.id))
-			)
-			.where(eq(project.key, key)),
-		db
-			.select({
-				issue,
-				// batch では同じ名前の列が重なるので（D1 の仕様）、join した表の列には別名を付ける
-				parentNumber: sql<number | null>`${parent.number}`.as('parent_number'),
-				parentTitle: sql<string | null>`${parent.title}`.as('parent_title'),
-				reporterName: sql<string>`${reporter.name}`.as('reporter_name'),
-				deletedByName: sql<string | null>`${deleter.name}`.as('deleted_by_name')
-			})
-			.from(issue)
-			.leftJoin(parent, eq(issue.parentId, parent.id))
-			.innerJoin(reporter, eq(issue.reporterId, reporter.id))
-			.leftJoin(deleter, eq(issue.deletedBy, deleter.id))
-			.where(and(ofProject(issue.projectId), eq(issue.number, number))),
-		// 子課題（番号順）。削除したものは除く
-		db
-			.select({
-				id: issue.id,
-				number: issue.number,
-				title: issue.title,
-				status: issue.status,
-				assigneeIds: issue.assigneeIds
-			})
-			.from(issue)
-			.where(
-				and(
-					ofProject(issue.projectId),
-					inList(
-						issue.parentId,
-						db
-							.select({ id: parent.id })
-							.from(parent)
-							.where(and(ofProject(parent.projectId), eq(parent.number, number)))
-					),
-					isNull(issue.deletedAt)
-				)
-			)
-			.orderBy(asc(issue.number)),
-		// listAssignableUsers と同じ（有効な管理者と参加者）
-		db
-			.select({ id: user.id, name: user.name, role: user.role })
-			.from(user)
-			.where(
-				and(
-					isNull(user.disabledAt),
-					or(
-						eq(user.role, 'admin'),
+	const ofThis = ofProject(db, key);
+	const [access, issueRows, children, assignable, statuses, issueTypes, categories, milestones] =
+		await db.batch([
+			projectAccessQuery(ctx, key),
+			db
+				.select({
+					issue,
+					// batch では同じ名前の列が重なるので（D1 の仕様）、join した表の列には別名を付ける
+					parentNumber: sql<number | null>`${parent.number}`.as('parent_number'),
+					parentTitle: sql<string | null>`${parent.title}`.as('parent_title'),
+					reporterName: sql<string>`${reporter.name}`.as('reporter_name'),
+					deletedByName: sql<string | null>`${deleter.name}`.as('deleted_by_name')
+				})
+				.from(issue)
+				.leftJoin(parent, eq(issue.parentId, parent.id))
+				.innerJoin(reporter, eq(issue.reporterId, reporter.id))
+				.leftJoin(deleter, eq(issue.deletedBy, deleter.id))
+				.where(and(ofThis(issue.projectId), eq(issue.number, number))),
+			// 子課題（番号順）。削除したものは除く
+			db
+				.select({
+					id: issue.id,
+					number: issue.number,
+					title: issue.title,
+					status: issue.status,
+					assigneeIds: issue.assigneeIds
+				})
+				.from(issue)
+				.where(
+					and(
+						ofThis(issue.projectId),
 						inList(
-							user.id,
+							issue.parentId,
 							db
-								.select({ id: projectMember.userId })
-								.from(projectMember)
-								.where(ofProject(projectMember.projectId))
+								.select({ id: parent.id })
+								.from(parent)
+								.where(and(ofThis(parent.projectId), eq(parent.number, number)))
+						),
+						isNull(issue.deletedAt)
+					)
+				)
+				.orderBy(asc(issue.number)),
+			// listAssignableUsers と同じ（有効な管理者と参加者）
+			db
+				.select({ id: user.id, name: user.name, role: user.role })
+				.from(user)
+				.where(
+					and(
+						isNull(user.disabledAt),
+						or(
+							eq(user.role, 'admin'),
+							inList(
+								user.id,
+								db
+									.select({ id: projectMember.userId })
+									.from(projectMember)
+									.where(ofThis(projectMember.projectId))
+							)
 						)
 					)
 				)
-			)
-			.orderBy(asc(user.name)),
-		db
-			.select({ key: issueStatus.key, name: issueStatus.name, color: issueStatus.color })
-			.from(issueStatus)
-			.where(ofProject(issueStatus.projectId))
-			.orderBy(asc(issueStatus.position), asc(issueStatus.createdAt)),
-		db
-			.select()
-			.from(issueType)
-			.where(ofProject(issueType.projectId))
-			.orderBy(asc(issueType.position), asc(issueType.createdAt)),
-		db
-			.select()
-			.from(category)
-			.where(ofProject(category.projectId))
-			.orderBy(asc(category.createdAt), asc(category.id)),
-		db
-			.select()
-			.from(milestone)
-			.where(ofProject(milestone.projectId))
-			.orderBy(
-				sql`${milestone.releaseDate} is null`,
-				asc(milestone.releaseDate),
-				asc(milestone.name)
-			)
-	]);
+				.orderBy(asc(user.name)),
+			statusesQuery(db, ofThis),
+			issueTypesQuery(db, ofThis),
+			categoriesQuery(db, ofThis),
+			milestonesQuery(db, ofThis)
+		]);
 
-	const [p] = projectRows;
-	if (!p || (ctx.actor.role !== 'admin' && !p.memberId)) {
-		throw new AppError('not_found', 'プロジェクトが見つかりません');
-	}
+	const project = checkProjectAccess(ctx, access);
 	const [row] = issueRows;
 	if (!row) throw new AppError('not_found', '課題が見つかりません');
 
@@ -166,7 +118,7 @@ export async function getIssueDetailRows(ctx: AppContext, key: string, number: n
 	];
 
 	return {
-		project: p.project as ProjectRow,
+		project,
 		issue: {
 			...row.issue,
 			assignees: named(row.issue.assigneeIds),

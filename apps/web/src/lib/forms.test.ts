@@ -67,6 +67,7 @@ describe('withPasswordKeys', () => {
 
 	afterEach(() => {
 		vi.unstubAllGlobals();
+		vi.restoreAllMocks();
 	});
 
 	it('生のパスワードを鍵に置き換えて送る', async () => {
@@ -108,6 +109,17 @@ describe('withPasswordKeys', () => {
 		await withPasswordKeys({ fields: [{ name: 'password' }] })(i);
 		expect(i.cancel).toHaveBeenCalled();
 		expect(i.formData.has('passwordKey')).toBe(false);
+	});
+
+	it('鍵を作れなかったときは、例外を投げずに知らせて送らず、ボタンを戻す', async () => {
+		vi.spyOn(crypto.subtle, 'deriveBits').mockRejectedValue(new Error('not supported'));
+		const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const i = submitInput({ email: 'a@example.com', password: 'password-1234' });
+		await expect(withPasswordKeys({ fields: [{ name: 'password' }] })(i)).resolves.toBeUndefined();
+		expect(err).toHaveBeenCalled();
+		expect(i.cancel).toHaveBeenCalled();
+		expect(i.formData.has('passwordKey')).toBe(false);
+		expect(i.submitter.disabled).toBe(false);
 	});
 
 	it('鍵を作って送り終えるまで送信ボタンを無効にする', async () => {

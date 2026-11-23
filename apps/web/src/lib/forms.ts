@@ -75,7 +75,6 @@ export function withPasswordKeys<S extends Data, F extends Data>(
 			if (button && 'disabled' in button) button.disabled = v;
 		};
 		setDisabled(true);
-		let after: Awaited<ReturnType<SubmitFunction<S, F>>>;
 		try {
 			const email = opts.email ?? String(input.formData.get('email') ?? '');
 			for (const f of opts.fields) {
@@ -83,6 +82,16 @@ export function withPasswordKeys<S extends Data, F extends Data>(
 				input.formData.set(`${f.name}Key`, await derivePasswordKey(email, raw));
 				if (!f.keepRaw) input.formData.delete(f.name);
 			}
+		} catch (e) {
+			// 古いブラウザなどで鍵を作れないとき。黙って止まらないように知らせる
+			console.error('derivePasswordKey failed', e);
+			toast.error('パスワードを処理できませんでした。別のブラウザでお試しください');
+			setDisabled(false);
+			input.cancel();
+			return;
+		}
+		let after: Awaited<ReturnType<SubmitFunction<S, F>>>;
+		try {
 			let cancelled = false;
 			after = await submit({
 				...input,

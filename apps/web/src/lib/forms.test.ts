@@ -78,13 +78,6 @@ describe('withPasswordKeys', () => {
 		expect(i.cancel).not.toHaveBeenCalled();
 	});
 
-	it('keepRaw の欄は生の値も残す', async () => {
-		const i = submitInput({ email: 'a@example.com', password: 'password-1234' });
-		await withPasswordKeys({ fields: [{ name: 'password', keepRaw: true }] })(i);
-		expect(i.formData.get('passwordKey')).toBe(key('a@example.com', 'password-1234'));
-		expect(i.formData.get('password')).toBe('password-1234');
-	});
-
 	it('渡したメールアドレスをフォームの email 欄より優先してソルトにする', async () => {
 		const i = submitInput({ password: 'password-1234' });
 		await withPasswordKeys({ email: 'a@example.com', fields: [{ name: 'password' }] })(i);
@@ -95,11 +88,11 @@ describe('withPasswordKeys', () => {
 		const i = submitInput({ currentPassword: 'old-password-1', newPassword: 'new-password-1' });
 		await withPasswordKeys({
 			email: 'a@example.com',
-			fields: [{ name: 'currentPassword', keepRaw: true }, { name: 'newPassword' }]
+			fields: [{ name: 'currentPassword' }, { name: 'newPassword' }]
 		})(i);
 		expect(i.formData.get('currentPasswordKey')).toBe(key('a@example.com', 'old-password-1'));
 		expect(i.formData.get('newPasswordKey')).toBe(key('a@example.com', 'new-password-1'));
-		expect(i.formData.get('currentPassword')).toBe('old-password-1');
+		expect(i.formData.has('currentPassword')).toBe(false);
 		expect(i.formData.has('newPassword')).toBe(false);
 	});
 

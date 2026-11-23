@@ -52,8 +52,8 @@ export const enhance = <S extends Data, F extends Data>(
 type PasswordKeyOptions = {
 	/** ソルトに使うメールアドレス。省略するとフォームの email 欄を使う */
 	email?: string;
-	/** 鍵にする欄。鍵は `${name}Key` で送る。keepRaw の欄は生の値も送る（旧形式のハッシュの移行期間だけ） */
-	fields: { name: string; keepRaw?: boolean }[];
+	/** 鍵にする欄。鍵は `${name}Key` で送り、生の値は送らない */
+	fields: { name: string }[];
 };
 
 /**
@@ -80,7 +80,7 @@ export function withPasswordKeys<S extends Data, F extends Data>(
 			for (const f of opts.fields) {
 				const raw = String(input.formData.get(f.name) ?? '');
 				input.formData.set(`${f.name}Key`, await derivePasswordKey(email, raw));
-				if (!f.keepRaw) input.formData.delete(f.name);
+				input.formData.delete(f.name);
 			}
 		} catch (e) {
 			// 古いブラウザなどで鍵を作れないとき。黙って止まらないように知らせる

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	consumeRateLimit,
 	isLoginBlocked,
-	isPasswordChangeBlocked,
+	passwordChangeLockedFor,
 	recordLoginFailure,
 	recordLoginSuccess,
 	recordPasswordChangeFailure,
@@ -58,15 +58,17 @@ describe('login failure limits', () => {
 });
 
 describe('password change failure limits', () => {
-	it('現在のパスワードの間違いはユーザー単位に 5 回で止め、15 分で解除する', async () => {
+	it('現在のパスワードの間違いはユーザー単位に 5 回でロックし、ロックの残り時間を返す', async () => {
 		const db = await createTestDb();
 		for (let i = 0; i < 5; i++) {
-			expect(await isPasswordChangeBlocked(db, 'u1', i)).toBe(false);
+			expect(await passwordChangeLockedFor(db, 'u1', i)).toBe(0);
 			await recordPasswordChangeFailure(db, 'u1', i);
 		}
-		expect(await isPasswordChangeBlocked(db, 'u1', 10)).toBe(true);
-		expect(await isPasswordChangeBlocked(db, 'u2', 10)).toBe(false);
-		expect(await isPasswordChangeBlocked(db, 'u1', 15 * 60_000)).toBe(false);
+		// 窓は 1 回目の失敗（時刻 0）から 15 分
+		expect(await passwordChangeLockedFor(db, 'u1', 4)).toBe(15 * 60_000 - 4);
+		expect(await passwordChangeLockedFor(db, 'u1', 10 * 60_000)).toBe(5 * 60_000);
+		expect(await passwordChangeLockedFor(db, 'u2', 10)).toBe(0);
+		expect(await passwordChangeLockedFor(db, 'u1', 15 * 60_000)).toBe(0);
 	});
 
 	it('変更できたら失敗回数はリセットされる', async () => {
@@ -74,6 +76,6 @@ describe('password change failure limits', () => {
 		for (let i = 0; i < 4; i++) await recordPasswordChangeFailure(db, 'u1', i);
 		await recordPasswordChangeSuccess(db, 'u1');
 		await recordPasswordChangeFailure(db, 'u1', 10);
-		expect(await isPasswordChangeBlocked(db, 'u1', 11)).toBe(false);
+		expect(await passwordChangeLockedFor(db, 'u1', 11)).toBe(0);
 	});
 });

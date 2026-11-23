@@ -5,7 +5,8 @@ import { appContext } from '#lib/server/context.ts';
 import { authorize, can } from '#lib/server/authz.ts';
 import { handleAction } from '#lib/server/errors.ts';
 import {
-	isPasswordChangeBlocked,
+	PASSWORD_CHANGE_FAILURE_LIMIT,
+	passwordChangeLockedFor,
 	recordPasswordChangeFailure,
 	recordPasswordChangeSuccess
 } from '#lib/server/ratelimit.ts';
@@ -27,6 +28,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 };
 
 type FailData = { message: string; fields: Record<string, string[]> };
+
+/** 現在のパスワードを間違え続けてパスワードの変更をロックしたときの文言。ms はロックが解けるまでの時間 */
+const lockedMessage = (ms: number) =>
+	`現在のパスワードを${PASSWORD_CHANGE_FAILURE_LIMIT.max}回間違えたため、パスワードの変更を一時的にロックしています。${Math.ceil(ms / 60_000)}分後にもう一度お試しください`;
 
 /** カード内にエラーを出すため、失敗結果にカードの印（slack: true など）を付ける */
 async function cardAction<T, K extends 'slack' | 'apiKey'>(key: K, fn: () => Promise<T>) {
@@ -65,12 +70,8 @@ export const actions: Actions = {
 				input
 			);
 			// 旧形式の照合（scrypt）より前に止める
-			if (await isPasswordChangeBlocked(db, actor.id)) {
-				return fail(429, {
-					message: '試行回数が多すぎます。しばらくしてから再度お試しください',
-					fields: {}
-				});
-			}
+			const lockedFor = await passwordChangeLockedFor(db, actor.id);
+			if (lockedFor > 0) return fail(429, { message: lockedMessage(lockedFor), fields: {} });
 			if (data.currentPassword) {
 				await upgradeLegacyPassword(
 					db,
@@ -91,6 +92,10 @@ export const actions: Actions = {
 			} catch (e) {
 				if (!(e instanceof APIError)) throw e;
 				await recordPasswordChangeFailure(db, actor.id);
+				// この間違いで上限に達したら、その場でロックしたことを伝える
+				const nowLockedFor = await passwordChangeLockedFor(db, actor.id);
+				if (nowLockedFor > 0)
+					return fail(429, { message: lockedMessage(nowLockedFor), fields: {} });
 				return fail(400, { message: '現在のパスワードが違います', fields: {} });
 			}
 			await recordPasswordChangeSuccess(db, actor.id);

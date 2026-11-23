@@ -1429,10 +1429,19 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 			headers: { Origin: 'http://localhost:4173' },
 			form: { currentPasswordKey, newPasswordKey: 'b'.repeat(64) }
 		});
-	for (let i = 0; i < 5; i++) expect((await changeWith('a'.repeat(64))).status()).toBe(400);
-	const blocked = await changeWith('a'.repeat(64));
-	expect(blocked.status()).toBe(429);
-	expect(await blocked.text()).toContain('試行回数が多すぎます');
+	for (let i = 0; i < 4; i++) {
+		const wrong = await changeWith('a'.repeat(64));
+		expect(wrong.status()).toBe(400);
+		expect(await wrong.text()).toContain('現在のパスワードが違います');
+	}
+	// 5 回目の間違いで、ロックしたことと解けるまでの時間を伝える。ロック中は正しくても試せない
+	for (let i = 0; i < 2; i++) {
+		const locked = await changeWith('a'.repeat(64));
+		expect(locked.status()).toBe(429);
+		expect(await locked.text()).toMatch(
+			/現在のパスワードを5回間違えたため、パスワードの変更を一時的にロックしています。\d+分後に/
+		);
+	}
 
 	expect(problems).toEqual([]);
 });

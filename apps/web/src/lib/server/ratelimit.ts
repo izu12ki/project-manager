@@ -79,12 +79,19 @@ export async function recordLoginSuccess(db: DB, ip: string, email: string): Pro
 
 const passwordChangeKey = (userId: string) => `app:password-change-fail:${userId}`;
 
-export async function isPasswordChangeBlocked(
+/** パスワード変更のロックが解けるまでの時間（ms）。ロックされていなければ 0 */
+export async function passwordChangeLockedFor(
 	db: DB,
 	userId: string,
 	now: number = Date.now()
-): Promise<boolean> {
-	return isExhausted(db, passwordChangeKey(userId), PASSWORD_CHANGE_FAILURE_LIMIT, now);
+): Promise<number> {
+	const limit = PASSWORD_CHANGE_FAILURE_LIMIT;
+	const [row] = await db
+		.select()
+		.from(rateLimit)
+		.where(eq(rateLimit.key, passwordChangeKey(userId)));
+	if (!row || row.count < limit.max) return 0;
+	return Math.max(0, row.lastRequest + limit.windowMs - now);
 }
 
 export async function recordPasswordChangeFailure(

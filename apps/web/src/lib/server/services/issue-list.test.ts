@@ -17,12 +17,13 @@ import {
 	listIssueTypes,
 	listMilestones
 } from './issue-fields';
-import { getIssueListRows } from './issue-list';
+import { getIssueListRows, getNewIssueRows } from './issue-list';
 import {
 	createIssue,
 	deleteIssue,
 	listDeletedIssues,
 	listIssues,
+	listParentCandidates,
 	type IssueFilters
 } from './issues';
 import { listAssignableUsers, requireProject } from './projects';
@@ -139,5 +140,43 @@ describe('getIssueListRows', () => {
 		const before = roundTrips(db);
 		await getIssueListRows(as(member), 'ACME', { q: 'ACME-1' }, { key: 'due', order: 'asc' });
 		expect(roundTrips(db) - before).toBe(1);
+	});
+});
+
+describe('getNewIssueRows', () => {
+	it('returns the same rows as the single-purpose functions in one round trip', async () => {
+		const db = await createTestDb();
+		const base = createTestBase(db);
+		const as = (a: Actor) => ctxOf(base, a);
+		const admin = await seedUser(db, 'admin', 'Admin');
+		const member = await seedUser(db, 'member', 'Member');
+		const viewer = await seedUser(db, 'viewer', 'Viewer');
+		const outsider = await seedUser(db, 'member', 'Outsider');
+		await seedProject(db, { key: 'ACME', members: [member, viewer] });
+		await seedProject(db, { key: 'OTHER', members: [outsider] });
+		for (const key of ['OTHER', 'ACME']) {
+			await createCategory(as(admin), key, { name: `${key} カテゴリー` });
+			await createMilestone(as(admin), key, { name: `${key} v1` });
+			await createIssue(as(admin), key, { title: `${key} 親` });
+		}
+		await createIssue(as(admin), 'ACME', { title: '子', parentNumber: 1 });
+		const ctx = as(member);
+		const p = await requireProject(ctx, 'ACME');
+		const before = roundTrips(db);
+		const rows = await getNewIssueRows(ctx, 'ACME');
+		expect(roundTrips(db) - before).toBe(1);
+		expect(rows).toEqual({
+			project: p,
+			assignable: await listAssignableUsers(db, p.id),
+			categories: await listCategories(ctx, 'ACME'),
+			milestones: await listMilestones(ctx, 'ACME'),
+			parentCandidates: await listParentCandidates(ctx, 'ACME')
+		});
+		await expect(getNewIssueRows(as(outsider), 'ACME')).rejects.toMatchObject({
+			code: 'not_found'
+		});
+		await expect(getNewIssueRows(as(viewer), 'ACME')).rejects.toMatchObject({
+			code: 'forbidden'
+		});
 	});
 });

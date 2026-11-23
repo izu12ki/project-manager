@@ -371,20 +371,25 @@ export async function getIssue(ctx: AppContext, key: string, number: number) {
  * 親にできる課題（新しい順）。子課題は 1 階層までなので、子課題でない課題だけ。
  * 削除したものと、exceptNumber（親を設定しようとしている課題自身）は除く
  */
-export async function listParentCandidates(ctx: AppContext, key: string, exceptNumber?: number) {
-	const p = await requireProject(ctx, key);
-	return ctx.db
+/** 親課題の候補（子課題でない、削除していない課題を新しい順に）。batch にも入れられる */
+export function parentCandidatesQuery(db: DB, of: ProjectCond, exceptNumber?: number) {
+	return db
 		.select({ number: issue.number, title: issue.title })
 		.from(issue)
 		.where(
 			and(
-				eq(issue.projectId, p.id),
+				of(issue.projectId),
 				isNull(issue.parentId),
 				isNull(issue.deletedAt),
 				exceptNumber === undefined ? undefined : ne(issue.number, exceptNumber)
 			)
 		)
 		.orderBy(desc(issue.number));
+}
+
+export async function listParentCandidates(ctx: AppContext, key: string, exceptNumber?: number) {
+	const p = await requireProject(ctx, key);
+	return parentCandidatesQuery(ctx.db, byProjectId(p.id), exceptNumber);
 }
 
 /** 削除した課題は閲覧だけできる */

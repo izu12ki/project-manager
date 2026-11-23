@@ -29,9 +29,9 @@ export function unknownUserInsert(db: DB) {
 		.onConflictDoNothing();
 }
 
-export async function listUsers(ctx: AppContext) {
-	authorize(ctx.actor, 'user:manage');
-	return ctx.db
+/** 管理画面のユーザー一覧（登録順。「不明なユーザー」は除く）。batch にも入れられる */
+export function usersQuery(db: DB) {
+	return db
 		.select({
 			id: user.id,
 			name: user.name,
@@ -43,6 +43,11 @@ export async function listUsers(ctx: AppContext) {
 		.from(user)
 		.where(ne(user.id, UNKNOWN_USER_ID))
 		.orderBy(asc(user.createdAt));
+}
+
+export async function listUsers(ctx: AppContext) {
+	authorize(ctx.actor, 'user:manage');
+	return usersQuery(ctx.db);
 }
 
 /**

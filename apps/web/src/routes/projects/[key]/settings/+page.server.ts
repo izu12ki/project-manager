@@ -36,6 +36,7 @@ import {
 	updateProject
 } from '#lib/server/services/projects.ts';
 import { removeProjectIconImage, setProjectIconImage } from '#lib/server/services/project-icons.ts';
+import { getProjectSettingsRows } from '#lib/server/services/project-settings.ts';
 import { listUsers } from '#lib/server/services/users.ts';
 import { formObject } from '#lib/server/validation.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -44,15 +45,8 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 	const ctx = appContext(locals);
 	if (ctx.actor.role !== 'admin') error(404, 'Not found');
 	return handleLoad(async () => {
-		const p = await requireProject(ctx, params.key);
-		const [members, users, invitations, issueTypes, categories, milestones] = await Promise.all([
-			listMembers(ctx, params.key),
-			listUsers(ctx),
-			listPendingInvitations(ctx, { projectId: p.id }),
-			listIssueTypes(ctx, params.key),
-			listCategories(ctx, params.key),
-			listMilestones(ctx, params.key)
-		]);
+		const { members, users, invitations, issueTypes, categories, milestones } =
+			await getProjectSettingsRows(ctx, params.key);
 		const memberIds = new Set(members.map((m) => m.id));
 		const candidates = users.filter(
 			(u) => !u.disabledAt && u.role !== 'admin' && !memberIds.has(u.id)

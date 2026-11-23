@@ -203,14 +203,19 @@ export async function setProjectArchived(
 	forgetProject(ctx, key);
 }
 
-export async function listMembers(ctx: AppContext, key: string) {
-	const p = await requireProject(ctx, key);
-	return ctx.db
+/** プロジェクトの参加者（名前順）。batch にも入れられる */
+export function membersQuery(db: DB, of: ProjectCond) {
+	return db
 		.select({ id: user.id, name: user.name, email: user.email, role: user.role })
 		.from(projectMember)
 		.innerJoin(user, eq(user.id, projectMember.userId))
-		.where(eq(projectMember.projectId, p.id))
+		.where(of(projectMember.projectId))
 		.orderBy(asc(user.name));
+}
+
+export async function listMembers(ctx: AppContext, key: string) {
+	const p = await requireProject(ctx, key);
+	return membersQuery(ctx.db, byProjectId(p.id));
 }
 
 export async function addMember(ctx: AppContext, key: string, userId: string): Promise<void> {

@@ -1423,5 +1423,16 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await logout(page);
 	await login(page, 'member@example.com', 'legacy-password-1');
 
+	// 17. パスワード変更で現在のパスワードを 5 回間違えると、しばらく試せない（盗んだセッションでの総当たり対策）
+	const changeWith = (currentPasswordKey: string) =>
+		page.request.post('/account?/changePassword', {
+			headers: { Origin: 'http://localhost:4173' },
+			form: { currentPasswordKey, newPasswordKey: 'b'.repeat(64) }
+		});
+	for (let i = 0; i < 5; i++) expect((await changeWith('a'.repeat(64))).status()).toBe(400);
+	const blocked = await changeWith('a'.repeat(64));
+	expect(blocked.status()).toBe(429);
+	expect(await blocked.text()).toContain('試行回数が多すぎます');
+
 	expect(problems).toEqual([]);
 });

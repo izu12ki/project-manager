@@ -4,6 +4,11 @@ import * as v from 'valibot';
 import { appContext } from '#lib/server/context.ts';
 import { authorize, can } from '#lib/server/authz.ts';
 import { handleAction } from '#lib/server/errors.ts';
+import {
+	isPasswordChangeBlocked,
+	recordPasswordChangeFailure,
+	recordPasswordChangeSuccess
+} from '#lib/server/ratelimit.ts';
 import { createApiKey, listApiKeys, revokeApiKey } from '#lib/server/services/api-keys.ts';
 import { disableSlack, enableSlack, getSlackStatus } from '#lib/server/services/integrations.ts';
 import { upgradeLegacyPassword } from '#lib/server/services/legacy-password.ts';
@@ -59,6 +64,13 @@ export const actions: Actions = {
 				}),
 				input
 			);
+			// 旧形式の照合（scrypt）より前に止める
+			if (await isPasswordChangeBlocked(db, actor.id)) {
+				return fail(429, {
+					message: '試行回数が多すぎます。しばらくしてから再度お試しください',
+					fields: {}
+				});
+			}
 			if (data.currentPassword) {
 				await upgradeLegacyPassword(
 					db,
@@ -77,10 +89,11 @@ export const actions: Actions = {
 					headers: request.headers
 				});
 			} catch (e) {
-				if (e instanceof APIError)
-					return fail(400, { message: '現在のパスワードが違います', fields: {} });
-				throw e;
+				if (!(e instanceof APIError)) throw e;
+				await recordPasswordChangeFailure(db, actor.id);
+				return fail(400, { message: '現在のパスワードが違います', fields: {} });
 			}
+			await recordPasswordChangeSuccess(db, actor.id);
 			return { passwordSaved: true };
 		});
 	},

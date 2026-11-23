@@ -2,9 +2,7 @@ import { parseIssueSort } from '#lib/issue-sort.ts';
 import { PRIORITIES, type Priority } from '#lib/labels.ts';
 import { appContext } from '#lib/server/context.ts';
 import { handleLoad } from '#lib/server/errors.ts';
-import { listCategories, listMilestones } from '#lib/server/services/issue-fields.ts';
-import { listDeletedIssues, listIssues } from '#lib/server/services/issues.ts';
-import { listAssignableUsers, requireProject } from '#lib/server/services/projects.ts';
+import { getIssueListRows } from '#lib/server/services/issue-list.ts';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
@@ -22,14 +20,12 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	};
 	const sort = parseIssueSort(q);
 	return handleLoad(async () => {
-		const p = await requireProject(ctx, params.key);
-		const [issues, assignees, categories, milestones, deletedIssues] = await Promise.all([
-			listIssues(ctx, params.key, filters, sort),
-			listAssignableUsers(ctx.db, p.id),
-			listCategories(ctx, params.key),
-			listMilestones(ctx, params.key),
-			listDeletedIssues(ctx, params.key)
-		]);
+		const { issues, assignees, categories, milestones, deletedIssues } = await getIssueListRows(
+			ctx,
+			params.key,
+			filters,
+			sort
+		);
 		return { issues, assignees, categories, milestones, deletedIssues, filters, sort };
 	});
 };

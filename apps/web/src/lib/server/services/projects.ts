@@ -11,6 +11,7 @@ import { issue, project, projectMember, user } from '../db/schema';
 import { AppError } from '../errors';
 import { parse } from '../validation';
 import { defaultFieldInserts } from './issue-fields';
+import { byProjectId, type ProjectCond } from './project-access';
 
 export type ProjectRow = typeof project.$inferSelect;
 
@@ -220,7 +221,8 @@ export async function removeMember(ctx: AppContext, key: string, userId: string)
 	]);
 }
 
-export async function listAssignableUsers(db: DB, projectId: string) {
+/** 担当者にできる人（有効な管理者と参加者）。batch にも入れられる */
+export function assignableUsersQuery(db: DB, of: ProjectCond) {
 	return db
 		.select({ id: user.id, name: user.name, role: user.role })
 		.from(user)
@@ -234,10 +236,14 @@ export async function listAssignableUsers(db: DB, projectId: string) {
 						db
 							.select({ id: projectMember.userId })
 							.from(projectMember)
-							.where(eq(projectMember.projectId, projectId))
+							.where(of(projectMember.projectId))
 					)
 				)
 			)
 		)
 		.orderBy(asc(user.name));
+}
+
+export async function listAssignableUsers(db: DB, projectId: string) {
+	return assignableUsersQuery(db, byProjectId(projectId));
 }

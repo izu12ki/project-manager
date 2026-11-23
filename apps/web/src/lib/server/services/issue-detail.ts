@@ -1,12 +1,13 @@
-import { and, asc, eq, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import { inList } from '../db/limits';
 import { alias } from 'drizzle-orm/sqlite-core';
 import type { AppContext } from '../context';
-import { issue, projectMember, user } from '../db/schema';
+import { issue, user } from '../db/schema';
 import { AppError } from '../errors';
 import { categoriesQuery, issueTypesQuery, milestonesQuery, statusesQuery } from './issue-fields';
 import type { AssigneeRef } from './issues';
 import { checkProjectAccess, ofProject, projectAccessQuery } from './project-access';
+import { assignableUsersQuery } from './projects';
 
 const parent = alias(issue, 'parent');
 const reporter = alias(user, 'reporter');
@@ -62,26 +63,7 @@ export async function getIssueDetailRows(ctx: AppContext, key: string, number: n
 					)
 				)
 				.orderBy(asc(issue.number)),
-			// listAssignableUsers と同じ（有効な管理者と参加者）
-			db
-				.select({ id: user.id, name: user.name, role: user.role })
-				.from(user)
-				.where(
-					and(
-						isNull(user.disabledAt),
-						or(
-							eq(user.role, 'admin'),
-							inList(
-								user.id,
-								db
-									.select({ id: projectMember.userId })
-									.from(projectMember)
-									.where(ofThis(projectMember.projectId))
-							)
-						)
-					)
-				)
-				.orderBy(asc(user.name)),
+			assignableUsersQuery(db, ofThis),
 			statusesQuery(db, ofThis),
 			issueTypesQuery(db, ofThis),
 			categoriesQuery(db, ofThis),

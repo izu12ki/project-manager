@@ -38,6 +38,7 @@ import {
 	updateEventsOf,
 	withCategoryGuard
 } from './issue-input';
+import { byProjectId, type ProjectCond } from './project-access';
 import { assertWritable, forgetProject, requireProject, type ProjectRow } from './projects';
 
 const STALE = '並び順が古くなっています。画面を再読み込みしてください';
@@ -196,9 +197,14 @@ function keywordCond(projectKey: string, q: string | undefined): SQL | undefined
 	return m ? or(title, eq(issue.number, Number(m[1]))) : title;
 }
 
-function filterConds(p: ProjectRow, filters: IssueFilters): SQL | undefined {
+/** 一覧の絞り込み。プロジェクトは of で絞る（ID でもキーの副問い合わせでもよい）。キーは「ACME-12」の番号検索に使う */
+export function filterConds(
+	projectKey: string,
+	of: ProjectCond,
+	filters: IssueFilters
+): SQL | undefined {
 	return and(
-		eq(issue.projectId, p.id),
+		of(issue.projectId),
 		isNull(issue.deletedAt),
 		filters.status ? eq(issue.status, filters.status) : undefined,
 		filters.priority ? eq(issue.priority, filters.priority) : undefined,
@@ -206,12 +212,12 @@ function filterConds(p: ProjectRow, filters: IssueFilters): SQL | undefined {
 		idsCond(issue.categoryIds, filters.categoryId),
 		optionCond(issue.typeId, filters.typeId),
 		optionCond(issue.milestoneId, filters.milestoneId),
-		keywordCond(p.key, filters.q)
+		keywordCond(projectKey, filters.q)
 	);
 }
 
 /** 並べ替えの ORDER BY。日付が空の課題は、どちらの向きでも末尾に置く。同じ値の中はキーの降順 */
-function sortOrder(sort: IssueSort): SQL[] {
+export function sortOrder(sort: IssueSort): SQL[] {
 	const dir = sort.order === 'asc' ? asc : desc;
 	const byDate = (col: typeof issue.startDate | typeof issue.dueDate) => [
 		sql`${col} is null`,
@@ -238,7 +244,7 @@ export async function listIssues(
 	sort: IssueSort = DEFAULT_ISSUE_SORT
 ) {
 	const p = await requireProject(ctx, key);
-	return selectIssues(ctx.db, filterConds(p, filters), sortOrder(sort));
+	return selectIssues(ctx.db, filterConds(p.key, byProjectId(p.id), filters), sortOrder(sort));
 }
 
 /** プロジェクトごとの未完了（完了以外）の課題数。projectIds は呼び出し側で閲覧可能なものに限ること。 */
@@ -270,7 +276,7 @@ export async function listBoard(
 	const p = await requireProject(ctx, key);
 	const [statuses, rows] = await Promise.all([
 		listStatusesOf(ctx.db, p.id),
-		selectIssues(ctx.db, filterConds(p, { ...filters, status: undefined }), [
+		selectIssues(ctx.db, filterConds(p.key, byProjectId(p.id), { ...filters, status: undefined }), [
 			asc(issue.position),
 			asc(issue.number)
 		])
@@ -294,7 +300,9 @@ export async function listTimeline(
 	key: string
 ): Promise<{ scheduled: TimelineItem[]; unscheduled: TimelineItem[] }> {
 	const p = await requireProject(ctx, key);
-	const rows = await selectIssues(ctx.db, filterConds(p, {}), [asc(issue.number)]);
+	const rows = await selectIssues(ctx.db, filterConds(p.key, byProjectId(p.id), {}), [
+		asc(issue.number)
+	]);
 	const items = rows.map((r) => ({
 		...r,
 		canEdit: !p.archivedAt && can(ctx.actor, 'issue:edit', { reporterId: r.reporterId })
@@ -360,9 +368,9 @@ export function assertNotDeleted(i: { deletedAt: Date | null }): void {
 }
 
 /** 削除履歴（新しい順） */
-export async function listDeletedIssues(ctx: AppContext, key: string) {
-	const p = await requireProject(ctx, key);
-	return ctx.db
+/** 削除した課題（新しい順）。batch にも入れられる */
+export function deletedIssuesQuery(db: DB, of: ProjectCond) {
+	return db
 		.select({
 			number: issue.number,
 			title: issue.title,
@@ -371,8 +379,13 @@ export async function listDeletedIssues(ctx: AppContext, key: string) {
 		})
 		.from(issue)
 		.leftJoin(deleter, eq(issue.deletedBy, deleter.id))
-		.where(and(eq(issue.projectId, p.id), isNotNull(issue.deletedAt)))
+		.where(and(of(issue.projectId), isNotNull(issue.deletedAt)))
 		.orderBy(desc(issue.deletedAt));
+}
+
+export async function listDeletedIssues(ctx: AppContext, key: string) {
+	const p = await requireProject(ctx, key);
+	return deletedIssuesQuery(ctx.db, byProjectId(p.id));
 }
 
 async function nextPosition(db: DB, projectId: string, status: Status): Promise<string> {

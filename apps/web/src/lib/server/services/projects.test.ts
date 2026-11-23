@@ -3,7 +3,14 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
 import { issue } from '../db/schema';
-import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
+import {
+	createTestBase,
+	createTestDb,
+	ctxOf,
+	roundTrips,
+	seedProject,
+	seedUser
+} from '../test-utils';
 import {
 	addMember,
 	assertWritable,
@@ -11,12 +18,14 @@ import {
 	listAssignableUsers,
 	listMembers,
 	listProjects,
+	listProjectsWithOpenCounts,
 	removeMember,
 	requireProject,
 	setProjectArchived,
 	updateProject
 } from './projects';
 import { listIssueTypes, listStatuses } from './issue-fields';
+import { createIssue, deleteIssue, listIssues } from './issues';
 
 describe('projects', () => {
 	let db: DB;
@@ -186,5 +195,49 @@ describe('projects', () => {
 		const { id } = await seedProject(db, { key: 'ACME', members: [member, viewer] });
 		const ids = (await listAssignableUsers(db, id)).map((u) => u.id).sort();
 		expect(ids).toEqual([admin.id, member.id, viewer.id].sort());
+	});
+
+	describe('listProjectsWithOpenCounts', () => {
+		beforeEach(async () => {
+			await seedProject(db, { key: 'ACME', name: 'Acme', members: [member] });
+			await seedProject(db, { key: 'BETA', name: 'Beta' });
+			await seedProject(db, { key: 'OLD', name: 'Old', members: [member], archived: true });
+			const ctx = ctxOf(base, admin);
+			await createIssue(ctx, 'ACME', { title: '未完了' });
+			await createIssue(ctx, 'ACME', { title: '完了', status: 'done' });
+			await createIssue(ctx, 'ACME', { title: '削除' });
+			await deleteIssue(ctx, 'ACME', 3);
+			await createIssue(ctx, 'BETA', { title: '未完了' });
+			await createIssue(ctx, 'BETA', { title: '未完了 2' });
+		});
+
+		/** listProjects と、一覧（削除した課題は出ない）の完了以外の件数から作った期待値 */
+		async function expected(actor: Actor) {
+			const ctx = ctxOf(base, actor);
+			const projects = await listProjects(ctx);
+			const active = [];
+			for (const p of projects.filter((p) => !p.archivedAt)) {
+				const open = (await listIssues(ctx, p.key)).filter((i) => i.status !== 'done');
+				active.push({ ...p, openCount: open.length });
+			}
+			return { active, archived: projects.filter((p) => p.archivedAt) };
+		}
+
+		it('returns the same projects and open counts as before for each role', async () => {
+			for (const actor of [admin, member, outsider]) {
+				expect(await listProjectsWithOpenCounts(ctxOf(base, actor))).toEqual(await expected(actor));
+			}
+			const mine = await listProjectsWithOpenCounts(ctxOf(base, admin));
+			expect(mine.active.map((p) => [p.key, p.openCount])).toEqual([
+				['ACME', 1],
+				['BETA', 2]
+			]);
+		});
+
+		it('reads in one round trip', async () => {
+			const before = roundTrips(db);
+			await listProjectsWithOpenCounts(ctxOf(base, member));
+			expect(roundTrips(db) - before).toBe(1);
+		});
 	});
 });

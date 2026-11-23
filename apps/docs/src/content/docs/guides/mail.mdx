@@ -9,11 +9,11 @@ import { Steps } from '@astrojs/starlight/components';
 
 | | 使える条件 | 料金（2026-10 時点） |
 |---|---|---|
-| **Cloudflare Email Sending（推奨）** | 送信元ドメインの DNS を Cloudflare で管理している | Workers Paid プランに月 3,000 通まで含まれる。超えた分は 1,000 通あたり 0.35 ドル |
+| **Cloudflare Email Sending（Paid プランなら推奨）** | Workers Paid プランで、送信元ドメインの DNS を Cloudflare で管理している | Workers Paid プランに月 3,000 通まで含まれる。超えた分は 1,000 通あたり 0.35 ドル |
 | SMTP2GO | DNS の管理先は問わない | 無料枠: 月 1,000 通・1 日 200 通 |
 | Resend | DNS の管理先は問わない | 無料枠: 月 3,000 通・1 日 100 通（宛先 1 件ごとに 1 通と数える） |
 
-このアプリは Workers Paid プランが前提なので、送信元ドメインの DNS を Cloudflare で管理しているなら **Cloudflare Email Sending を使ってください**。別のサービスの契約も API キーも要りません。DNS を Cloudflare 以外で管理している場合は SMTP2GO か Resend を使います。
+Workers Paid プランを使っていて、送信元ドメインの DNS を Cloudflare で管理しているなら **Cloudflare Email Sending を使ってください**。別のサービスの契約も API キーも要りません。Workers の無料プランの場合と、DNS を Cloudflare 以外で管理している場合は、SMTP2GO か Resend を使います。
 
 最新の条件は各サービスの料金ページで確認してください。
 

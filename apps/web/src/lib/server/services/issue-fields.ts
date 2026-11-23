@@ -20,6 +20,7 @@ import {
 import { category, issue, issueStatus, issueType, milestone } from '../db/schema';
 import { AppError } from '../errors';
 import { DateOrEmptySchema as DateOrEmpty, emptyToNull, parse } from '../validation';
+import { byProjectId, type ProjectCond } from './project-access';
 import { assertWritable, requireProject } from './projects';
 
 const NameSchema = (label: string) =>
@@ -36,27 +37,53 @@ export type IssueTypeRow = typeof issueType.$inferSelect;
 export type CategoryRow = typeof category.$inferSelect;
 export type MilestoneRow = typeof milestone.$inferSelect;
 
-export async function listCategories(ctx: AppContext, key: string): Promise<CategoryRow[]> {
-	const p = await requireProject(ctx, key);
-	return ctx.db
+// 一覧の select。並び順を 1 か所で決め、単独の問い合わせと、画面ごとの batch（project-access.ts）の両方で使う
+
+export function categoriesQuery(db: DB, of: ProjectCond) {
+	return db
 		.select()
 		.from(category)
-		.where(eq(category.projectId, p.id))
+		.where(of(category.projectId))
 		.orderBy(asc(category.createdAt), asc(category.id));
 }
 
 /** リリース日の早い順。日付未設定（バックログ等）は最後。 */
-export async function listMilestones(ctx: AppContext, key: string): Promise<MilestoneRow[]> {
-	const p = await requireProject(ctx, key);
-	return ctx.db
+export function milestonesQuery(db: DB, of: ProjectCond) {
+	return db
 		.select()
 		.from(milestone)
-		.where(eq(milestone.projectId, p.id))
+		.where(of(milestone.projectId))
 		.orderBy(
 			sql`${milestone.releaseDate} is null`,
 			asc(milestone.releaseDate),
 			asc(milestone.name)
 		);
+}
+
+export function statusesQuery(db: DB, of: ProjectCond) {
+	return db
+		.select({ key: issueStatus.key, name: issueStatus.name, color: issueStatus.color })
+		.from(issueStatus)
+		.where(of(issueStatus.projectId))
+		.orderBy(asc(issueStatus.position), asc(issueStatus.createdAt));
+}
+
+export function issueTypesQuery(db: DB, of: ProjectCond) {
+	return db
+		.select()
+		.from(issueType)
+		.where(of(issueType.projectId))
+		.orderBy(asc(issueType.position), asc(issueType.createdAt));
+}
+
+export async function listCategories(ctx: AppContext, key: string): Promise<CategoryRow[]> {
+	const p = await requireProject(ctx, key);
+	return categoriesQuery(ctx.db, byProjectId(p.id));
+}
+
+export async function listMilestones(ctx: AppContext, key: string): Promise<MilestoneRow[]> {
+	const p = await requireProject(ctx, key);
+	return milestonesQuery(ctx.db, byProjectId(p.id));
 }
 
 function duplicate(field: string, label: string): AppError {
@@ -234,11 +261,7 @@ export function defaultFieldInserts(db: DB, projectId: string) {
 }
 
 export async function listStatusesOf(db: DB, projectId: string): Promise<StatusDef[]> {
-	return db
-		.select({ key: issueStatus.key, name: issueStatus.name, color: issueStatus.color })
-		.from(issueStatus)
-		.where(eq(issueStatus.projectId, projectId))
-		.orderBy(asc(issueStatus.position), asc(issueStatus.createdAt));
+	return statusesQuery(db, byProjectId(projectId));
 }
 
 export async function listStatuses(ctx: AppContext, key: string): Promise<StatusDef[]> {
@@ -397,11 +420,7 @@ function swapped(ids: string[], id: string, dir: -1 | 1): string[] | null {
 // ---- 課題種別 ----
 
 export async function listIssueTypesOf(db: DB, projectId: string): Promise<IssueTypeRow[]> {
-	return db
-		.select()
-		.from(issueType)
-		.where(eq(issueType.projectId, projectId))
-		.orderBy(asc(issueType.position), asc(issueType.createdAt));
+	return issueTypesQuery(db, byProjectId(projectId));
 }
 
 export async function listIssueTypes(ctx: AppContext, key: string): Promise<IssueTypeRow[]> {

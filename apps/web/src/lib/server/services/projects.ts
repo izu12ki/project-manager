@@ -5,12 +5,13 @@ import * as v from 'valibot';
 import { authorize } from '../authz';
 import type { AppContext } from '../context';
 import type { DB } from '../db';
-import { COLORS } from '#lib/labels.ts';
+import { COLORS, DONE_STATUS } from '#lib/labels.ts';
 import { PROJECT_KEY_PATTERN, PROJECT_KEY_RULE } from '#lib/project-key.ts';
 import { issue, project, projectMember, user } from '../db/schema';
 import { AppError } from '../errors';
 import { parse } from '../validation';
 import { defaultFieldInserts } from './issue-fields';
+import { byProjectId, type ProjectCond } from './project-access';
 
 export type ProjectRow = typeof project.$inferSelect;
 
@@ -45,17 +46,48 @@ const ColorSchema = v.optional(
 	''
 );
 
+/** 見られるプロジェクト（名前順）。全画面のレイアウトで引くので、同時の読み取りとまとめて送る（ctx.readBatch） */
 export async function listProjects(ctx: AppContext): Promise<ProjectRow[]> {
 	if (ctx.actor.role === 'admin') {
-		return ctx.db.select().from(project).orderBy(asc(project.name));
+		const [rows] = await ctx.readBatch([ctx.db.select().from(project).orderBy(asc(project.name))]);
+		return rows;
 	}
-	const rows = await ctx.db
-		.select({ project })
-		.from(project)
-		.innerJoin(projectMember, eq(projectMember.projectId, project.id))
-		.where(eq(projectMember.userId, ctx.actor.id))
-		.orderBy(asc(project.name));
+	const [rows] = await ctx.readBatch([
+		ctx.db
+			.select({ project })
+			.from(project)
+			.innerJoin(projectMember, eq(projectMember.projectId, project.id))
+			.where(eq(projectMember.userId, ctx.actor.id))
+			.orderBy(asc(project.name))
+	]);
 	return rows.map((r) => r.project);
+}
+
+/**
+ * ホーム用。見られるプロジェクトと、進行中のものには未完了（完了以外）の課題数を付けて返す。
+ * 課題数は相関副問い合わせで同じ文に入れる（D1 への 1 往復）
+ */
+export async function listProjectsWithOpenCounts(ctx: AppContext): Promise<{
+	active: (ProjectRow & { openCount: number })[];
+	archived: ProjectRow[];
+}> {
+	const openCount = sql<number>`(select count(*) from ${issue}
+		where ${issue.projectId} = ${project.id} and ${issue.status} != ${DONE_STATUS} and ${issue.deletedAt} is null)`;
+	const query = ctx.db.select({ project, openCount }).from(project).$dynamic();
+	const [rows] = await ctx.readBatch([
+		(ctx.actor.role === 'admin'
+			? query
+			: query
+					.innerJoin(projectMember, eq(projectMember.projectId, project.id))
+					.where(eq(projectMember.userId, ctx.actor.id))
+		).orderBy(asc(project.name))
+	]);
+	return {
+		active: rows
+			.filter((r) => !r.project.archivedAt)
+			.map((r) => ({ ...r.project, openCount: r.openCount })),
+		archived: rows.filter((r) => r.project.archivedAt).map((r) => r.project)
+	};
 }
 
 export function requireProject(ctx: AppContext, key: string): Promise<ProjectRow> {
@@ -176,14 +208,19 @@ export async function setProjectArchived(
 	forgetProject(ctx, key);
 }
 
-export async function listMembers(ctx: AppContext, key: string) {
-	const p = await requireProject(ctx, key);
-	return ctx.db
+/** プロジェクトの参加者（名前順）。batch にも入れられる */
+export function membersQuery(db: DB, of: ProjectCond) {
+	return db
 		.select({ id: user.id, name: user.name, email: user.email, role: user.role })
 		.from(projectMember)
 		.innerJoin(user, eq(user.id, projectMember.userId))
-		.where(eq(projectMember.projectId, p.id))
+		.where(of(projectMember.projectId))
 		.orderBy(asc(user.name));
+}
+
+export async function listMembers(ctx: AppContext, key: string) {
+	const p = await requireProject(ctx, key);
+	return membersQuery(ctx.db, byProjectId(p.id));
 }
 
 export async function addMember(ctx: AppContext, key: string, userId: string): Promise<void> {
@@ -220,7 +257,8 @@ export async function removeMember(ctx: AppContext, key: string, userId: string)
 	]);
 }
 
-export async function listAssignableUsers(db: DB, projectId: string) {
+/** 担当者にできる人（有効な管理者と参加者）。batch にも入れられる */
+export function assignableUsersQuery(db: DB, of: ProjectCond) {
 	return db
 		.select({ id: user.id, name: user.name, role: user.role })
 		.from(user)
@@ -234,10 +272,14 @@ export async function listAssignableUsers(db: DB, projectId: string) {
 						db
 							.select({ id: projectMember.userId })
 							.from(projectMember)
-							.where(eq(projectMember.projectId, projectId))
+							.where(of(projectMember.projectId))
 					)
 				)
 			)
 		)
 		.orderBy(asc(user.name));
+}
+
+export async function listAssignableUsers(db: DB, projectId: string) {
+	return assignableUsersQuery(db, byProjectId(projectId));
 }

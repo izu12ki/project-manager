@@ -59,8 +59,12 @@ DB は Cloudflare D1 です。SQL は SQLite と同じですが、次の制約�
 2. 1 つのクエリのバインド変数は 100 個までです。`IN` には `drizzle-orm` の `inArray` ではなく `apps/web/src/lib/server/db/limits.ts` の `inList` を使い（ESLint で強制しています）、複数行の insert は `insertChunks` で分けます。
 3. `db.batch()` に入れた select の結果は、列名をキーにした行で返ります。そのため、同じ名前の列（join した表の `id` や `name` など）があると値がずれます。batch の中で join するときは、列に別名（`` sql`${列}`.as('別名') ``）を付けます。
 4. LIKE のパターンは 50 バイトまでです（日本語なら 16 文字ほど）。利用者が入力した文字列での部分一致には、LIKE ではなく `instr` を使います。
-5. Workers の無料プランでは、1 回のリクエストで 50 クエリまでです（`db.batch()` は 1 回と数えます）。
+5. Workers の無料プランでは、1 回のリクエストで 50 クエリまでです（`db.batch()` は 1 回と数えます）。人数や件数に比例して問い合わせが増える処理は、まとめて送るか、画面から分けて送ります（Backlog のユーザー取り込みは 8 人ずつ）。
 6. 外部キー制約を切れません。テーブルを作り直すマイグレーション（drizzle が `PRAGMA foreign_keys=OFF` を出すもの）では、`DROP TABLE` の時点で `ON DELETE CASCADE` の子の行が消えます。ほかのテーブルから参照されているテーブルは作り直さないでください。`pnpm db:sync` は `PRAGMA foreign_keys=OFF` を `PRAGMA defer_foreign_keys = on` に置き換えますが、これで防げるのは制約違反のエラーだけです。
+
+### CPU 時間
+
+Workers の無料プランは 1 リクエストの CPU 時間が 10ms までです。D1 への 1 往復ごとに CPU 時間がかかるので、1 つの画面（load・remote query）の読み取りは 1 回の batch にまとめます（`apps/web/src/lib/server/services/project-access.ts` の先頭を参照）。読み取りは `ctx.readBatch` で送ると、同じリクエストで同時に出たものが 1 往復にまとまります。計測と無料プランでの確認の方法は[ローカル開発のドキュメント](https://project-manager-docs.hirano-i.workers.dev/contributing/local-dev/)を参照してください。
 
 ### ドキュメント
 

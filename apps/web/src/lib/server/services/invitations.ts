@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, sql, type SQLWrapper } from 'drizzle-orm';
 import { inList, insertChunks } from '../db/limits';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
@@ -12,6 +12,7 @@ import { invitationMail } from '../mailer/templates';
 import { randomToken, sha256Hex } from '../tokens';
 import { EmailSchema, NameSchema, parse, PasswordKeySchema } from '../validation';
 import { credentialUserInserts } from './credentials';
+import { byProjectId, type ProjectCond } from './project-access';
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const INVALID_INVITE = '招待リンクが無効か、期限切れです。管理者に再発行を依頼してください';
@@ -23,18 +24,30 @@ const CreateInput = v.object({
 	name: v.optional(v.union([v.literal(''), NameSchema]), '')
 });
 
-/** 招待ごとの参加プロジェクト（名前順） */
-async function projectsOf(db: DB, invitationIds: string[]) {
-	if (invitationIds.length === 0) return new Map<string, { id: string; name: string }[]>();
-	const rows = await db
+/** 招待（ID の配列か副問い合わせで絞る）の参加プロジェクトの行（名前順）。batch にも入れられる */
+export function invitationProjectsQuery(db: DB, invitationIds: string[] | SQLWrapper) {
+	return db
 		.select({ invitationId: invitationProject.invitationId, id: project.id, name: project.name })
 		.from(invitationProject)
 		.innerJoin(project, eq(project.id, invitationProject.projectId))
 		.where(inList(invitationProject.invitationId, invitationIds))
 		.orderBy(asc(project.name));
+}
+
+type InvitationProjectRow = { invitationId: string; id: string; name: string };
+
+function groupByInvitation(rows: InvitationProjectRow[]) {
 	const map = new Map<string, { id: string; name: string }[]>();
-	for (const r of rows) map.set(r.invitationId, [...(map.get(r.invitationId) ?? []), r]);
+	for (const { invitationId, id, name } of rows) {
+		map.set(invitationId, [...(map.get(invitationId) ?? []), { id, name }]);
+	}
 	return map;
+}
+
+/** 招待ごとの参加プロジェクト（名前順） */
+async function projectsOf(db: DB, invitationIds: string[]) {
+	if (invitationIds.length === 0) return new Map<string, { id: string; name: string }[]>();
+	return groupByInvitation(await invitationProjectsQuery(db, invitationIds));
 }
 
 export async function createInvitation(
@@ -166,24 +179,9 @@ export interface PendingInvitation {
 	expired: boolean;
 }
 
-export async function listPendingInvitations(
-	ctx: AppContext,
-	filter: { projectId?: string } = {}
-): Promise<PendingInvitation[]> {
-	authorize(ctx.actor, 'user:manage');
-	const conds = [isNull(invitation.acceptedAt)];
-	if (filter.projectId) {
-		conds.push(
-			inList(
-				invitation.id,
-				ctx.db
-					.select({ id: invitationProject.invitationId })
-					.from(invitationProject)
-					.where(eq(invitationProject.projectId, filter.projectId))
-			)
-		);
-	}
-	const rows = await ctx.db
+/** 受諾されていない招待（新しい順）。of を渡すと、そのプロジェクトに参加する招待に限る。batch にも入れられる */
+export function pendingInvitationsQuery(db: DB, of?: ProjectCond) {
+	return db
 		.select({
 			id: invitation.id,
 			email: invitation.email,
@@ -191,18 +189,51 @@ export async function listPendingInvitations(
 			expiresAt: invitation.expiresAt
 		})
 		.from(invitation)
-		.where(and(...conds))
+		.where(
+			and(
+				isNull(invitation.acceptedAt),
+				of
+					? inList(
+							invitation.id,
+							db
+								.select({ id: invitationProject.invitationId })
+								.from(invitationProject)
+								.where(of(invitationProject.projectId))
+						)
+					: undefined
+			)
+		)
 		.orderBy(desc(invitation.createdAt));
-	const projects = await projectsOf(
-		ctx.db,
-		rows.map((r) => r.id)
-	);
+}
+
+/** pendingInvitationsQuery と invitationProjectsQuery の行から PendingInvitation を作る */
+export function toPendingInvitations(
+	rows: Awaited<ReturnType<typeof pendingInvitationsQuery>>,
+	projectRows: InvitationProjectRow[]
+): PendingInvitation[] {
+	const projects = groupByInvitation(projectRows);
 	const now = Date.now();
 	return rows.map((r) => ({
 		...r,
 		projects: projects.get(r.id) ?? [],
 		expired: r.expiresAt.getTime() < now
 	}));
+}
+
+export async function listPendingInvitations(
+	ctx: AppContext,
+	filter: { projectId?: string } = {}
+): Promise<PendingInvitation[]> {
+	authorize(ctx.actor, 'user:manage');
+	const rows = await pendingInvitationsQuery(
+		ctx.db,
+		filter.projectId ? byProjectId(filter.projectId) : undefined
+	);
+	const ids = rows.map((r) => r.id);
+	return toPendingInvitations(
+		rows,
+		ids.length === 0 ? [] : await invitationProjectsQuery(ctx.db, ids)
+	);
 }
 
 async function findValidByToken(db: DB, token: string) {

@@ -7,6 +7,7 @@ import { env, waitUntil } from 'cloudflare:workers';
 import { createAuth } from '#lib/server/auth.ts';
 import { isAllowedAuthRequest, type Role } from '#lib/server/authz.ts';
 import { createDb } from '#lib/server/db/index.ts';
+import { createReadBatcher } from '#lib/server/db/read-batch.ts';
 import { readEnv } from '#lib/server/env.ts';
 import { createMailer } from '#lib/server/mailer/index.ts';
 
@@ -35,6 +36,7 @@ const app: Handle = async ({ event, resolve }) => {
 	event.locals.auth = auth;
 	event.locals.base = {
 		db,
+		readBatch: createReadBatcher(db),
 		mailer,
 		bucket: env.BUCKET,
 		waitUntil,

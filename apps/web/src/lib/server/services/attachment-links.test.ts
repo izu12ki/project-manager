@@ -3,9 +3,16 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
 import { attachment } from '../db/schema';
-import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
+import {
+	createTestBase,
+	createTestDb,
+	ctxOf,
+	roundTrips,
+	seedProject,
+	seedUser
+} from '../test-utils';
 import { referencedAttachmentIds } from './attachment-links';
-import { listAttachments, uploadAttachment } from './attachments';
+import { getAttachmentRows, listAttachments, uploadAttachment } from './attachments';
 import { addComment, deleteComment, editComment, listComments } from './comments';
 import { createIssue, getIssue, updateIssue } from './issues';
 
@@ -112,5 +119,32 @@ describe('attachment links', () => {
 			['a.png', 'guest'],
 			['b.png', 'member']
 		]);
+	});
+
+	it('getAttachmentRows returns the same project, issue state and attachments in one round trip', async () => {
+		const a = await uploadAttachment(as(guest), 'ACME', png('a.png'));
+		await createIssue(as(guest), 'ACME', { title: 'A', description: `![a](${a.url})` });
+		await seedProject(db, { key: 'OTHER', members: [member] });
+		const o = await uploadAttachment(as(member), 'OTHER', png('other.png'));
+		await createIssue(as(member), 'OTHER', { title: '別', description: `![o](${o.url})` });
+		const { project, issue } = await getIssue(as(member), 'ACME', 1);
+		const before = roundTrips(db);
+		const rows = await getAttachmentRows(as(member), 'ACME', 1);
+		expect(roundTrips(db) - before).toBe(1);
+		expect(rows.project).toEqual(project);
+		expect(rows.issue.deletedAt).toEqual(issue.deletedAt);
+		expect(rows.attachments).toEqual(await listAttachments(as(member), 'ACME', 1));
+		expect(rows.attachments.map((x) => x.filename)).toEqual(['a.png']);
+	});
+
+	it('getAttachmentRows hides projects the actor has not joined and missing issues', async () => {
+		await createIssue(as(guest), 'ACME', { title: 'A' });
+		const outsider = await seedUser(db, 'member', 'outsider');
+		await expect(getAttachmentRows(as(outsider), 'ACME', 1)).rejects.toMatchObject({
+			code: 'not_found'
+		});
+		await expect(getAttachmentRows(as(member), 'ACME', 2)).rejects.toMatchObject({
+			code: 'not_found'
+		});
 	});
 });

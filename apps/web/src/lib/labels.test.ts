@@ -1,10 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	PRIORITIES,
 	PRIORITY_LABEL,
 	DEFAULT_STATUSES,
 	STATUS_LABEL,
-	milestoneLabel
+	formatDate,
+	formatDateTime,
+	milestoneLabel,
+	todayJst
 } from './labels';
 
 describe('labels', () => {
@@ -21,5 +24,25 @@ describe('labels', () => {
 			'v1.0（11/30 リリース）'
 		);
 		expect(milestoneLabel({ name: 'バックログ', releaseDate: null })).toBe('バックログ');
+	});
+});
+
+describe('日付の表示（日本時間）', () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it('todayJst returns the current JST date on every call', () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-11-23T14:59:00Z'));
+		expect(todayJst()).toBe('2026-11-23');
+		vi.setSystemTime(new Date('2026-11-23T15:00:00Z'));
+		expect(todayJst()).toBe('2026-11-24');
+	});
+
+	it('formatDateTime and formatDate show the JST date', () => {
+		const d = new Date('2026-11-23T15:04:00Z');
+		expect(formatDateTime(d)).toBe('2026/11/24 00:04');
+		expect(formatDate(d)).toBe('2026/11/24');
 	});
 });

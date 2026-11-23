@@ -1,25 +1,20 @@
 import { redirect } from '@sveltejs/kit';
-import { authorize, can } from '#lib/server/authz.ts';
+import { can } from '#lib/server/authz.ts';
 import { appContext } from '#lib/server/context.ts';
 import { handleAction, handleLoad } from '#lib/server/errors.ts';
-import { listCategories, listMilestones } from '#lib/server/services/issue-fields.ts';
-import { createIssue, listParentCandidates } from '#lib/server/services/issues.ts';
-import { listAssignableUsers, requireProject } from '#lib/server/services/projects.ts';
+import { getNewIssueRows } from '#lib/server/services/issue-list.ts';
+import { createIssue } from '#lib/server/services/issues.ts';
 import { formObject } from '#lib/server/validation.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const ctx = appContext(locals);
 	return handleLoad(async () => {
-		const p = await requireProject(ctx, params.key);
-		authorize(ctx.actor, 'issue:create');
+		const { assignable, categories, milestones, parentCandidates } = await getNewIssueRows(
+			ctx,
+			params.key
+		);
 		const canAssign = can(ctx.actor, 'issue:assign');
-		const [assignable, categories, milestones, parentCandidates] = await Promise.all([
-			listAssignableUsers(ctx.db, p.id),
-			listCategories(ctx, params.key),
-			listMilestones(ctx, params.key),
-			listParentCandidates(ctx, params.key)
-		]);
 		const wanted = Number(url.searchParams.get('parent'));
 		const parent = parentCandidates.find((c) => c.number === wanted) ?? null;
 		return {

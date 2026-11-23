@@ -1,18 +1,13 @@
 import { can } from '#lib/server/authz.ts';
 import { appContext } from '#lib/server/context.ts';
 import { handleLoad } from '#lib/server/errors.ts';
-import { listIssueTypesOf, listStatusesOf } from '#lib/server/services/issue-fields.ts';
-import { requireProject } from '#lib/server/services/projects.ts';
+import { getProjectLayoutRows } from '#lib/server/services/project-access.ts';
 import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = async ({ locals, params }) => {
 	const ctx = appContext(locals);
 	return handleLoad(async () => {
-		const project = await requireProject(ctx, params.key);
-		const [statuses, issueTypes] = await Promise.all([
-			listStatusesOf(ctx.db, project.id),
-			listIssueTypesOf(ctx.db, project.id)
-		]);
+		const { project, statuses, issueTypes } = await getProjectLayoutRows(ctx, params.key);
 		return {
 			project,
 			statuses,

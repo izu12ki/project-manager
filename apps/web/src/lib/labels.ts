@@ -146,9 +146,26 @@ export function colorFor(seed: string | null | undefined): string {
 	return PALETTE[h % PALETTE.length];
 }
 
+// 日付の整形用オブジェクトは作るのが重い（一覧の 1 行ごとに作ると数十行で約 1ms）ので、モジュールで 1 つずつ作って使い回す
+const YMD_JST = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo' });
+const DATE_TIME_JST = new Intl.DateTimeFormat('ja-JP', {
+	timeZone: 'Asia/Tokyo',
+	year: 'numeric',
+	month: '2-digit',
+	day: '2-digit',
+	hour: '2-digit',
+	minute: '2-digit'
+});
+const DATE_JST = new Intl.DateTimeFormat('ja-JP', {
+	timeZone: 'Asia/Tokyo',
+	year: 'numeric',
+	month: '2-digit',
+	day: '2-digit'
+});
+
 /** 'YYYY-MM-DD' の今日（Asia/Tokyo） */
 export function todayJst(): string {
-	return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+	return YMD_JST.format(new Date());
 }
 
 /** 期限 'YYYY-MM-DD' → 'MM/DD'（未設定は '—'） */
@@ -166,23 +183,11 @@ export function isDueAlert(due: string | null | undefined, status: Status): bool
 }
 
 export function formatDateTime(d: Date): string {
-	return d.toLocaleString('ja-JP', {
-		timeZone: 'Asia/Tokyo',
-		year: 'numeric',
-		month: '2-digit',
-		day: '2-digit',
-		hour: '2-digit',
-		minute: '2-digit'
-	});
+	return DATE_TIME_JST.format(d);
 }
 
 export function formatDate(d: Date): string {
-	return d.toLocaleDateString('ja-JP', {
-		timeZone: 'Asia/Tokyo',
-		year: 'numeric',
-		month: '2-digit',
-		day: '2-digit'
-	});
+	return DATE_JST.format(d);
 }
 
 export const ISSUE_CHANGE_FIELDS = [

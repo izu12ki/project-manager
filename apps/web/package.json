@@ -13,6 +13,7 @@
 		"format": "prettier --write .",
 		"test:unit": "vitest",
 		"test:e2e": "playwright test",
+		"perf:server": "bash scripts/perf-server.sh",
 		"gen": "wrangler types",
 		"holidays:fetch": "node scripts/fetch-holidays.ts",
 		"db:generate": "drizzle-kit generate",

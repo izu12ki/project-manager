@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, isNotNull, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 import { inList } from '../db/limits';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
@@ -7,6 +7,7 @@ import * as v from 'valibot';
 import {
 	DONE_STATUS,
 	INITIAL_STATUS,
+	type ColorName,
 	type IssueChangeItem,
 	type Priority,
 	type Status,
@@ -21,7 +22,13 @@ import { AppError } from '../errors';
 import { notify } from '../notifications';
 import { emptyToNull, parse } from '../validation';
 import { linkAttachments } from './attachment-links';
-import { listStatusesOf } from './issue-fields';
+import {
+	categoriesQuery,
+	milestonesQuery,
+	statusesQuery,
+	type CategoryRow,
+	type MilestoneRow
+} from './issue-fields';
 import {
 	StatusSchema,
 	assertStatusIn,
@@ -37,7 +44,20 @@ import {
 	updateEventsOf,
 	withCategoryGuard
 } from './issue-input';
-import { assertWritable, forgetProject, requireProject, type ProjectRow } from './projects';
+import {
+	byProjectId,
+	checkProjectAccess,
+	ofProject,
+	projectAccessQuery,
+	type ProjectCond
+} from './project-access';
+import {
+	assertWritable,
+	assignableUsersQuery,
+	forgetProject,
+	requireProject,
+	type ProjectRow
+} from './projects';
 
 const STALE = '並び順が古くなっています。画面を再読み込みしてください';
 
@@ -59,13 +79,23 @@ const parent = alias(issue, 'parent');
 const reporter = alias(user, 'reporter');
 const deleter = alias(user, 'deleter');
 
+/**
+ * 担当者の名前（assigneeIds の順。存在しない ID は除く）とカテゴリーの名前（プロジェクトのカテゴリー順。
+ * 削除したものは除く）を JSON の配列で同じ文に入れる。別の問い合わせにすると D1 への往復が増えるため
+ */
+const assigneesJson = sql<string>`(select json_group_array(json_object('id', ${user.id}, 'name', ${user.name}) order by j.key)
+	from json_each(${issue.assigneeIds}) as j join ${user} on ${user.id} = j.value)`;
+const categoriesJson = sql<string>`(select json_group_array(json_object('id', ${category.id}, 'name', ${category.name}) order by ${category.createdAt}, ${category.id})
+	from ${category} where ${category.id} in (select value from json_each(${issue.categoryIds})))`;
+
+// batch に入れても列名が重ならないよう、join した表の列と式には別名を付ける（D1 の batch は同じ名前の列をまとめてしまう）
 const listColumns = {
 	id: issue.id,
 	number: issue.number,
 	title: issue.title,
 	typeId: issue.typeId,
-	typeName: issueType.name,
-	typeColor: issueType.color,
+	typeName: sql<string | null>`${issueType.name}`.as('type_name'),
+	typeColor: sql<ColorName | null>`${issueType.color}`.as('type_color'),
 	status: issue.status,
 	resolution: issue.resolution,
 	priority: issue.priority,
@@ -74,16 +104,18 @@ const listColumns = {
 	position: issue.position,
 	assigneeIds: issue.assigneeIds,
 	parentId: issue.parentId,
-	parentNumber: parent.number,
+	parentNumber: sql<number | null>`${parent.number}`.as('parent_number'),
 	categoryIds: issue.categoryIds,
 	milestoneId: issue.milestoneId,
-	milestoneName: milestone.name,
+	milestoneName: sql<string | null>`${milestone.name}`.as('milestone_name'),
 	reporterId: issue.reporterId,
 	createdAt: issue.createdAt,
-	updatedAt: issue.updatedAt
+	updatedAt: issue.updatedAt,
+	assigneesJson: assigneesJson.as('assignees_json'),
+	categoriesJson: categoriesJson.as('categories_json')
 };
 
-export type IssueListItem = Awaited<ReturnType<typeof selectIssues>>[number];
+export type IssueListItem = ReturnType<typeof toIssueListItems>[number];
 export type AssigneeRef = { id: string; name: string };
 export type CategoryRef = { id: string; name: string };
 
@@ -127,8 +159,9 @@ export async function withCategories<T extends { categoryIds: string[] }>(
 	}));
 }
 
-async function selectIssues(db: DB, where: SQL | undefined, order: SQL[]) {
-	const rows = await db
+/** 課題の一覧の select。batch にも入れられる。結果は toIssueListItems で直す */
+export function issueListQuery(db: DB, where: SQL | undefined, order: SQL[]) {
+	return db
 		.select(listColumns)
 		.from(issue)
 		.leftJoin(parent, eq(issue.parentId, parent.id))
@@ -136,11 +169,21 @@ async function selectIssues(db: DB, where: SQL | undefined, order: SQL[]) {
 		.leftJoin(milestone, eq(issue.milestoneId, milestone.id))
 		.where(where)
 		.orderBy(...order);
-	const [named, categorized] = await Promise.all([
-		withAssignees(db, rows),
-		withCategories(db, rows)
-	]);
-	return named.map((r, i) => ({ ...r, categories: categorized[i].categories }));
+}
+
+type IssueListRow = Awaited<ReturnType<typeof issueListQuery>>[number];
+
+/** issueListQuery の行の JSON の列を assignees・categories に直す */
+export function toIssueListItems(rows: IssueListRow[]) {
+	return rows.map(({ assigneesJson, categoriesJson, ...r }) => ({
+		...r,
+		assignees: JSON.parse(assigneesJson) as AssigneeRef[],
+		categories: JSON.parse(categoriesJson) as CategoryRef[]
+	}));
+}
+
+async function selectIssues(db: DB, where: SQL | undefined, order: SQL[]) {
+	return toIssueListItems(await issueListQuery(db, where, order));
 }
 
 /** ID の配列の列で絞る。'none' は空配列、それ以外はその ID を含む課題 */
@@ -168,13 +211,20 @@ function keywordCond(projectKey: string, q: string | undefined): SQL | undefined
 	// LIKE は使わない（D1 は LIKE のパターンが 50 バイトまでで、日本語 17 文字ほどで失敗する）。
 	// instr なら長さの制限がなく、% や _ も文字のまま比べる。lower は LIKE と同じく英字だけを小文字にする
 	const title = sql`instr(lower(${issue.title}), lower(${kw})) > 0`;
-	const m = kw.match(new RegExp(`^(?:${projectKey}-|#)?(\\d{1,9})$`, 'i'));
+	// キーは URL から来ることがある（一覧の batch はプロジェクトの行を待たない）。正規表現の記号は文字として扱う
+	const key = projectKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	const m = kw.match(new RegExp(`^(?:${key}-|#)?(\\d{1,9})$`, 'i'));
 	return m ? or(title, eq(issue.number, Number(m[1]))) : title;
 }
 
-function filterConds(p: ProjectRow, filters: IssueFilters): SQL | undefined {
+/** 一覧の絞り込み。プロジェクトは of で絞る（ID でもキーの副問い合わせでもよい）。キーは「ACME-12」の番号検索に使う */
+export function filterConds(
+	projectKey: string,
+	of: ProjectCond,
+	filters: IssueFilters
+): SQL | undefined {
 	return and(
-		eq(issue.projectId, p.id),
+		of(issue.projectId),
 		isNull(issue.deletedAt),
 		filters.status ? eq(issue.status, filters.status) : undefined,
 		filters.priority ? eq(issue.priority, filters.priority) : undefined,
@@ -182,12 +232,12 @@ function filterConds(p: ProjectRow, filters: IssueFilters): SQL | undefined {
 		idsCond(issue.categoryIds, filters.categoryId),
 		optionCond(issue.typeId, filters.typeId),
 		optionCond(issue.milestoneId, filters.milestoneId),
-		keywordCond(p.key, filters.q)
+		keywordCond(projectKey, filters.q)
 	);
 }
 
 /** 並べ替えの ORDER BY。日付が空の課題は、どちらの向きでも末尾に置く。同じ値の中はキーの降順 */
-function sortOrder(sort: IssueSort): SQL[] {
+export function sortOrder(sort: IssueSort): SQL[] {
 	const dir = sort.order === 'asc' ? asc : desc;
 	const byDate = (col: typeof issue.startDate | typeof issue.dueDate) => [
 		sql`${col} is null`,
@@ -214,70 +264,79 @@ export async function listIssues(
 	sort: IssueSort = DEFAULT_ISSUE_SORT
 ) {
 	const p = await requireProject(ctx, key);
-	return selectIssues(ctx.db, filterConds(p, filters), sortOrder(sort));
+	return selectIssues(ctx.db, filterConds(p.key, byProjectId(p.id), filters), sortOrder(sort));
 }
 
-/** プロジェクトごとの未完了（完了以外）の課題数。projectIds は呼び出し側で閲覧可能なものに限ること。 */
-export async function countOpenIssues(
-	ctx: AppContext,
-	projectIds: string[]
-): Promise<Record<string, number>> {
-	if (projectIds.length === 0) return {};
-	const rows = await ctx.db
-		.select({ projectId: issue.projectId, n: count() })
-		.from(issue)
-		.where(
-			and(
-				inList(issue.projectId, projectIds),
-				ne(issue.status, DONE_STATUS),
-				isNull(issue.deletedAt)
-			)
-		)
-		.groupBy(issue.projectId);
-	return Object.fromEntries(rows.map((r) => [r.projectId, r.n]));
-}
-
-/** 列はプロジェクトのステータス順。絞り込んだ場合も、カード間の並び順は全体の position を保つ。 */
+/**
+ * カンバン（remote query の getBoard）に要るもの。1 回の batch（D1 への 1 往復）で引く。
+ * 列はプロジェクトのステータス順。絞り込んだ場合も、カード間の並び順は全体の position を保つ。
+ */
 export async function listBoard(
 	ctx: AppContext,
 	key: string,
 	filters: Omit<IssueFilters, 'status'> = {}
-): Promise<{ statuses: StatusDef[]; columns: Record<Status, IssueListItem[]> }> {
-	const p = await requireProject(ctx, key);
-	const [statuses, rows] = await Promise.all([
-		listStatusesOf(ctx.db, p.id),
-		selectIssues(ctx.db, filterConds(p, { ...filters, status: undefined }), [
+): Promise<{
+	statuses: StatusDef[];
+	columns: Record<Status, IssueListItem[]>;
+	milestones: MilestoneRow[];
+}> {
+	const { db } = ctx;
+	const of = ofProject(db, key);
+	const [access, statuses, rows, milestones] = await ctx.readBatch([
+		projectAccessQuery(ctx, key),
+		statusesQuery(db, of),
+		issueListQuery(db, filterConds(key, of, { ...filters, status: undefined }), [
 			asc(issue.position),
 			asc(issue.number)
-		])
+		]),
+		milestonesQuery(db, of)
 	]);
+	checkProjectAccess(ctx, access);
 	const columns: Record<Status, IssueListItem[]> = Object.fromEntries(
 		statuses.map((s) => [s.key, [] as IssueListItem[]])
 	);
 	// 定義が消えたステータスの課題は初期ステータスの列に出す
-	for (const r of rows) (columns[r.status] ?? columns[INITIAL_STATUS])?.push(r);
-	return { statuses, columns };
+	for (const r of toIssueListItems(rows)) (columns[r.status] ?? columns[INITIAL_STATUS])?.push(r);
+	return { statuses, columns, milestones };
 }
 
 export type TimelineItem = IssueListItem & { canEdit: boolean };
 
 /**
- * タイムライン用。日付のある課題はすべて（完了を含む）、日付のない課題は未完了のものだけ返す。
+ * タイムライン（remote query の getTimeline）に要るもの。1 回の batch（D1 への 1 往復）で引く。
+ * 日付のある課題はすべて（完了を含む）、日付のない課題は未完了のものだけ返す。
  * 表示範囲では絞らない（範囲外の課題にも行を出すため）。並べ替え・グループ化はクライアント側で行う。
  */
 export async function listTimeline(
 	ctx: AppContext,
 	key: string
-): Promise<{ scheduled: TimelineItem[]; unscheduled: TimelineItem[] }> {
-	const p = await requireProject(ctx, key);
-	const rows = await selectIssues(ctx.db, filterConds(p, {}), [asc(issue.number)]);
-	const items = rows.map((r) => ({
+): Promise<{
+	scheduled: TimelineItem[];
+	unscheduled: TimelineItem[];
+	milestones: MilestoneRow[];
+	categories: CategoryRow[];
+	assignees: Awaited<ReturnType<typeof assignableUsersQuery>>;
+}> {
+	const { db } = ctx;
+	const of = ofProject(db, key);
+	const [access, rows, milestones, categories, assignees] = await ctx.readBatch([
+		projectAccessQuery(ctx, key),
+		issueListQuery(db, filterConds(key, of, {}), [asc(issue.number)]),
+		milestonesQuery(db, of),
+		categoriesQuery(db, of),
+		assignableUsersQuery(db, of)
+	]);
+	const p = checkProjectAccess(ctx, access);
+	const items = toIssueListItems(rows).map((r) => ({
 		...r,
 		canEdit: !p.archivedAt && can(ctx.actor, 'issue:edit', { reporterId: r.reporterId })
 	}));
 	return {
 		scheduled: items.filter((i) => i.startDate || i.dueDate),
-		unscheduled: items.filter((i) => !i.startDate && !i.dueDate && i.status !== DONE_STATUS)
+		unscheduled: items.filter((i) => !i.startDate && !i.dueDate && i.status !== DONE_STATUS),
+		milestones,
+		categories,
+		assignees
 	};
 }
 
@@ -314,14 +373,14 @@ export async function getIssue(ctx: AppContext, key: string, number: number) {
  * 親にできる課題（新しい順）。子課題は 1 階層までなので、子課題でない課題だけ。
  * 削除したものと、exceptNumber（親を設定しようとしている課題自身）は除く
  */
-export async function listParentCandidates(ctx: AppContext, key: string, exceptNumber?: number) {
-	const p = await requireProject(ctx, key);
-	return ctx.db
+/** 親課題の候補（子課題でない、削除していない課題を新しい順に）。batch にも入れられる */
+export function parentCandidatesQuery(db: DB, of: ProjectCond, exceptNumber?: number) {
+	return db
 		.select({ number: issue.number, title: issue.title })
 		.from(issue)
 		.where(
 			and(
-				eq(issue.projectId, p.id),
+				of(issue.projectId),
 				isNull(issue.parentId),
 				isNull(issue.deletedAt),
 				exceptNumber === undefined ? undefined : ne(issue.number, exceptNumber)
@@ -330,15 +389,20 @@ export async function listParentCandidates(ctx: AppContext, key: string, exceptN
 		.orderBy(desc(issue.number));
 }
 
+export async function listParentCandidates(ctx: AppContext, key: string, exceptNumber?: number) {
+	const p = await requireProject(ctx, key);
+	return parentCandidatesQuery(ctx.db, byProjectId(p.id), exceptNumber);
+}
+
 /** 削除した課題は閲覧だけできる */
 export function assertNotDeleted(i: { deletedAt: Date | null }): void {
 	if (i.deletedAt) throw new AppError('conflict', '削除された課題は変更できません');
 }
 
 /** 削除履歴（新しい順） */
-export async function listDeletedIssues(ctx: AppContext, key: string) {
-	const p = await requireProject(ctx, key);
-	return ctx.db
+/** 削除した課題（新しい順）。batch にも入れられる */
+export function deletedIssuesQuery(db: DB, of: ProjectCond) {
+	return db
 		.select({
 			number: issue.number,
 			title: issue.title,
@@ -347,8 +411,13 @@ export async function listDeletedIssues(ctx: AppContext, key: string) {
 		})
 		.from(issue)
 		.leftJoin(deleter, eq(issue.deletedBy, deleter.id))
-		.where(and(eq(issue.projectId, p.id), isNotNull(issue.deletedAt)))
+		.where(and(of(issue.projectId), isNotNull(issue.deletedAt)))
 		.orderBy(desc(issue.deletedAt));
+}
+
+export async function listDeletedIssues(ctx: AppContext, key: string) {
+	const p = await requireProject(ctx, key);
+	return deletedIssuesQuery(ctx.db, byProjectId(p.id));
 }
 
 async function nextPosition(db: DB, projectId: string, status: Status): Promise<string> {
@@ -418,21 +487,36 @@ async function applyPatch(
 }
 
 /** 編集履歴（古い順）。課題が存在しない場合は空配列 */
+/** 課題の ID と削除日時（コメント・添付の一覧で、課題の有無と書き込めるかを確かめる）。batch にも入れられる */
+export function issueStateQuery(db: DB, of: ProjectCond, number: number) {
+	return db
+		.select({ id: issue.id, deletedAt: issue.deletedAt })
+		.from(issue)
+		.where(and(of(issue.projectId), eq(issue.number, number)));
+}
+
+/** 課題の変更履歴（古い順）。アクセス権の確認と合わせて 1 往復 */
 export async function listIssueChanges(ctx: AppContext, key: string, number: number) {
-	const p = await requireProject(ctx, key);
-	return ctx.db
-		.select({
-			id: issueChange.id,
-			actorId: issueChange.actorId,
-			actorName: user.name,
-			changes: issueChange.changes,
-			createdAt: issueChange.createdAt
-		})
-		.from(issueChange)
-		.innerJoin(user, eq(user.id, issueChange.actorId))
-		.innerJoin(issue, eq(issue.id, issueChange.issueId))
-		.where(and(eq(issue.projectId, p.id), eq(issue.number, number)))
-		.orderBy(asc(issueChange.createdAt), asc(issueChange.id));
+	const { db } = ctx;
+	const of = ofProject(db, key);
+	const [access, rows] = await ctx.readBatch([
+		projectAccessQuery(ctx, key),
+		db
+			.select({
+				id: issueChange.id,
+				actorId: issueChange.actorId,
+				actorName: user.name,
+				changes: issueChange.changes,
+				createdAt: issueChange.createdAt
+			})
+			.from(issueChange)
+			.innerJoin(user, eq(user.id, issueChange.actorId))
+			.innerJoin(issue, eq(issue.id, issueChange.issueId))
+			.where(and(of(issue.projectId), eq(issue.number, number)))
+			.orderBy(asc(issueChange.createdAt), asc(issueChange.id))
+	]);
+	checkProjectAccess(ctx, access);
+	return rows;
 }
 
 /** 未送信（undefined）の項目は変更しない。値が変わった項目だけ権限を確認する。 */

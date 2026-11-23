@@ -6,12 +6,15 @@
 	import {
 		formatImportPreview,
 		formatImportResult,
+		IMPORT_CHUNK,
 		inviteAllowed,
 		MAX_IMPORT_USERS,
+		mergeImportResults,
 		readBacklogUsers,
 		SKIP_LABEL,
 		type BacklogUserRow,
 		type ImportRole,
+		type UserImportResult,
 		type UserImportSkip
 	} from '#lib/backlog-users.ts';
 	import { decodeCsv } from '#lib/csv.ts';
@@ -107,17 +110,28 @@
 		pending = true;
 		message = '';
 		const { plan, rows } = preview;
+		// 取り込まない行は送らずにここで理由を数え（確認画面の内訳と同じ）、取り込む行を IMPORT_CHUNK 人ずつ送る。
+		// Workers の無料プランでは 1 リクエストの D1 への問い合わせと招待メールの送信が 50 回までのため
+		const unsent: UserImportResult = {
+			invited: 0,
+			joined: 0,
+			skipped: {},
+			inviteFailed: [],
+			mailFailed: []
+		};
+		const targets: (BacklogUserRow & { include: boolean; role: ImportRole })[] = [];
+		rows.forEach((row, i) => {
+			const skip = skipOf(plan.rows[i]);
+			if (skip) unsent.skipped[skip] = (unsent.skipped[skip] ?? 0) + 1;
+			else targets.push({ ...row, include: true, role: roleOf[row.rowNumber] });
+		});
+		const parts = [unsent];
 		try {
-			const r = await runUserImport({
-				// 確認画面でチェックが付いていた行だけを取り込む（計画の行は CSV の行と同じ順）
-				rows: rows.map((row, i) => ({
-					...row,
-					include: importable(plan.rows[i]) && !unchecked[row.rowNumber],
-					role: roleOf[row.rowNumber]
-				}))
-			});
+			for (let i = 0; i < targets.length; i += IMPORT_CHUNK) {
+				parts.push(await runUserImport({ rows: targets.slice(i, i + IMPORT_CHUNK) }));
+			}
 			close();
-			result = formatImportResult(r);
+			result = formatImportResult(mergeImportResults(parts));
 			await invalidateAll();
 		} catch (err) {
 			message = failure(

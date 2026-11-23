@@ -4,7 +4,7 @@ import * as v from 'valibot';
 import {
 	inviteAllowed,
 	MAX_CSV_USERS,
-	MAX_IMPORT_USERS,
+	IMPORT_CHUNK,
 	roleFromBacklog,
 	type BacklogUserRow,
 	type ImportPerson,
@@ -222,11 +222,9 @@ export async function importUsers(ctx: AppContext, input: unknown): Promise<User
 		else joins.push(row);
 	});
 
-	if (invites.length + joins.length > MAX_IMPORT_USERS) {
-		throw new AppError(
-			'validation',
-			`一度に取り込めるのは${MAX_IMPORT_USERS}人までです。チェックを外して分けて取り込んでください`
-		);
+	// 画面は IMPORT_CHUNK 人ずつ分けて送る（Workers の無料プランの、1 リクエストの問い合わせ・メール送信の上限のため）
+	if (invites.length + joins.length > IMPORT_CHUNK) {
+		throw new AppError('validation', `一度に送れるのは${IMPORT_CHUNK}人までです`);
 	}
 
 	const work = write(ctx, joins, invites);

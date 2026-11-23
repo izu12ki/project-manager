@@ -3,7 +3,14 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
 import { user as userTable } from '../db/schema';
-import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
+import {
+	createTestBase,
+	createTestDb,
+	ctxOf,
+	roundTrips,
+	seedProject,
+	seedUser
+} from '../test-utils';
 import { getIssueDetailRows } from './issue-detail';
 import {
 	createCategory,
@@ -132,5 +139,29 @@ describe('listParentCandidates', () => {
 			{ number: 1, title: '親' }
 		]);
 		expect(await listParentCandidates(ctx, 'ACME', 3)).toEqual([{ number: 1, title: '親' }]);
+	});
+});
+
+describe('getIssueDetailRows の往復', () => {
+	it('reads the detail in one round trip, with names of disabled assignees of children', async () => {
+		const db = await createTestDb();
+		const base = createTestBase(db);
+		const admin = await seedUser(db, 'admin', 'Admin');
+		const member = await seedUser(db, 'member', 'Member');
+		const guest = await seedUser(db, 'guest', 'Guest');
+		const as = (a: Actor) => ctxOf(base, a);
+		await seedProject(db, { key: 'ACME', members: [member, guest] });
+		await createIssue(as(member), 'ACME', { title: '親', assigneeIds: [member.id] });
+		await createIssue(as(member), 'ACME', {
+			title: '子',
+			parentNumber: 1,
+			assigneeIds: [guest.id]
+		});
+		await db.update(userTable).set({ disabledAt: new Date() }).where(eq(userTable.id, guest.id));
+		const before = roundTrips(db);
+		const rows = await getIssueDetailRows(as(admin), 'ACME', 1);
+		expect(roundTrips(db) - before).toBe(1);
+		expect(rows.issue.assignees).toEqual([{ id: member.id, name: 'Member' }]);
+		expect(rows.children.map((c) => c.assignees)).toEqual([[{ id: guest.id, name: 'Guest' }]]);
 	});
 });

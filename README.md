@@ -10,7 +10,7 @@
 - 顧客をゲストとして招待し、参加プロジェクトだけを見せる。見せるだけの相手は閲覧者として招待できる（起票・編集・コメント不可）
 - REST API と Claude Code 用の Skill
 
-**利用には Cloudflare アカウント（Workers Paid プラン）が必要です。** 手順は[ドキュメント](https://project-manager-docs.hirano-i.workers.dev)（ソースは `apps/docs`）を参照してください。
+**利用には Cloudflare アカウントが必要です。Workers の無料プランで動きます。** 手順は[ドキュメント](https://project-manager-docs.hirano-i.workers.dev)（ソースは `apps/docs`）を参照してください。
 
 ![カンバンの画面。未着手・進行中・レビュー・完了の列に課題のカードが並ぶ](apps/docs/public/screenshots/board.png)
 

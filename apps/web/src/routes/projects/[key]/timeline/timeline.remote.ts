@@ -1,23 +1,12 @@
 import * as v from 'valibot';
 import { command, query } from '$app/server';
 import { remoteContext, runCommand, runQuery } from '#lib/server/remote-helpers.ts';
-import { listCategories, listMilestones } from '#lib/server/services/issue-fields.ts';
 import { listTimeline, updateIssue } from '#lib/server/services/issues.ts';
-import { listAssignableUsers, requireProject } from '#lib/server/services/projects.ts';
 
 /** 絞り込みはクライアント側で行うので、プロジェクトの課題をすべて返す */
 export const getTimeline = query(v.string(), (key) => {
 	const ctx = remoteContext();
-	return runQuery(async () => {
-		const p = await requireProject(ctx, key);
-		const [items, milestones, categories, assignees] = await Promise.all([
-			listTimeline(ctx, key),
-			listMilestones(ctx, key),
-			listCategories(ctx, key),
-			listAssignableUsers(ctx.db, p.id)
-		]);
-		return { ...items, milestones, categories, assignees };
-	});
+	return runQuery(() => listTimeline(ctx, key));
 });
 
 /** 開始日・期限を変える。'' は未設定。権限・前後関係・アーカイブの検査は updateIssue に任せる */

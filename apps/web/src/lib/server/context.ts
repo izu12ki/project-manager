@@ -2,10 +2,13 @@ import { redirect } from '@sveltejs/kit';
 import type { AttachmentStore } from './attachment-store';
 import type { Actor } from './authz';
 import type { DB } from './db';
+import type { ReadBatch } from './db/read-batch';
 import type { Mailer } from './mailer';
 
 export interface BaseContext {
 	db: DB;
+	/** 読み取りの batch。同じリクエストで同時に出たものを 1 往復にまとめる（db/read-batch.ts）。書き込みには使わない */
+	readBatch: ReadBatch;
 	mailer: Mailer;
 	bucket: AttachmentStore;
 	waitUntil: (p: Promise<unknown>) => void;

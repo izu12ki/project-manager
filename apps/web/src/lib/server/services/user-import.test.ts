@@ -1,10 +1,17 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
-import type { BacklogUserRow, ImportRole } from '#lib/backlog-users.ts';
+import { IMPORT_CHUNK, type BacklogUserRow, type ImportRole } from '#lib/backlog-users.ts';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
 import { invitation, invitationProject, projectMember, user } from '../db/schema';
-import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
+import {
+	createTestBase,
+	createTestDb,
+	ctxOf,
+	roundTrips,
+	seedProject,
+	seedUser
+} from '../test-utils';
 import { createInvitation, getInvitationByToken, revokeInvitation } from './invitations';
 import { importUsers, planUserImport } from './user-import';
 
@@ -204,8 +211,8 @@ describe('user-import', () => {
 		expect(base.sent).toHaveLength(1);
 	});
 
-	it('処理対象が 100 人を超えたら何も書かない', async () => {
-		const rows = Array.from({ length: 101 }, () => send(row()));
+	it('1 回に送られた処理対象が IMPORT_CHUNK 人を超えたら何も書かない', async () => {
+		const rows = Array.from({ length: IMPORT_CHUNK + 1 }, () => send(row()));
 		await expect(importUsers(ctxOf(base, admin), { rows })).rejects.toMatchObject({
 			code: 'validation'
 		});
@@ -309,5 +316,19 @@ describe('user-import', () => {
 		const invs = await db.select({ email: invitation.email }).from(invitation);
 		expect(invs.map((i) => i.email).sort()).toEqual(['a@example.com', 'c@example.com']);
 		expect(err).toHaveBeenCalledWith('invitation failed', expect.any(Error));
+	});
+
+	it('IMPORT_CHUNK 人の招待と参加の追加は、D1 無料プランの 1 リクエスト 50 クエリに収まる', async () => {
+		const joiner = await seedWithEmail('member', 'joiner@example.com');
+		const rows = [
+			send(row({ email: joiner.email })),
+			...Array.from({ length: IMPORT_CHUNK - 1 }, () => send(row()))
+		];
+		const before = roundTrips(db);
+		const r = await importUsers(ctxOf(base, admin), { rows });
+		await Promise.all(base.pending);
+		// hooks のセッション確認など、取り込み以外の問い合わせの分（5 回）を残す
+		expect(roundTrips(db) - before).toBeLessThanOrEqual(45);
+		expect(r).toMatchObject({ invited: IMPORT_CHUNK - 1, joined: 1 });
 	});
 });

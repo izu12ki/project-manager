@@ -13,7 +13,7 @@ import { usersQuery } from './users';
 export async function getUserAdminRows(ctx: AppContext) {
 	authorize(ctx.actor, 'user:manage');
 	const { db } = ctx;
-	const [users, invitations, invitationProjects, projects] = await db.batch([
+	const [users, invitations, invitationProjects, projects] = await ctx.readBatch([
 		usersQuery(db),
 		pendingInvitationsQuery(db),
 		invitationProjectsQuery(

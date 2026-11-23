@@ -46,16 +46,20 @@ const ColorSchema = v.optional(
 	''
 );
 
+/** 見られるプロジェクト（名前順）。全画面のレイアウトで引くので、同時の読み取りとまとめて送る（ctx.readBatch） */
 export async function listProjects(ctx: AppContext): Promise<ProjectRow[]> {
 	if (ctx.actor.role === 'admin') {
-		return ctx.db.select().from(project).orderBy(asc(project.name));
+		const [rows] = await ctx.readBatch([ctx.db.select().from(project).orderBy(asc(project.name))]);
+		return rows;
 	}
-	const rows = await ctx.db
-		.select({ project })
-		.from(project)
-		.innerJoin(projectMember, eq(projectMember.projectId, project.id))
-		.where(eq(projectMember.userId, ctx.actor.id))
-		.orderBy(asc(project.name));
+	const [rows] = await ctx.readBatch([
+		ctx.db
+			.select({ project })
+			.from(project)
+			.innerJoin(projectMember, eq(projectMember.projectId, project.id))
+			.where(eq(projectMember.userId, ctx.actor.id))
+			.orderBy(asc(project.name))
+	]);
 	return rows.map((r) => r.project);
 }
 
@@ -70,13 +74,14 @@ export async function listProjectsWithOpenCounts(ctx: AppContext): Promise<{
 	const openCount = sql<number>`(select count(*) from ${issue}
 		where ${issue.projectId} = ${project.id} and ${issue.status} != ${DONE_STATUS} and ${issue.deletedAt} is null)`;
 	const query = ctx.db.select({ project, openCount }).from(project).$dynamic();
-	const rows = await (
-		ctx.actor.role === 'admin'
+	const [rows] = await ctx.readBatch([
+		(ctx.actor.role === 'admin'
 			? query
 			: query
 					.innerJoin(projectMember, eq(projectMember.projectId, project.id))
 					.where(eq(projectMember.userId, ctx.actor.id))
-	).orderBy(asc(project.name));
+		).orderBy(asc(project.name))
+	]);
 	return {
 		active: rows
 			.filter((r) => !r.project.archivedAt)

@@ -10,6 +10,7 @@ import type { Actor, Role } from './authz';
 import type { AppContext, BaseContext } from './context';
 import type { DB } from './db';
 import { D1_MAX_PARAMS } from './db/limits';
+import { createReadBatcher } from './db/read-batch';
 import { project, projectMember, relations, user } from './db/schema';
 import type { MailMessage } from './mailer';
 import { defaultFieldInserts } from './services/issue-fields';
@@ -105,6 +106,7 @@ export function createTestBase(
 	const pending: Promise<unknown>[] = [];
 	return {
 		db,
+		readBatch: createReadBatcher(db),
 		mailer: {
 			send: async (m) => {
 				sent.push(m);

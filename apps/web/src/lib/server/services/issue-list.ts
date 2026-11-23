@@ -23,7 +23,7 @@ export async function getIssueListRows(
 ) {
 	const { db } = ctx;
 	const of = ofProject(db, key);
-	const [access, issues, assignees, categories, milestones, deletedIssues] = await db.batch([
+	const [access, issues, assignees, categories, milestones, deletedIssues] = await ctx.readBatch([
 		projectAccessQuery(ctx, key),
 		issueListQuery(db, filterConds(key, of, filters), sortOrder(sort)),
 		assignableUsersQuery(db, of),
@@ -45,7 +45,7 @@ export async function getIssueListRows(
 export async function getNewIssueRows(ctx: AppContext, key: string) {
 	const { db } = ctx;
 	const of = ofProject(db, key);
-	const [access, assignable, categories, milestones, parentCandidates] = await db.batch([
+	const [access, assignable, categories, milestones, parentCandidates] = await ctx.readBatch([
 		projectAccessQuery(ctx, key),
 		assignableUsersQuery(db, of),
 		categoriesQuery(db, of),

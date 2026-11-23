@@ -125,7 +125,7 @@ export async function listAttachments(ctx: AppContext, key: string, number: numb
  */
 export async function getAttachmentRows(ctx: AppContext, key: string, number: number) {
 	const of = ofProject(ctx.db, key);
-	const [access, issues, attachments] = await ctx.db.batch([
+	const [access, issues, attachments] = await ctx.readBatch([
 		projectAccessQuery(ctx, key),
 		issueStateQuery(ctx.db, of, number),
 		attachmentsQuery(

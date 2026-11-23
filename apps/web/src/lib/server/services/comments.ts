@@ -100,7 +100,7 @@ export async function listComments(ctx: AppContext, key: string, number: number)
  */
 export async function getCommentRows(ctx: AppContext, key: string, number: number) {
 	const of = ofProject(ctx.db, key);
-	const [access, issues, rows, reactions] = await ctx.db.batch([
+	const [access, issues, rows, reactions] = await ctx.readBatch([
 		projectAccessQuery(ctx, key),
 		issueStateQuery(ctx.db, of, number),
 		commentsQuery(ctx, of, number),

@@ -63,7 +63,7 @@ export async function getProjectLayoutRows(
 	key: string
 ): Promise<{ project: ProjectRow; statuses: StatusDef[]; issueTypes: IssueTypeRow[] }> {
 	const of = ofProject(ctx.db, key);
-	const [access, statuses, issueTypes] = await ctx.db.batch([
+	const [access, statuses, issueTypes] = await ctx.readBatch([
 		projectAccessQuery(ctx, key),
 		statusesQuery(ctx.db, of),
 		issueTypesQuery(ctx.db, of)

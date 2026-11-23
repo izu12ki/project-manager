@@ -154,11 +154,14 @@ export async function listNotifications(ctx: AppContext, limit = 50): Promise<No
 	}));
 }
 
+/** 未読の数。全画面のレイアウトで引くので、同時の読み取りとまとめて送る（ctx.readBatch） */
 export async function countUnread(ctx: AppContext): Promise<number> {
-	const [row] = await ctx.db
-		.select({ n: count() })
-		.from(notification)
-		.where(and(mine(ctx), isNull(notification.readAt)));
+	const [[row]] = await ctx.readBatch([
+		ctx.db
+			.select({ n: count() })
+			.from(notification)
+			.where(and(mine(ctx), isNull(notification.readAt)))
+	]);
 	return row?.n ?? 0;
 }
 

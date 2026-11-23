@@ -32,7 +32,7 @@ export async function getIssueDetailRows(ctx: AppContext, key: string, number: n
 		categories,
 		milestones,
 		people
-	] = await db.batch([
+	] = await ctx.readBatch([
 		projectAccessQuery(ctx, key),
 		db
 			.select({

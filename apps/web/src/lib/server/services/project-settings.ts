@@ -43,7 +43,7 @@ export async function getProjectSettingsRows(ctx: AppContext, key: string) {
 		issueTypes,
 		categories,
 		milestones
-	] = await db.batch([
+	] = await ctx.readBatch([
 		projectAccessQuery(ctx, key),
 		membersQuery(db, of),
 		usersQuery(db),

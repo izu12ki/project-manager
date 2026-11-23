@@ -280,7 +280,7 @@ export async function listBoard(
 }> {
 	const { db } = ctx;
 	const of = ofProject(db, key);
-	const [access, statuses, rows, milestones] = await db.batch([
+	const [access, statuses, rows, milestones] = await ctx.readBatch([
 		projectAccessQuery(ctx, key),
 		statusesQuery(db, of),
 		issueListQuery(db, filterConds(key, of, { ...filters, status: undefined }), [
@@ -317,7 +317,7 @@ export async function listTimeline(
 }> {
 	const { db } = ctx;
 	const of = ofProject(db, key);
-	const [access, rows, milestones, categories, assignees] = await db.batch([
+	const [access, rows, milestones, categories, assignees] = await ctx.readBatch([
 		projectAccessQuery(ctx, key),
 		issueListQuery(db, filterConds(key, of, {}), [asc(issue.number)]),
 		milestonesQuery(db, of),
@@ -497,7 +497,7 @@ export function issueStateQuery(db: DB, of: ProjectCond, number: number) {
 export async function listIssueChanges(ctx: AppContext, key: string, number: number) {
 	const { db } = ctx;
 	const of = ofProject(db, key);
-	const [access, rows] = await db.batch([
+	const [access, rows] = await ctx.readBatch([
 		projectAccessQuery(ctx, key),
 		db
 			.select({

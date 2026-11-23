@@ -32,3 +32,8 @@ e2e.db*
 
 # wrangler d1 migrations apply 用に drizzle/ から生成する（pnpm db:sync）
 /.d1-migrations
+
+# @rolldown/perf-kit が作る（npx perf-kit worker-config・worker-scan など）
+/.perf-kit
+/perf-kit.vite.config.ts
+/dist-attrib

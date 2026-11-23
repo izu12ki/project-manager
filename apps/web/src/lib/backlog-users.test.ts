@@ -4,6 +4,7 @@ import {
 	formatImportPreview,
 	formatImportResult,
 	inviteAllowed,
+	mergeImportResults,
 	readBacklogUsers,
 	roleFromBacklog,
 	type BacklogUserRow
@@ -187,5 +188,37 @@ describe('formatImportPreview', () => {
 		expect(
 			formatImportPreview({ invite: 0, join: 0, skipped: { no_projects: 12, already_joined: 1 } })
 		).toBe('取り込む人がいません（参加済み 1、参加できるプロジェクトがない 12）');
+	});
+});
+
+describe('mergeImportResults', () => {
+	it('分けて送った結果の人数・理由別の数・失敗した人を足し合わせる', () => {
+		const a = { name: 'A', email: 'a@example.com' };
+		const b = { name: 'B', email: 'b@example.com' };
+		expect(
+			mergeImportResults([
+				{
+					invited: 0,
+					joined: 0,
+					skipped: { inactive: 1, unselected: 2 },
+					inviteFailed: [],
+					mailFailed: []
+				},
+				{ invited: 3, joined: 1, skipped: {}, inviteFailed: [a], mailFailed: [] },
+				{
+					invited: 2,
+					joined: 0,
+					skipped: { unselected: 1, already_joined: 1 },
+					inviteFailed: [],
+					mailFailed: [b]
+				}
+			])
+		).toEqual({
+			invited: 5,
+			joined: 1,
+			skipped: { inactive: 1, unselected: 3, already_joined: 1 },
+			inviteFailed: [a],
+			mailFailed: [b]
+		});
 	});
 });

@@ -6,6 +6,12 @@ export type ImportRole = keyof typeof ROLE_LABEL;
 
 export const MAX_CSV_USERS = 1000;
 export const MAX_IMPORT_USERS = 100;
+/**
+ * 1 回のリクエストで送る取り込み対象（招待・参加の追加）の人数。画面はこの人数ずつ分けて送る。
+ * Workers の無料プランは 1 リクエストで D1 への問い合わせが 50 回、外部への送信（招待メール）が 50 回まで。
+ * 招待は 1 人あたり問い合わせ 4 回なので、確認・参加の追加・セッション確認の分を足しても 50 回に収まる人数にする
+ */
+export const IMPORT_CHUNK = 8;
 
 export interface BacklogUserRow {
 	/** ヘッダーを 1 とした行番号 */
@@ -141,4 +147,21 @@ export function formatImportResult(r: UserImportResult): string {
 			? `。招待メールを送れなかった人 ${r.mailFailed.length} 人: ${people(r.mailFailed)}。招待中の一覧の「リンクを再発行」でリンクを渡してください`
 			: '';
 	return `招待 ${r.invited} 人、参加の追加 ${r.joined} 人、取り込まなかった人 ${total} 人${detail}${invite}${mail}`;
+}
+
+/** 分けて送った取り込みの結果を 1 つにまとめる（人数と理由別の数は足し、失敗した人は並べる） */
+export function mergeImportResults(parts: UserImportResult[]): UserImportResult {
+	const skipped: UserImportResult['skipped'] = {};
+	for (const p of parts) {
+		for (const [reason, n] of Object.entries(p.skipped) as [UserImportSkip, number][]) {
+			skipped[reason] = (skipped[reason] ?? 0) + n;
+		}
+	}
+	return {
+		invited: parts.reduce((sum, p) => sum + p.invited, 0),
+		joined: parts.reduce((sum, p) => sum + p.joined, 0),
+		skipped,
+		inviteFailed: parts.flatMap((p) => p.inviteFailed),
+		mailFailed: parts.flatMap((p) => p.mailFailed)
+	};
 }

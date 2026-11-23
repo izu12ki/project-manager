@@ -11,6 +11,13 @@ import { upgradeLegacyPassword } from './legacy-password';
 const KEY = 'a'.repeat(64);
 let legacyHash: string;
 
+/** かかった時間（ms） */
+async function elapsed(fn: () => Promise<unknown>): Promise<number> {
+	const start = performance.now();
+	await fn();
+	return performance.now() - start;
+}
+
 beforeAll(async () => {
 	// better-auth の既定（scrypt）で作った旧形式のハッシュ
 	legacyHash = await hashPassword('old-password-1');
@@ -70,5 +77,41 @@ describe('upgradeLegacyPassword', () => {
 		expect(
 			await upgradeLegacyPassword(db, { email: 'nobody@example.com' }, 'old-password-1', KEY)
 		).toBe(false);
+	});
+
+	// scrypt（数十 ms）とメモリ上の DB の問い合わせ（1ms 前後）の差は大きいので、比で比べる
+	it('旧形式の人が残っている間は、いない人・移行済みの人も旧形式の人と同じくらい時間がかかる（登録の有無を漏らさない）', async () => {
+		const { db, userId } = await seed(legacyHash);
+		await db.batch(
+			credentialUserInserts(db, {
+				name: 'B',
+				email: 'b@example.com',
+				role: 'member',
+				passwordHash: await hashPasswordKey(KEY)
+			}).statements
+		);
+		const legacy = await elapsed(() =>
+			upgradeLegacyPassword(db, { userId }, 'wrong-password', KEY)
+		);
+		const nobody = await elapsed(() =>
+			upgradeLegacyPassword(db, { email: 'nobody@example.com' }, 'wrong-password', KEY)
+		);
+		const upgraded = await elapsed(() =>
+			upgradeLegacyPassword(db, { email: 'b@example.com' }, 'wrong-password', KEY)
+		);
+		expect(nobody).toBeGreaterThan(legacy / 2);
+		expect(upgraded).toBeGreaterThan(legacy / 2);
+	});
+
+	it('旧形式の人がいなければ scrypt をかけない（無料プランの CPU 時間）', async () => {
+		const { db, userId } = await seed(legacyHash);
+		const legacy = await elapsed(() =>
+			upgradeLegacyPassword(db, { userId }, 'wrong-password', KEY)
+		);
+		const fresh = (await seed(await hashPasswordKey(KEY))).db;
+		const nobody = await elapsed(() =>
+			upgradeLegacyPassword(fresh, { email: 'nobody@example.com' }, 'wrong-password', KEY)
+		);
+		expect(nobody).toBeLessThan(legacy / 2);
 	});
 });

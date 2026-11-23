@@ -3,7 +3,6 @@ import { appContext } from '#lib/server/context.ts';
 import { handleAction, handleLoad } from '#lib/server/errors.ts';
 import {
 	createInvitation,
-	listPendingInvitations,
 	reissueInvitation,
 	revokeInvitation
 } from '#lib/server/services/invitations.ts';
@@ -16,9 +15,6 @@ import {
 	deleteIssueType,
 	deleteMilestone,
 	deleteStatus,
-	listCategories,
-	listIssueTypes,
-	listMilestones,
 	moveIssueType,
 	moveStatus,
 	setMilestoneCompleted,
@@ -29,7 +25,6 @@ import {
 } from '#lib/server/services/issue-fields.ts';
 import {
 	addMember,
-	listMembers,
 	removeMember,
 	requireProject,
 	setProjectArchived,
@@ -37,7 +32,6 @@ import {
 } from '#lib/server/services/projects.ts';
 import { removeProjectIconImage, setProjectIconImage } from '#lib/server/services/project-icons.ts';
 import { getProjectSettingsRows } from '#lib/server/services/project-settings.ts';
-import { listUsers } from '#lib/server/services/users.ts';
 import { formObject } from '#lib/server/validation.ts';
 import type { Actions, PageServerLoad } from './$types';
 

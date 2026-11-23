@@ -2,12 +2,10 @@ import { appContext } from '#lib/server/context.ts';
 import { handleAction } from '#lib/server/errors.ts';
 import {
 	createInvitation,
-	listPendingInvitations,
 	reissueInvitation,
 	revokeInvitation
 } from '#lib/server/services/invitations.ts';
-import { listProjects } from '#lib/server/services/projects.ts';
-import { changeUserRole, disableUser, enableUser, listUsers } from '#lib/server/services/users.ts';
+import { changeUserRole, disableUser, enableUser } from '#lib/server/services/users.ts';
 import { formObject } from '#lib/server/validation.ts';
 import { getUserAdminRows } from '#lib/server/services/user-admin.ts';
 import type { Actions, PageServerLoad } from './$types';

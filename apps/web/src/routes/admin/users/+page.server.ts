@@ -9,16 +9,11 @@ import {
 import { listProjects } from '#lib/server/services/projects.ts';
 import { changeUserRole, disableUser, enableUser, listUsers } from '#lib/server/services/users.ts';
 import { formObject } from '#lib/server/validation.ts';
+import { getUserAdminRows } from '#lib/server/services/user-admin.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
-	const ctx = appContext(locals);
-	const [users, invitations, projects] = await Promise.all([
-		listUsers(ctx),
-		listPendingInvitations(ctx),
-		listProjects(ctx)
-	]);
-	return { users, invitations, projects: projects.filter((p) => !p.archivedAt) };
+	return getUserAdminRows(appContext(locals));
 };
 
 export const actions: Actions = {

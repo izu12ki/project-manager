@@ -97,7 +97,7 @@ type CallFrame = { functionName: string; url: string; lineNumber: number };
 type ProfileNode = { id: number; callFrame: CallFrame; children?: number[] };
 type Profile = { nodes: ProfileNode[]; samples: number[]; timeDeltas: number[] };
 
-async function connect(inspector: string) {
+async function connect(inspector: string, timeoutMs: number) {
 	const targets: { webSocketDebuggerUrl?: string }[] = await (
 		await fetch(`${inspector}/json`)
 	).json();
@@ -129,7 +129,7 @@ async function connect(inspector: string) {
 					reject(
 						new Error(`${method}: インスペクタから応答がありません。もう一度実行してください`)
 					),
-				30_000
+				timeoutMs
 			);
 			pending.set(++id, (r) => {
 				clearTimeout(timer);
@@ -194,8 +194,27 @@ async function countRoundTrips(request: () => Promise<number>): Promise<number> 
 }
 
 const cookie = await login();
-const cdp = await connect(await findInspector());
-await cdp.send('Profiler.enable');
+/**
+ * wrangler dev の起動・読み込み直しの直後は、最初の接続に応答が来ないことがある。
+ * 応答が来なければ繋ぎ直す（2 回目以降は応答する）
+ */
+async function connectProfiler() {
+	for (let attempt = 1; ; attempt++) {
+		const cdp = await connect(await findInspector(), 30_000);
+		try {
+			await Promise.race([
+				cdp.send('Profiler.enable'),
+				new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5_000))
+			]);
+			return cdp;
+		} catch (e) {
+			cdp.close();
+			if (attempt === 3) throw e;
+		}
+	}
+}
+
+const cdp = await connectProfiler();
 await cdp.send('Profiler.setSamplingInterval', { interval: 100 });
 
 const results: { route: string; ms: number; trips: number; status: number }[] = [];

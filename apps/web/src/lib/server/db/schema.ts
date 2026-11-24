@@ -32,6 +32,8 @@ export const user = sqliteTable(
 			.notNull()
 			.default('member'),
 		disabledAt: integer('disabled_at', { mode: 'timestamp_ms' }),
+		/** 担当者に設定されたとき・メンションされたときに、メールでも知らせるか（アカウント設定で変える） */
+		emailNotifications: integer('email_notifications', { mode: 'boolean' }).notNull().default(true),
 		createdAt: createdAt(),
 		updatedAt: updatedAt()
 	},

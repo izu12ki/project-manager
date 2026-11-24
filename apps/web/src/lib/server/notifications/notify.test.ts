@@ -369,3 +369,137 @@ describe('notifyBulk', () => {
 		expect(err).toHaveBeenCalled();
 	});
 });
+
+describe('notify (email)', () => {
+	let db: DB;
+	let base: ReturnType<typeof createTestBase>;
+	let admin: Actor, member: Actor, guest: Actor;
+	let input: Omit<NotifyInput, 'events'>;
+	const as = (a: Actor) => ctxOf(base, a);
+	/** 送ったメールの宛先と件名・本文の 1 行目 */
+	const sent = async () => {
+		await Promise.all(base.pending);
+		return base.sent.map((m) => `${m.to}|${m.subject}|${m.text.split('\n')[0]}`).sort();
+	};
+
+	beforeEach(async () => {
+		db = await createTestDb();
+		base = createTestBase(db);
+		admin = await seedUser(db, 'admin', '管理');
+		member = await seedUser(db, 'member', '花子');
+		guest = await seedUser(db, 'guest', '太郎');
+		const p = await seedProject(db, { key: 'ACME', members: [member, guest] });
+		await createIssue(as(guest), 'ACME', { title: 'ログイン画面の修正' });
+		await Promise.all(base.pending);
+		base.sent.length = 0;
+		base.pending.length = 0;
+		const [i] = await db.select().from(issue);
+		input = {
+			project: { id: p.id, key: 'ACME', name: 'Acme' },
+			issue: { id: i.id, number: 1, title: 'ログイン画面の修正' }
+		};
+	});
+
+	it('担当者に設定された人とメンションされた人に送る。件名は「[課題キー] 件名」', async () => {
+		await db.update(issue).set({ assigneeIds: [member.id] });
+		const body = `${mentionToken(guest)} 確認お願いします`;
+		await db
+			.insert(comment)
+			.values({ id: 'c1', issueId: input.issue.id, authorId: admin.id, body });
+		await notify(as(admin), {
+			...input,
+			events: [
+				{ kind: 'assignees_added', assigneeIds: [member.id] },
+				{ kind: 'commented', commentId: 'c1', body }
+			]
+		});
+		expect(await sent()).toEqual(
+			[
+				`${member.email}|[ACME-1] ログイン画面の修正|管理さんが あなたを担当者に設定 しました。`,
+				`${guest.email}|[ACME-1] ログイン画面の修正|管理さんが あなたを メンション しました。`
+			].sort()
+		);
+		const mail = base.sent.find((m) => m.to === guest.email)!;
+		expect(mail.text).toContain('確認お願いします');
+		expect(mail.text).toContain('http://localhost:5173/projects/ACME/issues/1#comment-c1');
+		expect(mail.text).toContain('http://localhost:5173/account');
+	});
+
+	it('コメントとステータスの変更だけではメールを送らない（アプリ内の通知は作る）', async () => {
+		await db
+			.insert(comment)
+			.values({ id: 'c1', issueId: input.issue.id, authorId: admin.id, body: 'x' });
+		await notify(as(admin), {
+			...input,
+			events: [
+				{ kind: 'commented', commentId: 'c1', body: 'x' },
+				{ kind: 'status_changed', from: 'todo', to: 'done' }
+			]
+		});
+		expect(await sent()).toEqual([]);
+		expect((await db.select().from(notification)).map((n) => n.userId)).toEqual([guest.id]);
+	});
+
+	it('メールの通知をオフにした人と、無効化された人には送らない', async () => {
+		await db.update(user).set({ emailNotifications: false }).where(eq(user.id, member.id));
+		await db.update(issue).set({ assigneeIds: [member.id, guest.id] });
+		await notify(as(admin), {
+			...input,
+			events: [{ kind: 'assignees_added', assigneeIds: [member.id, guest.id] }]
+		});
+		expect(await sent()).toEqual([
+			`${guest.email}|[ACME-1] ログイン画面の修正|管理さんが あなたを担当者に設定 しました。`
+		]);
+		base.sent.length = 0;
+		await db.update(user).set({ disabledAt: new Date() }).where(eq(user.id, guest.id));
+		await notify(as(admin), {
+			...input,
+			events: [{ kind: 'assignees_added', assigneeIds: [member.id, guest.id] }]
+		});
+		expect(await sent()).toEqual([]);
+	});
+
+	it('送れなかったメールがあっても、ほかの人には送り、元の操作は失敗させない', async () => {
+		const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const delivered: string[] = [];
+		base.mailer = {
+			send: async (m) => {
+				if (m.to === member.email) throw new Error('quota exceeded');
+				delivered.push(m.to);
+			}
+		};
+		await db.update(issue).set({ assigneeIds: [member.id, guest.id] });
+		await notify(as(admin), {
+			...input,
+			events: [{ kind: 'assignees_added', assigneeIds: [member.id, guest.id] }]
+		});
+		await Promise.all(base.pending);
+		expect(delivered).toEqual([guest.email]);
+		expect(errors.mock.calls.some(([msg]) => String(msg).includes(member.id))).toBe(true);
+		errors.mockRestore();
+	});
+
+	it('一括の更新は、担当・メンションのまとめ通知だけメールで送る', async () => {
+		const project = input.project;
+		await db.update(issue).set({ assigneeIds: [member.id] });
+		await notifyBulk(as(admin), {
+			project,
+			items: [
+				{
+					issue: input.issue,
+					events: [
+						{ kind: 'assignees_added', assigneeIds: [member.id] },
+						{ kind: 'status_changed', from: 'todo', to: 'done' }
+					]
+				}
+			]
+		});
+		// 起票者の guest は bulk_updated なのでメールは送らない
+		expect(await sent()).toEqual([
+			`${member.email}|[ACME] 管理さんが ACME の 1 件の課題で あなたを担当者に設定しました。|管理さんが ACME の 1 件の課題で あなたを担当者に設定しました。`
+		]);
+		expect(base.sent[0].text).toContain(
+			`http://localhost:5173/projects/ACME?assignee=${member.id}`
+		);
+	});
+});

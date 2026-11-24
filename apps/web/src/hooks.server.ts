@@ -38,6 +38,7 @@ const app: Handle = async ({ event, resolve }) => {
 		db,
 		readBatch: createReadBatcher(db),
 		mailer,
+		mailConfigured: appEnv.MAIL_PROVIDER !== 'console',
 		bucket: env.BUCKET,
 		waitUntil,
 		// Workers の fetch は this が違うと Illegal invocation になるので包む

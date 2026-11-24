@@ -1,5 +1,5 @@
 // Backlog の課題 CSV の取り込み。ブラウザで読んだ行を受け取り、確認画面の「計画」を作る（planIssueImport）。
-// 実行（importIssues）は送られた行と人の対応表から計画を作り直し、1 回の db.batch で全件成功か全件失敗にする。
+// 実行（importIssues）は送られた行・人の対応表・新しいマイルストーンのリリース予定日から計画を作り直し、1 回の db.batch で全件成功か全件失敗にする。
 // 通知・編集履歴は作らない。DB への問い合わせ回数は件数によらず一定にする。
 import { and, asc, eq, gte, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import { inList, insertChunks } from '../db/limits';

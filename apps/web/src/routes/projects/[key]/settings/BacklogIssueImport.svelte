@@ -3,6 +3,7 @@
 	import { CircleCheck, TriangleAlert } from '@lucide/svelte';
 	import FormAlert from '#lib/components/FormAlert.svelte';
 	import {
+		carryOver,
 		formatIssueImportResult,
 		MAX_CSV_BYTES,
 		readBacklogIssues,
@@ -32,7 +33,7 @@
 	let notation = $state<Notation>('markdown');
 	/** Backlog 記法が見つかった課題のキー */
 	let notationKeys = $state.raw<string[]>([]);
-	/** 確認画面。rows は送る行（変換済み）。実行時は行と人の対応表を送る（サーバーが計画を作り直す） */
+	/** 確認画面。rows は送る行（変換済み）。実行時は行・人の対応表・リリース予定日を送る（サーバーが計画を作り直す） */
 	let preview = $state.raw<{ plan: Plan; rows: BacklogIssueRow[] } | null>(null);
 	/** Backlog の名前ごとの対応先の user id。'' は不明なユーザー */
 	let chosen = $state<Record<string, string>>({});
@@ -103,12 +104,9 @@
 		message = '';
 		try {
 			const plan = await previewIssueImport({ key: projectKey, rows });
-			chosen = Object.fromEntries(
-				plan.people.map((p) => [p.name, chosen[p.name] ?? p.userId ?? ''])
-			);
-			releaseDates = Object.fromEntries(
-				plan.created.milestones.map((name) => [name, releaseDates[name] ?? ''])
-			);
+			const auto = new Map(plan.people.map((p) => [p.name, p.userId ?? '']));
+			chosen = carryOver(chosen, [...auto.keys()], (name) => auto.get(name) ?? '');
+			releaseDates = carryOver(releaseDates, plan.created.milestones, () => '');
 			preview = { plan, rows };
 		} catch (err) {
 			message = failure(err, '読み込めませんでした');

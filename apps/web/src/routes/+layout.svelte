@@ -55,6 +55,7 @@
 		if (path.startsWith('/admin/users')) return [{ label: '管理' }, { label: 'ユーザー' }];
 		if (path === '/account') return [{ label: 'アカウント' }];
 		if (path === '/notifications') return [{ label: '通知' }];
+		if (path === '/issues') return [{ label: '自分の課題' }];
 		if (path === '/emoji') return [{ label: 'カスタム絵文字' }];
 		const project = page.data.project as { key: string; name: string } | undefined;
 		if (project) {

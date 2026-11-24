@@ -729,6 +729,16 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.keyboard.press('Escape');
 	await expect(boardSheet).toBeHidden();
 
+	// 7b. 自分の課題に、担当している課題がプロジェクトのステータス名で出る
+	await page.getByRole('link', { name: '自分の課題' }).click();
+	await expect(page).toHaveURL(/\/issues$/);
+	const myRow = page.getByRole('row', { name: /ACME-1/ });
+	await expect(myRow.getByRole('link', { name: 'ログインできない' })).toBeVisible();
+	await expect(myRow).toContainText('進行中');
+	await page.getByLabel('対象').selectOption({ label: '登録した課題' });
+	await expect(page).toHaveURL(/role=reporter/);
+	await expect(myRow).toBeVisible();
+
 	// 8. ゲストがコメント（PDF を添付）。テキストの貼り付けは横取りしない
 	// 「Markdown ソースのまま編集」（textarea）でも今までどおり添付・送信できる
 	await page.goto('/projects/ACME/issues/1');

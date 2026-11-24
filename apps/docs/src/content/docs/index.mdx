@@ -57,7 +57,7 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 		顧客を「ゲスト」として招待し、参加しているプロジェクトだけを見せます。ゲストは課題の起票・編集とコメントができます（削除はできません）。見せるだけの相手は「閲覧者」として招待すると、起票・編集・コメント・添付が一切できません（[権限](/reference/permissions/)）。
 	</Card>
 	<Card title="通知" icon="information">
-		担当の割り当て、ステータスの変更、コメント、`@` メンションをアプリ内で通知します。
+		担当の割り当て、ステータスの変更、コメント、`@` メンションをアプリ内で通知します。担当の割り当てとメンションはメールでも知らせます。
 	</Card>
 	<Card title="Slack 連携" icon="slack">
 		自分に関わる通知を Slack の DM で受け取れます（[Slack 連携](/guides/slack/)）。
@@ -68,8 +68,8 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 	<Card title="REST API" icon="setting">
 		管理者が発行する API キーで、課題の一括起票・一括修正やスケジュールの作成ができます。Claude Code 用の Skill を同梱しています。
 	</Card>
-	<Card title="招待メール / パスワードリセット" icon="email">
-		SMTP2GO、Resend、Cloudflare Email Sending（Workers Paid プランのみ）のどれかで送信します。メール設定なしでも招待リンクを手渡しできます（[メール送信の設定](/guides/mail/)）。
+	<Card title="メール" icon="email">
+		招待、パスワードリセット、担当の割り当てとメンションの通知をメールで送ります。SMTP2GO、Resend、Cloudflare Email Sending（Workers Paid プランのみ）のどれかで送信します。メール設定なしでも招待リンクを手渡しできます（[メール送信の設定](/guides/mail/)）。
 	</Card>
 </CardGrid>
 

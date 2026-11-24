@@ -9,7 +9,7 @@ description: デプロイの前に用意するアカウントと、手元の PC 
 |---|---|---|---|
 | [Cloudflare](https://dash.cloudflare.com/sign-up) | **必須** | アプリの実行環境（Workers）とデータベース（D1） | 無料プランで動く（下記「Workers のプラン」参照） |
 | Cloudflare R2 | **必須** | 添付ファイルの保存 | 10GB まで無料。初回はダッシュボードの「R2」で利用を開始する |
-| [SMTP2GO](https://www.smtp2go.com)、[Resend](https://resend.com)、Cloudflare Email Sending のどれか | 任意 | 招待メール・パスワードリセットメールの送信 | SMTP2GO・Resend は無料枠あり。Email Sending は Workers Paid プランのみ（月 3,000 通まで含まれる。送信元ドメインの DNS を Cloudflare で管理している場合）（[メール送信の設定](/guides/mail/)） |
+| [SMTP2GO](https://www.smtp2go.com)、[Resend](https://resend.com)、Cloudflare Email Sending のどれか | 任意 | 招待・パスワードリセット・通知のメールの送信 | SMTP2GO・Resend は無料枠あり。Email Sending は Workers Paid プランのみ（月 3,000 通まで含まれる。送信元ドメインの DNS を Cloudflare で管理している場合）（[メール送信の設定](/guides/mail/)） |
 
 :::note
 Cloudflare アカウントの作成が必要です。このツールは Cloudflare Workers 上でのみ動作します。

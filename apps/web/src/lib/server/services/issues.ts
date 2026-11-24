@@ -1,4 +1,16 @@
-import { and, asc, desc, eq, isNotNull, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
+import {
+	and,
+	asc,
+	desc,
+	eq,
+	isNotNull,
+	isNull,
+	ne,
+	or,
+	sql,
+	type SQL,
+	type SQLWrapper
+} from 'drizzle-orm';
 import { inList } from '../db/limits';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
@@ -17,7 +29,16 @@ import { DEFAULT_ISSUE_SORT, type IssueSort } from '#lib/issue-sort.ts';
 import { authorize, can } from '../authz';
 import type { AppContext } from '../context';
 import type { DB } from '../db';
-import { category, issue, issueChange, issueType, milestone, project, user } from '../db/schema';
+import {
+	category,
+	comment,
+	issue,
+	issueChange,
+	issueType,
+	milestone,
+	project,
+	user
+} from '../db/schema';
 import { AppError } from '../errors';
 import { notify } from '../notifications';
 import { emptyToNull, parse } from '../validation';
@@ -63,7 +84,7 @@ const STALE = '並び順が古くなっています。画面を再読み込み�
 
 /**
  * assigneeId / categoryId はその人・カテゴリーを含む課題、'none' は 1 つもない課題。
- * typeId / milestoneId は 'none' で未設定のものに絞る。q はタイトルか番号の部分一致。
+ * typeId / milestoneId は 'none' で未設定のものに絞る。q はタイトル・本文・コメントの部分一致か番号の一致。
  */
 export interface IssueFilters {
 	status?: Status;
@@ -205,7 +226,8 @@ function optionCond(
 }
 
 /**
- * タイトルの部分一致。「ACME-12」「#12」「12」は番号の一致としても扱う。
+ * タイトル・本文・コメントの部分一致（Backlog のキーワード検索と同じ範囲）。
+ * 「ACME-12」「#12」「12」は番号の一致としても扱う。
  * 「OLD-12」のような課題キーの形は、Backlog から取り込んだ課題の元のキーとも比べる
  */
 function keywordCond(projectKey: string, q: string | undefined): SQL | undefined {
@@ -213,7 +235,13 @@ function keywordCond(projectKey: string, q: string | undefined): SQL | undefined
 	if (!kw) return undefined;
 	// LIKE は使わない（D1 は LIKE のパターンが 50 バイトまでで、日本語 17 文字ほどで失敗する）。
 	// instr なら長さの制限がなく、% や _ も文字のまま比べる。lower は LIKE と同じく英字だけを小文字にする
-	const conds = [sql`instr(lower(${issue.title}), lower(${kw})) > 0`];
+	const has = (col: SQLWrapper) => sql`instr(lower(${col}), lower(${kw})) > 0`;
+	const conds = [
+		has(issue.title),
+		has(issue.description),
+		// コメントは課題ごとの索引（comment_issue_idx）で引く。削除したコメントは行ごと消えるので当たらない
+		sql`exists (select 1 from ${comment} where ${comment.issueId} = ${issue.id} and ${has(comment.body)})`
+	];
 	// キーは URL から来ることがある（一覧の batch はプロジェクトの行を待たない）。正規表現の記号は文字として扱う
 	const key = projectKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 	const m = kw.match(new RegExp(`^(?:${key}-|#)?(\\d{1,9})$`, 'i'));

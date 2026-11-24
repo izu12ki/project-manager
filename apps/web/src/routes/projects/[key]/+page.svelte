@@ -80,7 +80,7 @@
 		class="flex flex-wrap items-end gap-3"
 		onchange={(e) => e.currentTarget.requestSubmit()}
 	>
-		<div class="field w-56 gap-1.5">
+		<div class="field w-72 max-w-full gap-1.5">
 			<label class="label text-[0.8125rem]" for="filter-q">キーワード</label>
 			<div class="search">
 				<Search size={16} class="search-icon" />
@@ -90,7 +90,7 @@
 					name="q"
 					type="search"
 					maxlength={200}
-					placeholder="タイトル・課題キー"
+					placeholder="タイトル・本文・コメント・課題キー"
 					value={data.filters.q ?? ''}
 				/>
 			</div>

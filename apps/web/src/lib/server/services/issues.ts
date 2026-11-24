@@ -83,6 +83,7 @@ import {
 const STALE = '並び順が古くなっています。画面を再読み込みしてください';
 
 /**
+ * status の 'open' は完了以外（タイムラインの絞り込みと同じ値）。
  * assigneeId / categoryId はその人・カテゴリーを含む課題、'none' は 1 つもない課題。
  * typeId / milestoneId は 'none' で未設定のものに絞る。q はタイトル・本文・コメントの部分一致か番号の一致。
  */
@@ -217,6 +218,11 @@ function idsCond(
 	return sql`exists (select 1 from json_each(${col}) where value = ${value})`;
 }
 
+function statusCond(value: string | undefined): SQL | undefined {
+	if (!value) return undefined;
+	return value === 'open' ? ne(issue.status, DONE_STATUS) : eq(issue.status, value);
+}
+
 function optionCond(
 	col: typeof issue.typeId | typeof issue.milestoneId,
 	value: string | undefined
@@ -259,7 +265,7 @@ export function filterConds(
 	return and(
 		of(issue.projectId),
 		isNull(issue.deletedAt),
-		filters.status ? eq(issue.status, filters.status) : undefined,
+		statusCond(filters.status),
 		filters.priority ? eq(issue.priority, filters.priority) : undefined,
 		idsCond(issue.assigneeIds, filters.assigneeId),
 		idsCond(issue.categoryIds, filters.categoryId),

@@ -3,7 +3,13 @@ import type { Actor } from '../authz';
 import type { DB } from '../db';
 import { userIntegration } from '../db/schema';
 import { createTestDb, createTestBase, ctxOf, seedUser } from '../test-utils';
-import { disableSlack, enableSlack, getSlackStatus } from './integrations';
+import {
+	disableSlack,
+	enableSlack,
+	getEmailNotificationStatus,
+	getSlackStatus,
+	setEmailNotifications
+} from './integrations';
 
 describe('integrations (slack)', () => {
 	let db: DB;
@@ -105,5 +111,29 @@ describe('integrations (slack)', () => {
 		await expect(enableSlack(ctx())).rejects.toMatchObject({ code: 'forbidden' });
 		await expect(disableSlack(ctx())).rejects.toMatchObject({ code: 'forbidden' });
 		expect(urls).toEqual([]);
+	});
+});
+
+describe('integrations (email)', () => {
+	it('既定はオン。本人が切り替えられ、閲覧者は変えられない', async () => {
+		const db = await createTestDb();
+		const base = createTestBase(db);
+		const me = await seedUser(db, 'guest', '太郎');
+		const viewer = await seedUser(db, 'viewer', '見る人');
+		expect(await getEmailNotificationStatus(ctxOf(base, me))).toEqual({
+			on: true,
+			configured: true
+		});
+		await setEmailNotifications(ctxOf(base, me), false);
+		expect((await getEmailNotificationStatus(ctxOf(base, me))).on).toBe(false);
+		// ほかの人の設定は変えない
+		expect((await getEmailNotificationStatus(ctxOf(base, viewer))).on).toBe(true);
+		await setEmailNotifications(ctxOf(base, me), true);
+		expect((await getEmailNotificationStatus(ctxOf(base, me))).on).toBe(true);
+		await expect(setEmailNotifications(ctxOf(base, viewer), false)).rejects.toMatchObject({
+			code: 'forbidden'
+		});
+		base.mailConfigured = false;
+		expect((await getEmailNotificationStatus(ctxOf(base, me))).configured).toBe(false);
 	});
 });

@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { authorize } from '../authz';
 import type { AppContext } from '../context';
-import { userIntegration } from '../db/schema';
+import { user, userIntegration } from '../db/schema';
 import { AppError } from '../errors';
 import { channelConfig, providers } from '../notifications/channels';
 
@@ -51,4 +51,23 @@ export async function enableSlack(ctx: AppContext): Promise<void> {
 export async function disableSlack(ctx: AppContext): Promise<void> {
 	authorize(ctx.actor, 'account:modify');
 	await ctx.db.delete(userIntegration).where(mine(ctx));
+}
+
+/**
+ * メールの通知（担当者に設定されたとき・メンションされたとき）を受け取るか。
+ * configured はメール送信サービスを設定しているか（未設定なら実際には届かない）
+ */
+export async function getEmailNotificationStatus(
+	ctx: AppContext
+): Promise<{ on: boolean; configured: boolean }> {
+	const [row] = await ctx.db
+		.select({ on: user.emailNotifications })
+		.from(user)
+		.where(eq(user.id, ctx.actor.id));
+	return { on: row?.on ?? false, configured: ctx.mailConfigured };
+}
+
+export async function setEmailNotifications(ctx: AppContext, on: boolean): Promise<void> {
+	authorize(ctx.actor, 'account:modify');
+	await ctx.db.update(user).set({ emailNotifications: on }).where(eq(user.id, ctx.actor.id));
 }

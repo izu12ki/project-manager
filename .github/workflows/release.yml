@@ -1,10 +1,12 @@
 name: Release
 
 # changeset が溜まっていれば「Version Packages」PR を作成・更新し、
-# その PR がマージされたら web@x.y.z タグと GitHub Release を作る（npm には公開しない）
+# その PR がマージされたら web@x.y.z タグと GitHub Release を作って、ドキュメントサイトをデプロイする（npm には公開しない）。
+# 手動実行（workflow_dispatch）はドキュメントのデプロイだけを行う。リリースを待たずにドキュメントの修正を出すときに使う
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions: {}
 
@@ -13,6 +15,7 @@ concurrency:
 
 jobs:
   select-mode:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -60,6 +63,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      published: ${{ steps.publish.outputs.published }}
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
@@ -67,4 +72,34 @@ jobs:
           cache: false
       - run: pnpm install --frozen-lockfile
       # 全パッケージが private なので、changeset publish はタグを作るだけで npm には公開しない
-      - uses: changesets/action/publish@v2
+      - id: publish
+        uses: changesets/action/publish@v2
+
+  # ドキュメントはセルフホストの人が使う最新リリースに合わせる。
+  # publish モードは changeset の無い main への push のたびに走るので、実際にタグを作ったときだけデプロイする
+  deploy-docs:
+    needs: publish
+    # 手動実行では publish が skipped になるので !cancelled() で評価させる。フォークでは動かさない
+    if: >-
+      !cancelled() &&
+      github.repository == 'izu12ki/project-manager' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+        (needs.publish.result == 'success' && needs.publish.outputs.published == 'true'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@v5
+        with:
+          cache: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm docs:build
+      - run: pnpm --filter docs exec wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'

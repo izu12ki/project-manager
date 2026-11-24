@@ -221,6 +221,16 @@
 				</div>
 			{/if}
 
+			{#if plan.extraColumns.length > 0}
+				<div class="grid gap-1" data-testid="issue-import-extra-columns">
+					<p class="m-0 text-[0.8125rem] font-medium">本文の末尾に残す列</p>
+					<p class="m-0 text-[0.8125rem]">
+						{plan.extraColumns.join('、')}（対応する項目がないため、値を「列名:
+						値」の形で移行情報に残します）
+					</p>
+				</div>
+			{/if}
+
 			{#if plan.rowErrors.length > 0}
 				<div class="alert">
 					<TriangleAlert color="var(--c-amber)" />

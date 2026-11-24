@@ -58,6 +58,7 @@ function row(over: Partial<BacklogIssueRow> = {}): BacklogIssueRow {
 		estimatedHours: '',
 		actualHours: '',
 		attachments: 0,
+		extra: [],
 		comments: [],
 		...over
 	};
@@ -104,8 +105,23 @@ describe('issue-import: plan', () => {
 				milestones: ['v1.0']
 			},
 			rowErrors: [{ rowNumber: 8, key: 'DEMO-7', reason: '件名がありません' }],
-			alreadyImported: []
+			alreadyImported: [],
+			extraColumns: []
 		});
+	});
+
+	it('値のある知らない列の名前を、取り込む行で最初に出た順に返す', async () => {
+		const p = await plan([
+			row({ extra: [{ name: '顧客', value: '架空商事' }] }),
+			row({
+				extra: [
+					{ name: '顧客', value: '架空工業' },
+					{ name: '見積額', value: '1,000' }
+				]
+			}),
+			row({ title: '', extra: [{ name: '取り込まない行の列', value: 'x' }] })
+		]);
+		expect(p.extraColumns).toEqual(['顧客', '見積額']);
 	});
 
 	it('名前は空白を無視して自動で選び、同名が複数なら選ばない', async () => {
@@ -453,6 +469,26 @@ describe('issue-import: run', () => {
 		const kept = byKey.get('DEMO-2')!;
 		expect(kept.title).toBe('い'.repeat(200));
 		expect(kept.description).not.toContain('件名（Backlog）');
+	});
+
+	it('知らない列の値は本文末尾の移行情報に残し、複数行はリストの続きにする', async () => {
+		await run([
+			row({
+				description: '本文',
+				extra: [
+					{ name: '顧客', value: '架空商事' },
+					{ name: '見積額', value: '1,000\n\n税別' }
+				]
+			})
+		]);
+		const [{ description }] = await db.select().from(issue);
+		expect(description).toBe(
+			[
+				'本文',
+				'---',
+				'- Backlog から移行: DEMO-1\n- 顧客: 架空商事\n- 見積額: 1,000\n\n  税別'
+			].join('\n\n')
+		);
 	});
 
 	it('分けて取り込むと、前回の課題を親にし、子課題の子にはしない', async () => {

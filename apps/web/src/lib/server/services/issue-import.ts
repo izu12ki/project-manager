@@ -74,6 +74,8 @@ export interface IssueImportPlan {
 	longTitles: string[];
 	/** このプロジェクトに取り込み済みのキー（削除済みを含む）。1 つでもあれば取り込めない */
 	alreadyImported: string[];
+	/** 値を本文末尾に残す知らない列（カスタム属性など）の名前。取り込む行で最初に出た順 */
+	extraColumns: string[];
 }
 
 const TITLE_MAX = 200;
@@ -127,7 +129,8 @@ const RowSchema = v.object({
 	estimatedHours: Short,
 	actualHours: Short,
 	attachments: v.number(),
-	comments: v.array(v.object({ at: At, author: Short, body: Long }))
+	comments: v.array(v.object({ at: At, author: Short, body: Long })),
+	extra: v.pipe(v.array(v.object({ name: Short, value: Long })), v.maxLength(200))
 });
 const Rows = v.pipe(
 	v.array(RowSchema),
@@ -170,6 +173,10 @@ export function clipTitle(title: string): string {
 	return `${title.slice(0, end)}…`;
 }
 
+/** 移行情報の 1 項目。複数行の値は、空でない 2 行目以降を字下げしてリストの続きにする */
+const noteItem = (label: string, value: string) =>
+	`- ${label}: ${value.replace(/\n(?=[^\n])/g, '\n  ')}`;
+
 /** 本文・コメントの先頭に残す元の名前 */
 export const originalName = (name: string) => `（Backlog: ${name}）`;
 
@@ -189,7 +196,8 @@ export function composeDescription(
 		r.estimatedHours && `- 予定時間: ${r.estimatedHours}`,
 		r.actualHours && `- 実績時間: ${r.actualHours}`,
 		resolutionNote && `- 完了理由（Backlog）: ${r.resolution}`,
-		r.attachments > 0 && `- 添付ファイル: ${r.attachments} 件（移行していません）`
+		r.attachments > 0 && `- 添付ファイル: ${r.attachments} 件（移行していません）`,
+		...r.extra.map((x) => noteItem(x.name, x.value))
 	].filter(Boolean);
 	return [o.reporterName && originalName(o.reporterName), r.description, '---', lines.join('\n')]
 		.filter(Boolean)
@@ -500,7 +508,8 @@ export async function buildImport(
 		alreadyImported: valid
 			.filter((r) => importedByKey.has(r.key))
 			.map((r) => r.key)
-			.sort()
+			.sort(),
+		extraColumns: [...new Set(valid.flatMap((r) => r.extra.map((x) => x.name)))]
 	};
 	return {
 		plan,

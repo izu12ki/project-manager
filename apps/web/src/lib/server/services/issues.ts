@@ -382,38 +382,89 @@ export async function listBoard(
 
 export type TimelineItem = IssueListItem & { canEdit: boolean };
 
+/** タイムラインの「未スケジュール」に出す課題の数。新しいものから */
+export const UNSCHEDULED_LIMIT = 50;
+
+export interface TimelineView {
+	/**
+	 * 表示の開始日（'YYYY-MM-DD'）。完了した課題のうち、この日より前に終わったもの（期限、なければ開始日が前）は返さない。
+	 * 省略すると完了した課題もすべて返す
+	 */
+	from?: string;
+	filters?: Pick<IssueFilters, 'status' | 'assigneeId' | 'categoryId' | 'milestoneId'>;
+}
+
 /**
  * タイムライン（remote query の getTimeline）に要るもの。1 回の batch（D1 への 1 往復）で引く。
- * 日付のある課題はすべて（完了を含む）、日付のない課題は未完了のものだけ返す。
- * 表示範囲では絞らない（範囲外の課題にも行を出すため）。並べ替え・グループ化はクライアント側で行う。
+ * 日付のある課題（完了したものは view.from 以降に終わるものだけ）と、日付がなく未完了の課題（新しい順に
+ * UNSCHEDULED_LIMIT 件まで。unscheduledTotal は上限で切る前の数）を、絞り込んで返す。
+ * 未完了の課題は表示範囲の外でも返す（範囲外の課題にも行を出すため）。並べ替え・グループ化はクライアント側で行う。
+ * Backlog から移した数千件のプロジェクトでは、終わった課題をすべて返すと 1 回の表示の CPU 時間が 100ms を超える
  */
 export async function listTimeline(
 	ctx: AppContext,
-	key: string
+	key: string,
+	view: TimelineView = {}
 ): Promise<{
 	scheduled: TimelineItem[];
 	unscheduled: TimelineItem[];
+	unscheduledTotal: number;
 	milestones: MilestoneRow[];
 	categories: CategoryRow[];
 	assignees: Awaited<ReturnType<typeof assignableUsersQuery>>;
 }> {
 	const { db } = ctx;
 	const of = ofProject(db, key);
-	const [access, rows, milestones, categories, assignees] = await ctx.readBatch([
+	const where = filterConds(key, of, view.filters ?? {});
+	const unscheduledWhere = and(
+		where,
+		isNull(issue.startDate),
+		isNull(issue.dueDate),
+		ne(issue.status, DONE_STATUS)
+	);
+	const [
+		access,
+		scheduledRows,
+		unscheduledRows,
+		[{ unscheduledTotal }],
+		milestones,
+		categories,
+		assignees
+	] = await ctx.readBatch([
 		projectAccessQuery(ctx, key),
-		issueListQuery(db, filterConds(key, of, {}), [asc(issue.number)]),
+		issueListQuery(
+			db,
+			and(
+				where,
+				or(isNotNull(issue.startDate), isNotNull(issue.dueDate)),
+				view.from
+					? or(
+							ne(issue.status, DONE_STATUS),
+							sql`coalesce(${issue.dueDate}, ${issue.startDate}) >= ${view.from}`
+						)
+					: undefined
+			),
+			[asc(issue.number)]
+		),
+		issueListQuery(db, unscheduledWhere, [desc(issue.number)]).limit(UNSCHEDULED_LIMIT),
+		db
+			.select({ unscheduledTotal: sql<number>`count(*)`.as('unscheduled_total') })
+			.from(issue)
+			.where(unscheduledWhere),
 		milestonesQuery(db, of),
 		categoriesQuery(db, of),
 		assignableUsersQuery(db, of)
 	]);
 	const p = checkProjectAccess(ctx, access);
-	const items = toIssueListItems(rows).map((r) => ({
-		...r,
-		canEdit: !p.archivedAt && can(ctx.actor, 'issue:edit', { reporterId: r.reporterId })
-	}));
+	const withCanEdit = (rows: typeof scheduledRows) =>
+		toIssueListItems(rows).map((r) => ({
+			...r,
+			canEdit: !p.archivedAt && can(ctx.actor, 'issue:edit', { reporterId: r.reporterId })
+		}));
 	return {
-		scheduled: items.filter((i) => i.startDate || i.dueDate),
-		unscheduled: items.filter((i) => !i.startDate && !i.dueDate && i.status !== DONE_STATUS),
+		scheduled: withCanEdit(scheduledRows),
+		unscheduled: withCanEdit(unscheduledRows),
+		unscheduledTotal,
 		milestones,
 		categories,
 		assignees

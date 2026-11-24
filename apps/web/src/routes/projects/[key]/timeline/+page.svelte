@@ -6,7 +6,6 @@
 	import { toast } from '#lib/toast.svelte.ts';
 	import {
 		addDays,
-		filterItems,
 		groupItems,
 		lastDate,
 		parseView,
@@ -24,7 +23,9 @@
 	let { data, params }: PageProps = $props();
 	const today = todayJst();
 	const view = $derived(parseView(new URLSearchParams(page.url.search), today));
-	const timeline = $derived(await getTimeline(params.key));
+	// 絞り込みと表示の開始日はサーバーで使う（課題の多いプロジェクトで、終わった課題をすべて送らないため）
+	const ref = $derived({ key: params.key, from: view.from, ...view.filters });
+	const timeline = $derived(await getTimeline(ref));
 
 	/** 右側のシートで開いている課題の番号 */
 	let opened = $state<number | null>(null);
@@ -37,11 +38,8 @@
 	/** 保存中の楽観的な日付（issue id → 日付）。保存が終われば消す */
 	let pending = $state<Record<string, Dated>>({});
 	const all = $derived(
-		filterItems(
-			[...timeline.scheduled, ...timeline.unscheduled].map((i) =>
-				pending[i.id] ? { ...i, ...pending[i.id] } : i
-			),
-			view.filters
+		[...timeline.scheduled, ...timeline.unscheduled].map((i) =>
+			pending[i.id] ? { ...i, ...pending[i.id] } : i
 		)
 	);
 	const filtering = $derived(Object.values(view.filters).some(Boolean));
@@ -74,7 +72,7 @@
 		try {
 			// 保存と最新の再取得を 1 往復で行う（サーバー側で getTimeline を refresh）
 			await setIssueDates({
-				key: params.key,
+				ref,
 				number: item.number,
 				startDate: next.startDate ?? '',
 				dueDate: next.dueDate ?? ''
@@ -91,7 +89,7 @@
 			}
 		} catch (err) {
 			toast.error(failure(err));
-			getTimeline(params.key)
+			getTimeline(ref)
 				.refresh()
 				.catch(() => {});
 		} finally {
@@ -269,6 +267,7 @@
 			projectKey={params.key}
 			{groups}
 			{unscheduled}
+			unscheduledHidden={timeline.unscheduledTotal - timeline.unscheduled.length}
 			{range}
 			{today}
 			onjump={(from) => setQuery({ from })}
@@ -283,7 +282,7 @@
 			number={opened}
 			onclose={() => (opened = null)}
 			onsaved={() =>
-				getTimeline(params.key)
+				getTimeline(ref)
 					.refresh()
 					.catch(() => {})}
 		/>

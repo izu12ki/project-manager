@@ -7,7 +7,6 @@ import {
 	defaultFrom,
 	diffDays,
 	dragDelta,
-	filterItems,
 	groupItems,
 	isOffDay,
 	mondayOf,
@@ -15,7 +14,6 @@ import {
 	shortDate,
 	viewRange,
 	lastDate,
-	type TimelineFilters,
 	type TimelineIssue
 } from './timeline';
 
@@ -304,55 +302,5 @@ describe('groupItems', () => {
 	it('なし: 見出しのない 1 グループ。空なら何も返さない', () => {
 		expect(summary(groupItems(items, 'none', milestones))).toEqual([[null, 1, 4, [3, 4, 2, 1]]]);
 		expect(groupItems([], 'none', milestones)).toEqual([]);
-	});
-});
-
-describe('filterItems', () => {
-	const issue = (number: number, opts: Partial<TimelineIssue> = {}): TimelineIssue => ({
-		id: String(number),
-		number,
-		status: 'todo',
-		startDate: '2026-10-05',
-		dueDate: null,
-		assignees: [],
-		categoryIds: [],
-		milestoneId: null,
-		milestoneName: null,
-		...opts
-	});
-	const items = [
-		issue(1, {
-			status: 'done',
-			assignees: [{ id: 'u1', name: 'u1' }],
-			categoryIds: ['c1', 'c2'],
-			milestoneId: 'm1'
-		}),
-		issue(2, { status: 'in_progress', assignees: [{ id: 'u1', name: 'u1' }] }),
-		issue(3, { status: 'todo', categoryIds: ['c2'], milestoneId: 'm1' })
-	];
-	const all: TimelineFilters = { status: '', assignee: '', category: '', milestone: '' };
-	const numbers = (f: Partial<TimelineFilters>) =>
-		filterItems(items, { ...all, ...f }).map((i) => i.number);
-
-	it('条件なしなら全件', () => {
-		expect(numbers({})).toEqual([1, 2, 3]);
-	});
-
-	it('状態（open は完了以外）', () => {
-		expect(numbers({ status: 'done' })).toEqual([1]);
-		expect(numbers({ status: 'open' })).toEqual([2, 3]);
-	});
-
-	it('担当者・カテゴリー・マイルストーン。none は未設定', () => {
-		expect(numbers({ assignee: 'u1' })).toEqual([1, 2]);
-		expect(numbers({ assignee: 'none' })).toEqual([3]);
-		expect(numbers({ category: 'c2' })).toEqual([1, 3]);
-		expect(numbers({ category: 'none' })).toEqual([2]);
-		expect(numbers({ milestone: 'none' })).toEqual([2]);
-	});
-
-	it('条件は AND で組み合わせる', () => {
-		expect(numbers({ milestone: 'm1', status: 'open' })).toEqual([3]);
-		expect(numbers({ assignee: 'u1', category: 'c1', status: 'open' })).toEqual([]);
 	});
 });

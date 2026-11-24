@@ -118,26 +118,6 @@ export function parseView(q: URLSearchParams, today: string): ViewParams {
 	};
 }
 
-const matches = (value: string | null, want: string) =>
-	!want || (want === 'none' ? value === null : value === want);
-/** ID の配列の絞り込み。'none' は空、それ以外はその ID を含む */
-const includes = (ids: readonly string[], want: string) =>
-	!want || (want === 'none' ? ids.length === 0 : ids.includes(want));
-
-/** 絞り込み条件をすべて満たす課題 */
-export function filterItems<T extends TimelineIssue>(items: T[], f: TimelineFilters): T[] {
-	return items.filter(
-		(i) =>
-			(!f.status || (f.status === 'open' ? i.status !== DONE_STATUS : i.status === f.status)) &&
-			includes(
-				i.assignees.map((u) => u.id),
-				f.assignee
-			) &&
-			includes(i.categoryIds, f.category) &&
-			matches(i.milestoneId, f.milestone)
-	);
-}
-
 export interface Dated {
 	startDate: string | null;
 	dueDate: string | null;

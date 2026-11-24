@@ -25,7 +25,9 @@ import {
 	listIssues,
 	listTimeline,
 	moveIssue,
-	updateIssue
+	UNSCHEDULED_LIMIT,
+	updateIssue,
+	type TimelineView
 } from './issues';
 import { addComment, deleteComment, listComments } from './comments';
 import { getIssueDetailRows } from './issue-detail';
@@ -234,7 +236,8 @@ describe('issues', () => {
 				updatedAt: new Date(Date.UTC(2026, 0, 1) + n * 60_000)
 			}));
 			// D1 の 1 文の変数は 100 個まで
-			for (let i = 0; i < rows.length; i += 5) await db.insert(issueTable).values(rows.slice(i, i + 5));
+			for (let i = 0; i < rows.length; i += 5)
+				await db.insert(issueTable).values(rows.slice(i, i + 5));
 			await db
 				.update(projectTable)
 				.set({ nextIssueNumber: Math.max(...numbers) + 1 })
@@ -810,6 +813,93 @@ describe('issues', () => {
 			expect(t.scheduled.map((i) => i.number)).toEqual([1, 2, 5]);
 			expect(t.scheduled[0]).toMatchObject({ startDate: '2026-10-06', dueDate: '2026-10-08' });
 			expect(t.unscheduled.map((i) => i.number)).toEqual([3]);
+		});
+
+		it('完了した課題は表示の開始日より前に終わったものを除く。未完了の課題は残す', async () => {
+			const from = '2026-10-05';
+			await createIssue(as(member), 'ACME', {
+				title: '前に完了',
+				status: 'done',
+				dueDate: '2026-10-04'
+			});
+			await createIssue(as(member), 'ACME', {
+				title: '開始日だけで前に完了',
+				status: 'done',
+				startDate: '2026-10-01'
+			});
+			await createIssue(as(member), 'ACME', {
+				title: '開始日の当日に完了',
+				status: 'done',
+				dueDate: '2026-10-05'
+			});
+			await createIssue(as(member), 'ACME', {
+				title: '開始日をまたいで完了',
+				status: 'done',
+				startDate: '2026-09-20',
+				dueDate: '2026-10-10'
+			});
+			await createIssue(as(member), 'ACME', { title: '期限切れで未完了', dueDate: '2026-09-01' });
+			expect(
+				(await listTimeline(as(member), 'ACME', { from })).scheduled.map((i) => i.number)
+			).toEqual([3, 4, 5]);
+			// 開始日を指定しなければすべて
+			expect((await listTimeline(as(member), 'ACME')).scheduled.map((i) => i.number)).toEqual([
+				1, 2, 3, 4, 5
+			]);
+		});
+
+		it('絞り込みはサーバーで行い、未スケジュールにも効く', async () => {
+			await createCategory(as(admin), 'ACME', { name: 'X' });
+			const [x] = await listCategories(as(admin), 'ACME');
+			await createIssue(as(member), 'ACME', {
+				title: 'A',
+				dueDate: '2026-10-10',
+				assigneeIds: [guest.id],
+				categoryIds: [x.id]
+			});
+			await createIssue(as(member), 'ACME', { title: 'B', dueDate: '2026-10-10' });
+			await createIssue(as(member), 'ACME', { title: 'C', assigneeIds: [guest.id] });
+			await createIssue(as(member), 'ACME', { title: 'D' });
+			await createIssue(as(member), 'ACME', {
+				title: 'E',
+				status: 'in_progress',
+				dueDate: '2026-10-11'
+			});
+			const numbers = async (filters: TimelineView['filters']) => {
+				const t = await listTimeline(as(member), 'ACME', { filters });
+				return [
+					t.scheduled.map((i) => i.number),
+					t.unscheduled.map((i) => i.number),
+					t.unscheduledTotal
+				];
+			};
+			expect(await numbers({})).toEqual([[1, 2, 5], [4, 3], 2]);
+			expect(await numbers({ assigneeId: guest.id })).toEqual([[1], [3], 1]);
+			expect(await numbers({ assigneeId: 'none' })).toEqual([[2, 5], [4], 1]);
+			expect(await numbers({ categoryId: x.id })).toEqual([[1], [], 0]);
+			expect(await numbers({ status: 'in_progress' })).toEqual([[5], [], 0]);
+			expect(await numbers({ status: 'open' })).toEqual([[1, 2, 5], [4, 3], 2]);
+		});
+
+		it(`未スケジュールは新しい順に ${UNSCHEDULED_LIMIT} 件まで。総数は別に返す`, async () => {
+			const p = await requireProject(as(admin), 'ACME');
+			const n = UNSCHEDULED_LIMIT + 3;
+			const rows = Array.from({ length: n }, (_, i) => ({
+				id: `u-${i + 1}`,
+				projectId: p.id,
+				number: i + 1,
+				title: `日付なし ${i + 1}`,
+				reporterId: admin.id,
+				position: `a${i + 1}`
+			}));
+			// D1 の 1 文の変数は 100 個まで
+			for (let i = 0; i < rows.length; i += 5)
+				await db.insert(issueTable).values(rows.slice(i, i + 5));
+			const t = await listTimeline(as(member), 'ACME');
+			expect(t.unscheduledTotal).toBe(n);
+			expect(t.unscheduled.map((i) => i.number)).toEqual(
+				Array.from({ length: UNSCHEDULED_LIMIT }, (_, i) => n - i)
+			);
 		});
 
 		it('canEdit: ゲストも全課題 true、アーカイブ済みは全員 false', async () => {

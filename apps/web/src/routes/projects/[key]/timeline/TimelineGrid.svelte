@@ -24,6 +24,8 @@
 		projectKey: string;
 		groups: IssueGroup<T>[];
 		unscheduled: T[];
+		/** 未スケジュールのうち、上限で出していない課題の数 */
+		unscheduledHidden?: number;
 		range: ViewRange;
 		today: string;
 		onjump: (from: string) => void;
@@ -37,6 +39,7 @@
 		projectKey,
 		groups,
 		unscheduled,
+		unscheduledHidden = 0,
 		range,
 		today,
 		onjump,
@@ -440,7 +443,7 @@
 
 {#if unscheduled.length > 0}
 	<section class="unscheduled" aria-label="未スケジュール">
-		<h2>未スケジュール <span class="count">{unscheduled.length}</span></h2>
+		<h2>未スケジュール <span class="count">{unscheduled.length + unscheduledHidden}</span></h2>
 		{#if canPlace}
 			<p class="hint">タイムラインへドラッグすると、その日を開始日と期限に設定します。</p>
 		{/if}
@@ -463,6 +466,11 @@
 				</li>
 			{/each}
 		</ul>
+		{#if unscheduledHidden > 0}
+			<p class="hint">
+				新しい {unscheduled.length} 件を表示しています（ほか {unscheduledHidden} 件）。
+			</p>
+		{/if}
 	</section>
 {/if}
 

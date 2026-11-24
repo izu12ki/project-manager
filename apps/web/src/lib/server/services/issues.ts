@@ -320,8 +320,15 @@ export async function listIssues(
 }
 
 /**
+ * カンバンの列に出すカードの上限。完了の列は最近更新したもの、それ以外の列は上（position の小さい方）から。
+ * Backlog から移した数千件のプロジェクトでも、1 回の表示の CPU 時間が増え続けないようにする
+ */
+export const BOARD_LIMIT = { done: 30, other: 100 } as const;
+
+/**
  * カンバン（remote query の getBoard）に要るもの。1 回の batch（D1 への 1 往復）で引く。
  * 列はプロジェクトのステータス順。絞り込んだ場合も、カード間の並び順は全体の position を保つ。
+ * 各列は BOARD_LIMIT までに絞り、totals に列ごとの課題の数（絞り込んだ後、上限で切る前）を返す
  */
 export async function listBoard(
 	ctx: AppContext,
@@ -330,26 +337,47 @@ export async function listBoard(
 ): Promise<{
 	statuses: StatusDef[];
 	columns: Record<Status, IssueListItem[]>;
+	totals: Record<Status, number>;
 	milestones: MilestoneRow[];
 }> {
 	const { db } = ctx;
 	const of = ofProject(db, key);
-	const [access, statuses, rows, milestones] = await ctx.readBatch([
+	const where = filterConds(key, of, { ...filters, status: undefined });
+	// 列ごとに順位を付けて上限までを残す。副問い合わせの "issue" は内側の from を指す
+	const shown = sql`${issue.id} in (
+		select id from (
+			select ${issue.id} as id, ${issue.status} as status, row_number() over (
+				partition by ${issue.status}
+				order by case when ${issue.status} = ${DONE_STATUS} then -${issue.updatedAt} else 0 end,
+					${issue.position}, ${issue.number}
+			) as rn
+			from ${issue} where ${where ?? sql`1 = 1`}
+		) where rn <= case when status = ${DONE_STATUS} then ${BOARD_LIMIT.done} else ${BOARD_LIMIT.other} end
+	)`;
+	const [access, statuses, rows, counts, milestones] = await ctx.readBatch([
 		projectAccessQuery(ctx, key),
 		statusesQuery(db, of),
-		issueListQuery(db, filterConds(key, of, { ...filters, status: undefined }), [
-			asc(issue.position),
-			asc(issue.number)
-		]),
+		issueListQuery(db, and(where, shown), [asc(issue.position), asc(issue.number)]),
+		db
+			.select({ status: issue.status, n: sql<number>`count(*)`.as('board_count') })
+			.from(issue)
+			.where(where)
+			.groupBy(issue.status),
 		milestonesQuery(db, of)
 	]);
 	checkProjectAccess(ctx, access);
 	const columns: Record<Status, IssueListItem[]> = Object.fromEntries(
 		statuses.map((s) => [s.key, [] as IssueListItem[]])
 	);
+	const totals: Record<Status, number> = Object.fromEntries(statuses.map((s) => [s.key, 0]));
 	// 定義が消えたステータスの課題は初期ステータスの列に出す
-	for (const r of toIssueListItems(rows)) (columns[r.status] ?? columns[INITIAL_STATUS])?.push(r);
-	return { statuses, columns, milestones };
+	const columnOf = (status: Status) => (status in columns ? status : INITIAL_STATUS);
+	for (const r of toIssueListItems(rows)) columns[columnOf(r.status)]?.push(r);
+	for (const { status, n } of counts) {
+		const c = columnOf(status);
+		if (c in totals) totals[c] += n;
+	}
+	return { statuses, columns, totals, milestones };
 }
 
 export type TimelineItem = IssueListItem & { canEdit: boolean };
@@ -655,6 +683,22 @@ export async function moveIssue(ctx: AppContext, key: string, input: unknown): P
 	const afterId = emptyToNull(data.afterId);
 	let lo = await neighbor(beforeId);
 	let hi = await neighbor(afterId);
+	if (!afterId) {
+		// 後ろの課題がなければ列の末尾へ。カンバンは列の一部しか出さないことがある（BOARD_LIMIT・絞り込み）ので、
+		// 見えている最後の課題の直後ではなく、列のすべての課題の後に置く
+		const [last] = await ctx.db
+			.select({ max: sql<string | null>`max(${issue.position})` })
+			.from(issue)
+			.where(
+				and(
+					eq(issue.projectId, p.id),
+					eq(issue.status, data.status),
+					ne(issue.id, cur.id),
+					isNull(issue.deletedAt)
+				)
+			);
+		if (last?.max != null && (lo === null || last.max > lo)) lo = last.max;
+	}
 	if (lo !== null && hi !== null) {
 		if (lo > hi) throw new AppError('validation', STALE);
 		if (lo === hi) {

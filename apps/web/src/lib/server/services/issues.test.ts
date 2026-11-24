@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
 import { eq, sql } from 'drizzle-orm';
+import { generateNKeysBetween } from 'fractional-indexing';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { project as projectTable, issue as issueTable, user as userTable } from '../db/schema';
@@ -14,6 +15,7 @@ import {
 	seedUser
 } from '../test-utils';
 import {
+	BOARD_LIMIT,
 	createIssue,
 	deleteIssue,
 	getIssue,
@@ -210,6 +212,86 @@ describe('issues', () => {
 		const { columns: board } = await listBoard(as(member), 'ACME');
 		expect(board.in_review.map((i) => i.title)).toEqual(['B']);
 		expect(board.todo.map((i) => i.title)).toEqual(['A', 'C']);
+	});
+
+	describe('カンバンの列の上限', () => {
+		/**
+		 * 課題を直接入れる（createIssue を数百回呼ぶと遅い）。position は列の中で numbers の順（reverse なら逆順）、
+		 * updatedAt は番号の大きいものほど新しい
+		 */
+		async function insertMany(numbers: number[], status: string, reverse = false) {
+			const p = await requireProject(as(admin), 'ACME');
+			const keys = generateNKeysBetween(null, null, numbers.length);
+			if (reverse) keys.reverse();
+			const rows = numbers.map((n, i) => ({
+				id: `bulk-${n}`,
+				projectId: p.id,
+				number: n,
+				title: `課題 ${n}`,
+				status,
+				reporterId: admin.id,
+				position: keys[i],
+				updatedAt: new Date(Date.UTC(2026, 0, 1) + n * 60_000)
+			}));
+			// D1 の 1 文の変数は 100 個まで
+			for (let i = 0; i < rows.length; i += 5) await db.insert(issueTable).values(rows.slice(i, i + 5));
+			await db
+				.update(projectTable)
+				.set({ nextIssueNumber: Math.max(...numbers) + 1 })
+				.where(eq(projectTable.id, p.id));
+		}
+		const range = (from: number, to: number) =>
+			Array.from({ length: to - from + 1 }, (_, i) => from + i);
+
+		it('完了の列は最近更新した課題を上限まで、それ以外の列は上から上限まで出し、総数も返す', async () => {
+			await insertMany(range(1, BOARD_LIMIT.other + 5), 'todo');
+			// 完了の列の position は番号と逆順（新しいものほど上）にして、選ぶ基準が position でないことを確かめる
+			const done = range(1001, 1000 + BOARD_LIMIT.done + 10);
+			await insertMany(done, 'done', true);
+			await insertMany([2001, 2002], 'in_progress');
+			const { columns, totals } = await listBoard(as(member), 'ACME');
+			expect(columns.todo.map((i) => i.number)).toEqual(range(1, BOARD_LIMIT.other));
+			// 最近更新した 30 件を、列の並び（position）で出す
+			expect(columns.done.map((i) => i.number)).toEqual(done.slice(10).reverse());
+			expect(columns.in_progress.map((i) => i.number)).toEqual([2001, 2002]);
+			expect(totals).toEqual({
+				todo: BOARD_LIMIT.other + 5,
+				in_progress: 2,
+				in_review: 0,
+				done: BOARD_LIMIT.done + 10
+			});
+		});
+
+		it('総数は絞り込んだ後の数。削除した課題は数えない', async () => {
+			await createIssue(as(admin), 'ACME', { title: 'A' });
+			await createIssue(as(admin), 'ACME', { title: 'B' });
+			await deleteIssue(as(admin), 'ACME', 2);
+			await createMilestone(as(admin), 'ACME', { name: 'v1' });
+			const [v1] = await listMilestones(as(admin), 'ACME');
+			await createIssue(as(admin), 'ACME', { title: 'C', milestoneId: v1.id });
+			expect((await listBoard(as(member), 'ACME')).totals.todo).toBe(2);
+			expect((await listBoard(as(member), 'ACME', { milestoneId: v1.id })).totals.todo).toBe(1);
+		});
+
+		it('後ろの課題を指定しない移動は、見えていない課題も含めた列の末尾に入る', async () => {
+			await insertMany(range(1, BOARD_LIMIT.other + 5), 'todo');
+			await createIssue(as(member), 'ACME', { title: '新しい課題', status: 'in_progress' });
+			const { columns } = await listBoard(as(member), 'ACME');
+			const moving = columns.in_progress[0];
+			// 見えている最後の課題（#100）の後へ落としても、#101〜#105 の後ろに入る
+			await moveIssue(as(member), 'ACME', {
+				issueId: moving.id,
+				status: 'todo',
+				beforeId: columns.todo.at(-1)!.id,
+				afterId: ''
+			});
+			const all = await listIssues(as(member), 'ACME', { status: 'todo' });
+			const byPosition = [...all].sort((a, b) =>
+				a.position < b.position ? -1 : a.position > b.position ? 1 : a.number - b.number
+			);
+			expect(byPosition.at(-1)?.number).toBe(moving.number);
+			expect(new Set(all.map((i) => i.position)).size).toBe(all.length);
+		});
 	});
 
 	it('カンバン移動: 隣接 ID が別の列のもの（古い画面）なら validation', async () => {

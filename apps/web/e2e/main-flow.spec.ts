@@ -768,7 +768,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 		return ev.defaultPrevented;
 	});
 	expect(textPastePrevented).toBe(false);
-	await commentBox.fill('確認しました\n');
+	await commentBox.fill('確認しました（ACME-2 と同じ件）\n');
 	// アップロードが終わるまで送信させない（プレースホルダのまま保存されるのを防ぐ）
 	let releaseUpload!: () => void;
 	const uploadHeld = new Promise<void>((r) => (releaseUpload = r));
@@ -796,6 +796,10 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.unroute('**/projects/ACME/attachments');
 	await page.getByRole('button', { name: 'コメントする' }).click();
 	await expect(page.locator('.markdown').getByText('確認しました')).toBeVisible();
+	// 本文の課題キーは、同じタブで開くその課題へのリンクになる
+	const issueRef = page.locator('.markdown').getByRole('link', { name: 'ACME-2', exact: true });
+	await expect(issueRef).toHaveAttribute('href', '/projects/ACME/issues/2');
+	await expect(issueRef).not.toHaveAttribute('target');
 	// モードは localStorage に残るので、後の手順のために見たまま編集へ戻す
 	await commentToggle.click();
 	await expect(commentToggle).toHaveAttribute('aria-pressed', 'false');

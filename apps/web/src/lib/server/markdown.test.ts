@@ -101,4 +101,52 @@ describe('renderMarkdown', () => {
 			expect(html).not.toContain('<a');
 		});
 	});
+
+	describe('課題キーのリンク', () => {
+		const keys = new Set(['DEMO', 'WEB_APP']);
+		const render = (src: string) => renderMarkdown(src, { projectKeys: keys });
+
+		it('見られるプロジェクトのキーは、同じタブで開く課題へのリンクにする', () => {
+			const html = render('DEMO-12 と WEB_APP-3 を参照');
+			expect(hrefs(html)).toEqual(['/projects/DEMO/issues/12', '/projects/WEB_APP/issues/3']);
+			expect(html).toContain('<a href="/projects/DEMO/issues/12" class="issue-ref">DEMO-12</a>');
+			expect(html).not.toContain('target');
+		});
+		it('日本語に挟まれていてもリンクにする', () =>
+			expect(hrefs(render('これはDEMO-3の件'))).toEqual(['/projects/DEMO/issues/3']));
+		it('見出し・強調・表・箇条書きの中もリンクにする', () =>
+			expect(
+				hrefs(render('# DEMO-1\n\n**DEMO-2**\n\n- DEMO-3\n\n| a |\n| - |\n| DEMO-4 |'))
+			).toEqual([
+				'/projects/DEMO/issues/1',
+				'/projects/DEMO/issues/2',
+				'/projects/DEMO/issues/3',
+				'/projects/DEMO/issues/4'
+			]));
+		it('知らないキー・前後に英数字が続くもの・先頭ゼロ・小文字はリンクにしない', () => {
+			for (const src of [
+				'UTF-8',
+				'OTHER-1',
+				'XDEMO-1',
+				'DEMO-1a',
+				'DEMO-01',
+				'demo-1',
+				'A-DEMO-1'
+			]) {
+				expect(render(src), src).not.toContain('<a');
+			}
+		});
+		it('コード・既存のリンク・URL の中はリンクにしない', () => {
+			for (const src of [
+				'`DEMO-1`',
+				'```\nDEMO-1\n```',
+				'[DEMO-1](https://example.com/)',
+				'https://example.com/DEMO-1'
+			]) {
+				expect(hrefs(render(src)), src).not.toContain('/projects/DEMO/issues/1');
+			}
+		});
+		it('キーを渡さなければリンクにしない', () =>
+			expect(renderMarkdown('DEMO-1')).not.toContain('<a'));
+	});
 });

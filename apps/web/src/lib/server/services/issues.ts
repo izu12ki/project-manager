@@ -382,6 +382,8 @@ export async function listBoard(
 
 export type TimelineItem = IssueListItem & { canEdit: boolean };
 
+/** タイムラインに行を出す課題（日付のある課題）の数。表示の開始日に近いものから */
+export const SCHEDULED_LIMIT = 300;
 /** タイムラインの「未スケジュール」に出す課題の数。新しいものから */
 export const UNSCHEDULED_LIMIT = 50;
 
@@ -396,10 +398,10 @@ export interface TimelineView {
 
 /**
  * タイムライン（remote query の getTimeline）に要るもの。1 回の batch（D1 への 1 往復）で引く。
- * 日付のある課題（完了したものは view.from 以降に終わるものだけ）と、日付がなく未完了の課題（新しい順に
- * UNSCHEDULED_LIMIT 件まで。unscheduledTotal は上限で切る前の数）を、絞り込んで返す。
+ * 日付のある課題（完了したものは view.from 以降に終わるものだけ。view.from に近い順に SCHEDULED_LIMIT 件まで）と、
+ * 日付がなく未完了の課題（新しい順に UNSCHEDULED_LIMIT 件まで）を、絞り込んで返す。*Total は上限で切る前の数。
  * 未完了の課題は表示範囲の外でも返す（範囲外の課題にも行を出すため）。並べ替え・グループ化はクライアント側で行う。
- * Backlog から移した数千件のプロジェクトでは、終わった課題をすべて返すと 1 回の表示の CPU 時間が 100ms を超える
+ * Backlog から移した数千件のプロジェクトでは、課題をすべて返すと 1 回の表示の CPU 時間が 100ms を超える
  */
 export async function listTimeline(
 	ctx: AppContext,
@@ -407,6 +409,7 @@ export async function listTimeline(
 	view: TimelineView = {}
 ): Promise<{
 	scheduled: TimelineItem[];
+	scheduledTotal: number;
 	unscheduled: TimelineItem[];
 	unscheduledTotal: number;
 	milestones: MilestoneRow[];
@@ -416,6 +419,25 @@ export async function listTimeline(
 	const { db } = ctx;
 	const of = ofProject(db, key);
 	const where = filterConds(key, of, view.filters ?? {});
+	const scheduledWhere = and(
+		where,
+		or(isNotNull(issue.startDate), isNotNull(issue.dueDate)),
+		view.from
+			? or(
+					ne(issue.status, DONE_STATUS),
+					sql`coalesce(${issue.dueDate}, ${issue.startDate}) >= ${view.from}`
+				)
+			: undefined
+	);
+	// 開始日から期限までの間と view.from との隔たり（日数）。間に view.from を含めば 0。view.from がなければ番号順
+	const distance = view.from
+		? sql`max(0, julianday(coalesce(${issue.startDate}, ${issue.dueDate})) - julianday(${view.from}),
+			julianday(${view.from}) - julianday(coalesce(${issue.dueDate}, ${issue.startDate})))`
+		: sql`${issue.number}`;
+	const scheduledShown = sql`${issue.id} in (
+		select ${issue.id} from ${issue} where ${scheduledWhere ?? sql`1 = 1`}
+		order by ${distance}, ${issue.number} limit ${SCHEDULED_LIMIT}
+	)`;
 	const unscheduledWhere = and(
 		where,
 		isNull(issue.startDate),
@@ -425,6 +447,7 @@ export async function listTimeline(
 	const [
 		access,
 		scheduledRows,
+		[{ scheduledTotal }],
 		unscheduledRows,
 		[{ unscheduledTotal }],
 		milestones,
@@ -432,20 +455,11 @@ export async function listTimeline(
 		assignees
 	] = await ctx.readBatch([
 		projectAccessQuery(ctx, key),
-		issueListQuery(
-			db,
-			and(
-				where,
-				or(isNotNull(issue.startDate), isNotNull(issue.dueDate)),
-				view.from
-					? or(
-							ne(issue.status, DONE_STATUS),
-							sql`coalesce(${issue.dueDate}, ${issue.startDate}) >= ${view.from}`
-						)
-					: undefined
-			),
-			[asc(issue.number)]
-		),
+		issueListQuery(db, and(scheduledWhere, scheduledShown), [asc(issue.number)]),
+		db
+			.select({ scheduledTotal: sql<number>`count(*)`.as('scheduled_total') })
+			.from(issue)
+			.where(scheduledWhere),
 		issueListQuery(db, unscheduledWhere, [desc(issue.number)]).limit(UNSCHEDULED_LIMIT),
 		db
 			.select({ unscheduledTotal: sql<number>`count(*)`.as('unscheduled_total') })
@@ -463,6 +477,7 @@ export async function listTimeline(
 		}));
 	return {
 		scheduled: withCanEdit(scheduledRows),
+		scheduledTotal,
 		unscheduled: withCanEdit(unscheduledRows),
 		unscheduledTotal,
 		milestones,

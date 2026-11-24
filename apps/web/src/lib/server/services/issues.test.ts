@@ -25,6 +25,7 @@ import {
 	listIssues,
 	listTimeline,
 	moveIssue,
+	SCHEDULED_LIMIT,
 	UNSCHEDULED_LIMIT,
 	updateIssue,
 	type TimelineView
@@ -879,6 +880,36 @@ describe('issues', () => {
 			expect(await numbers({ categoryId: x.id })).toEqual([[1], [], 0]);
 			expect(await numbers({ status: 'in_progress' })).toEqual([[5], [], 0]);
 			expect(await numbers({ status: 'open' })).toEqual([[1, 2, 5], [4, 3], 2]);
+		});
+
+		it(`日付のある課題は表示の開始日に近い順に ${SCHEDULED_LIMIT} 件まで。総数は別に返す`, async () => {
+			const p = await requireProject(as(admin), 'ACME');
+			const from = '2026-10-05';
+			// #1〜#(上限+2) は from から番号の日数だけ前に期限があり、#(上限+3) は from をまたぐ
+			const n = SCHEDULED_LIMIT + 3;
+			const rows = Array.from({ length: n }, (_, i) => {
+				const number = i + 1;
+				const due = new Date(Date.UTC(2026, 9, 5) - number * 86_400_000).toISOString().slice(0, 10);
+				return {
+					id: `s-${number}`,
+					projectId: p.id,
+					number,
+					title: `日付あり ${number}`,
+					reporterId: admin.id,
+					position: `a${number}`,
+					...(number === n ? { startDate: '2026-09-01', dueDate: '2026-10-20' } : { dueDate: due })
+				};
+			});
+			// D1 の 1 文の変数は 100 個まで
+			for (let i = 0; i < rows.length; i += 5)
+				await db.insert(issueTable).values(rows.slice(i, i + 5));
+			const t = await listTimeline(as(member), 'ACME', { from });
+			expect(t.scheduledTotal).toBe(n);
+			// from をまたぐ #n と、期限の近い #1〜#(上限-1)。遠い 3 件は出さない。並びは番号順
+			expect(t.scheduled.map((i) => i.number)).toEqual([
+				...Array.from({ length: SCHEDULED_LIMIT - 1 }, (_, i) => i + 1),
+				n
+			]);
 		});
 
 		it(`未スケジュールは新しい順に ${UNSCHEDULED_LIMIT} 件まで。総数は別に返す`, async () => {

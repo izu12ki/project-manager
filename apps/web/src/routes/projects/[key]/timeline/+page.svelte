@@ -263,6 +263,12 @@
 			{/if}
 		</div>
 	{:else}
+		{#if timeline.scheduledTotal > timeline.scheduled.length}
+			<p class="hint">
+				日付のある課題が多いため、表示を始める日に近い {timeline.scheduled.length} 件だけを表示しています（ほか
+				{timeline.scheduledTotal - timeline.scheduled.length} 件）。担当者やマイルストーンで絞り込んでください。
+			</p>
+		{/if}
 		<TimelineGrid
 			projectKey={params.key}
 			{groups}

@@ -4,6 +4,7 @@ import { AppError } from '../errors';
 import { parse } from '../validation';
 import { apiUser } from '../api';
 import type { AppContext } from '../context';
+import { getCommentRows } from './comments';
 import { getIssue, listIssues } from './issues';
 import { listIssueTypes, listMilestones, listCategories, listStatuses } from './issue-fields';
 import { listAssignableUsers, listProjects, requireProject, type ProjectRow } from './projects';
@@ -150,6 +151,57 @@ export async function getApiIssue(
 	};
 }
 
+export type ApiComment = {
+	id: string;
+	author: { id: string; name: string };
+	body: string;
+	createdAt: string;
+	updatedAt: string;
+	url: string;
+	reactions: { emoji: string; users: { id: string; name: string }[] }[];
+};
+
+/** 課題のコメント（古い順）。削除した課題は課題の取得と同じく 404 */
+async function apiComments(ctx: AppContext, key: string, number: number): Promise<ApiComment[]> {
+	const { project: p, issue, comments } = await getCommentRows(ctx, key, number);
+	if (issue.deletedAt) throw new AppError('not_found', '課題が見つかりません');
+	const issueUrl = `${projectUrl(ctx, p.key)}/issues/${number}`;
+	return comments.map((c) => ({
+		id: c.id,
+		author: apiUser({ id: c.authorId, name: c.authorName }),
+		body: c.body,
+		createdAt: c.createdAt.toISOString(),
+		updatedAt: c.updatedAt.toISOString(),
+		url: `${issueUrl}#comment-${c.id}`,
+		reactions: c.reactions.map((r) => ({ emoji: r.emoji, users: r.users.map(apiUser) }))
+	}));
+}
+
+export async function listApiComments(
+	ctx: AppContext,
+	key: string,
+	number: number,
+	query: URLSearchParams
+) {
+	const { limit = 100, offset = 0 } = parse(ListQuery, {
+		limit: query.get('limit') ?? undefined,
+		offset: query.get('offset') ?? undefined
+	});
+	const all = await apiComments(ctx, key, number);
+	return { items: all.slice(offset, offset + limit), total: all.length, limit, offset };
+}
+
+export async function getApiComment(
+	ctx: AppContext,
+	key: string,
+	number: number,
+	id: string
+): Promise<ApiComment> {
+	const c = (await apiComments(ctx, key, number)).find((x) => x.id === id);
+	if (!c) throw new AppError('not_found', 'コメントが見つかりません');
+	return c;
+}
+
 const CREATE_KEYS = [
 	'title',
 	'description',
@@ -167,7 +219,8 @@ const CREATE_KEYS = [
 const ALLOWED_KEYS = {
 	create: CREATE_KEYS,
 	update: [...CREATE_KEYS, 'resolution'],
-	bulkUpdate: [...CREATE_KEYS, 'resolution', 'number']
+	bulkUpdate: [...CREATE_KEYS, 'resolution', 'number'],
+	comment: ['body']
 } as const;
 export type ApiInputKind = keyof typeof ALLOWED_KEYS;
 

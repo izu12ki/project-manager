@@ -5,7 +5,7 @@ description: Project Manager の REST API で、課題の一括起票、スケ�
 
 # Project Manager の課題を API で操作する
 
-課題の一括起票、スケジュール作成、一括修正を、Project Manager の REST API（`/api/v1`）で行う。エンドポイントと項目の詳細は同じディレクトリの `reference.md` を読む。
+課題の一括起票、スケジュール作成、一括修正を、Project Manager の REST API（`/api/v1`）で行う。課題のコメントの取得と投稿もできる。エンドポイントと項目の詳細は同じディレクトリの `reference.md` を読む。
 
 ## 事前準備
 

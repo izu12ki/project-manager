@@ -44,6 +44,8 @@ export interface BacklogIssueRow {
 	attachments: number;
 	/** 古い順。本文が空のコメントは除く */
 	comments: BacklogComment[];
+	/** 知らない列（カスタム属性など）の値。列の順で、値が空の列は除く */
+	extra: { name: string; value: string }[];
 }
 
 const REQUIRED = ['キー', '件名', '詳細', '状態', '登録者', '登録日'] as const;
@@ -65,6 +67,25 @@ const OPTIONAL = [
 	'添付'
 ] as const;
 type Column = (typeof REQUIRED)[number] | (typeof OPTIONAL)[number];
+/** 実物の CSV にあって使わない列。これ以外の知らない列は extra に読む */
+const UNUSED = [
+	'ID',
+	'プロジェクトID',
+	'プロジェクト名',
+	'種別ID',
+	'カテゴリーID',
+	'バージョンID',
+	'状態ID',
+	'優先度ID',
+	'マイルストーンID',
+	'完了理由ID',
+	'担当者ID',
+	'登録者ID',
+	'更新者ID',
+	'更新者',
+	'共有'
+];
+const COMMENT_COLUMN = /^コメント(\d+)$/;
 
 /** 空白（全角・半角、前後と途中）をすべて除く。人の名前の突き合わせに使う */
 export function personKey(name: string): string {
@@ -139,10 +160,14 @@ export function readBacklogIssues(
 	}
 	// 「コメントN」の N の順に読む（列の並びには依存しない）
 	const commentColumns = trimmed
-		.map((h, i) => ({ n: Number(h.match(/^コメント(\d+)$/)?.[1]), i }))
+		.map((h, i) => ({ n: Number(h.match(COMMENT_COLUMN)?.[1]), i }))
 		.filter((c) => !Number.isNaN(c.n))
 		.sort((a, b) => a.n - b.n)
 		.map((c) => c.i);
+	const known = new Set<string>([...REQUIRED, ...OPTIONAL, ...UNUSED]);
+	const extraColumns = trimmed
+		.map((name, i) => ({ name, i }))
+		.filter(({ name }) => name !== '' && !known.has(name) && !COMMENT_COLUMN.test(name));
 
 	// 表計算ソフトで保存し直すと、末尾に ",,,,," だけの行が付くことがある
 	const body = lines.filter((cells) => cells.some((c) => c.trim() !== ''));
@@ -193,7 +218,10 @@ export function readBacklogIssues(
 			estimatedHours: cell('予定時間'),
 			actualHours: cell('実績時間'),
 			attachments: Number.isInteger(attachments) && attachments > 0 ? attachments : 0,
-			comments: oldestFirst(comments)
+			comments: oldestFirst(comments),
+			extra: extraColumns
+				.map(({ name, i }) => ({ name, value: restoreNewlines(cells[i] ?? '').trim() }))
+				.filter((x) => x.value !== '')
 		};
 	});
 	const commentCount = rows.reduce((n, r) => n + r.comments.length, 0);

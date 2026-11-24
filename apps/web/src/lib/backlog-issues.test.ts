@@ -64,6 +64,7 @@ describe('readBacklogIssues', () => {
 			estimatedHours: '',
 			actualHours: '',
 			attachments: 0,
+			extra: [],
 			comments: [
 				{
 					at: at(2024, 1, 12, 10, 30),
@@ -117,6 +118,51 @@ describe('readBacklogIssues', () => {
 			.map(([, i]) => i);
 		const got = load(toCsv(table.map((r) => keep.map((i) => r[i]))));
 		expect(got.find((r) => r.key === 'DEMO-2')).toMatchObject({ parentKey: '', comments: [] });
+	});
+
+	it('知らない列（カスタム属性など）の値を、列の順に読む。空の値・使わない列・名前のない列は除く', () => {
+		const got = load(
+			toCsv([
+				[...REQUIRED, 'ID', '顧客', '', ' 見積額 ', '共有', 'コメント1', '更新者'],
+				[
+					'DEMO-1',
+					'件名',
+					'',
+					'未対応',
+					'鈴木 花子',
+					'2024/01/01 10:00',
+					'123',
+					' 架空商事 ',
+					'名前のない列',
+					'1,000\\n税別',
+					'1',
+					'',
+					'鈴木 花子'
+				],
+				[
+					'DEMO-2',
+					'件名',
+					'',
+					'未対応',
+					'鈴木 花子',
+					'2024/01/01 10:00',
+					'124',
+					'  ',
+					'',
+					'',
+					'',
+					'',
+					''
+				]
+			])
+		);
+		expect(got.map((r) => r.extra)).toEqual([
+			[
+				{ name: '顧客', value: '架空商事' },
+				{ name: '見積額', value: '1,000\n税別' }
+			],
+			[]
+		]);
 	});
 
 	it('キー ID が空なら、キーの番号を使う', () => {

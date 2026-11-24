@@ -282,7 +282,7 @@ describe('issues', () => {
 			await createIssue(as(member), 'ACME', { title: '新しい課題', status: 'in_progress' });
 			const { columns } = await listBoard(as(member), 'ACME');
 			const moving = columns.in_progress[0];
-			// 見えている最後の課題（#100）の後へ落としても、#101〜#105 の後ろに入る
+			// 見えている最後の課題の後へ落としても、上限で出していない 5 件の後ろに入る
 			await moveIssue(as(member), 'ACME', {
 				issueId: moving.id,
 				status: 'todo',

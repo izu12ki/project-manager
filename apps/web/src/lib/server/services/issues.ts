@@ -323,7 +323,7 @@ export async function listIssues(
  * カンバンの列に出すカードの上限。完了の列は最近更新したもの、それ以外の列は上（position の小さい方）から。
  * Backlog から移した数千件のプロジェクトでも、1 回の表示の CPU 時間が増え続けないようにする
  */
-export const BOARD_LIMIT = { done: 30, other: 100 } as const;
+export const BOARD_LIMIT = { done: 30, other: 50 } as const;
 
 /**
  * カンバン（remote query の getBoard）に要るもの。1 回の batch（D1 への 1 往復）で引く。

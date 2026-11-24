@@ -320,6 +320,20 @@ describe('issues', () => {
 		expect(await titles('login')).toEqual(['Login Bug']);
 	});
 
+	it('Backlog から取り込んだ課題は、元のキーでも探せる（英字の大小は区別しない）', async () => {
+		await createIssue(as(member), 'ACME', { title: 'A' });
+		await createIssue(as(member), 'ACME', { title: 'B' });
+		await db.update(issueTable).set({ backlogKey: 'OLD-7' }).where(eq(issueTable.number, 2));
+		const numbers = async (q: string) =>
+			(await listIssues(as(member), 'ACME', { q })).map((i) => i.number);
+
+		expect(await numbers('OLD-7')).toEqual([2]);
+		expect(await numbers(' old-7 ')).toEqual([2]);
+		expect(await numbers('OLD-1')).toEqual([]);
+		// このプロジェクトのキーは、これまでどおり番号で探す
+		expect(await numbers('ACME-1')).toEqual([1]);
+	});
+
 	it('削除はメンバー以上。ゲストは不可', async () => {
 		await createIssue(as(guest), 'ACME', { title: 'A' });
 		await expect(deleteIssue(as(guest), 'ACME', 1)).rejects.toMatchObject({ code: 'forbidden' });

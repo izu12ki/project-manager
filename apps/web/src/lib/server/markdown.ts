@@ -12,6 +12,7 @@ import type { Element, ElementContent, Parents as HastParents } from 'hast';
 import type { Definition, Nodes, PhrasingContent, Root } from 'mdast';
 import { mentionFromMarkdown, type MentionMdast } from '#lib/markdown/mention-mdast.ts';
 import { isAllowedUrl } from '#lib/markdown/url.ts';
+import { issueRefHref, linkIssueKeys, type IssueRefMdast } from './issue-ref-mdast';
 import { linkifyMdast } from './linkify-mdast';
 
 /** 生の HTML は解釈せず、書かれたままの文字として表示する */
@@ -108,7 +109,12 @@ function escapeText(node: HastParents): void {
 	});
 }
 
-export function renderMarkdown(src: string): string {
+export interface RenderOptions {
+	/** 課題キー（PROJ-12）をリンクにするプロジェクトのキー。見られるプロジェクトだけを渡す */
+	projectKeys?: ReadonlySet<string>;
+}
+
+export function renderMarkdown(src: string, options: RenderOptions = {}): string {
 	const tree: Root = fromMarkdown(src, {
 		extensions: [gfmStrikethrough(), gfmTable(), gfmTaskListItem()],
 		mdastExtensions: [
@@ -121,6 +127,8 @@ export function renderMarkdown(src: string): string {
 	htmlToText(tree);
 	resolveReferences(tree, src);
 	linkifyMdast(tree);
+	// URL を先にリンクにしておき、URL の中のキーはリンクにしない
+	if (options.projectKeys) linkIssueKeys(tree, options.projectKeys);
 	breakNewlines(tree);
 
 	const hast = toHast(tree, {
@@ -132,6 +140,17 @@ export function renderMarkdown(src: string): string {
 					tagName: 'span',
 					properties: { className: ['mention'] },
 					children: [{ type: 'text', value: `@${m.name}` }]
+				};
+				return el;
+			},
+			// アプリ内の移動なので、外部リンクと違って同じタブで開く
+			issueRef: (_state, node) => {
+				const r = node as unknown as IssueRefMdast;
+				const el: Element = {
+					type: 'element',
+					tagName: 'a',
+					properties: { href: issueRefHref(r), className: ['issue-ref'] },
+					children: [{ type: 'text', value: `${r.key}-${r.number}` }]
 				};
 				return el;
 			},

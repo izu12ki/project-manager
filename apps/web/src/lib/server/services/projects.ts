@@ -64,6 +64,19 @@ export async function listProjects(ctx: AppContext): Promise<ProjectRow[]> {
 }
 
 /**
+ * 見られるプロジェクトのキー。本文の課題キー（PROJ-12）をリンクにするときに使う。
+ * 課題の詳細と同じ読み取りの batch に入るよう、呼び出し側は詳細の読み取りと同時に呼ぶ
+ */
+export function visibleProjectKeys(ctx: AppContext): Promise<Set<string>> {
+	const hit = ctx.memo?.get(PROJECT_KEYS_MEMO) as Promise<Set<string>> | undefined;
+	if (hit) return hit;
+	const keys = listProjects(ctx).then((rows) => new Set(rows.map((p) => p.key)));
+	ctx.memo?.set(PROJECT_KEYS_MEMO, keys);
+	return keys;
+}
+const PROJECT_KEYS_MEMO = 'projectKeys';
+
+/**
  * ホーム用。見られるプロジェクトと、進行中のものには未完了（完了以外）の課題数を付けて返す。
  * 課題数は相関副問い合わせで同じ文に入れる（D1 への 1 往復）
  */

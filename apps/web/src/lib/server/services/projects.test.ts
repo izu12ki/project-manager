@@ -22,7 +22,8 @@ import {
 	removeMember,
 	requireProject,
 	setProjectArchived,
-	updateProject
+	updateProject,
+	visibleProjectKeys
 } from './projects';
 import { listIssueTypes, listStatuses } from './issue-fields';
 import { createIssue, deleteIssue, listIssues } from './issues';
@@ -81,6 +82,9 @@ describe('projects', () => {
 			'OTHER'
 		]);
 		expect((await listProjects(ctxOf(base, guest))).map((p) => p.key)).toEqual(['ACME']);
+		// 本文の課題キーをリンクにするのも、見られるプロジェクトだけ
+		expect([...(await visibleProjectKeys(ctxOf(base, guest)))]).toEqual(['ACME']);
+		expect([...(await visibleProjectKeys(ctxOf(base, admin)))].sort()).toEqual(['ACME', 'OTHER']);
 		await expect(requireProject(ctxOf(base, guest), 'OTHER')).rejects.toMatchObject({
 			code: 'not_found'
 		});

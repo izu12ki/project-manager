@@ -20,6 +20,7 @@ import {
 	updateIssue
 } from '#lib/server/services/issues.ts';
 import { markIssueRead } from '#lib/server/services/notifications.ts';
+import { visibleProjectKeys } from '#lib/server/services/projects.ts';
 
 const IssueRef = v.object({
 	key: v.string(),
@@ -32,13 +33,16 @@ const opt = v.optional(v.string());
 export const getIssueDetail = query(IssueRef, ({ key, number }) => {
 	const ctx = remoteContext();
 	return runQuery(async () => {
-		const { project, issue, children, assignees, statuses, issueTypes, categories, milestones } =
-			await getIssueDetailRows(ctx, key, number);
+		// 同時に呼んで、詳細と同じ読み取りの batch（DB への 1 往復）に入れる
+		const [
+			{ project, issue, children, assignees, statuses, issueTypes, categories, milestones },
+			projectKeys
+		] = await Promise.all([getIssueDetailRows(ctx, key, number), visibleProjectKeys(ctx)]);
 		const res = { reporterId: issue.reporterId };
 		// 削除した課題は閲覧だけできる
 		const writable = !project.archivedAt && !issue.deletedAt;
 		return {
-			issue: { ...issue, descriptionHtml: renderMarkdown(issue.description) },
+			issue: { ...issue, descriptionHtml: renderMarkdown(issue.description, { projectKeys }) },
 			assignees,
 			statuses,
 			issueTypes,
@@ -68,10 +72,13 @@ export const getParentCandidates = query(IssueRef, ({ key, number }) => {
 export const getComments = query(IssueRef, ({ key, number }) => {
 	const ctx = remoteContext();
 	return runQuery(async () => {
-		const { project, issue, comments } = await getCommentRows(ctx, key, number);
+		const [{ project, issue, comments }, projectKeys] = await Promise.all([
+			getCommentRows(ctx, key, number),
+			visibleProjectKeys(ctx)
+		]);
 		return comments.map((c) => ({
 			...c,
-			html: renderMarkdown(c.body),
+			html: renderMarkdown(c.body, { projectKeys }),
 			canModify:
 				!project.archivedAt &&
 				!issue.deletedAt &&

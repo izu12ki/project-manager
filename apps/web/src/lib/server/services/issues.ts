@@ -204,17 +204,22 @@ function optionCond(
 	return value === 'none' ? isNull(col) : eq(col, value);
 }
 
-/** タイトルの部分一致。「ACME-12」「#12」「12」は番号の一致としても扱う。 */
+/**
+ * タイトルの部分一致。「ACME-12」「#12」「12」は番号の一致としても扱う。
+ * 「OLD-12」のような課題キーの形は、Backlog から取り込んだ課題の元のキーとも比べる
+ */
 function keywordCond(projectKey: string, q: string | undefined): SQL | undefined {
 	const kw = q?.trim();
 	if (!kw) return undefined;
 	// LIKE は使わない（D1 は LIKE のパターンが 50 バイトまでで、日本語 17 文字ほどで失敗する）。
 	// instr なら長さの制限がなく、% や _ も文字のまま比べる。lower は LIKE と同じく英字だけを小文字にする
-	const title = sql`instr(lower(${issue.title}), lower(${kw})) > 0`;
+	const conds = [sql`instr(lower(${issue.title}), lower(${kw})) > 0`];
 	// キーは URL から来ることがある（一覧の batch はプロジェクトの行を待たない）。正規表現の記号は文字として扱う
 	const key = projectKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 	const m = kw.match(new RegExp(`^(?:${key}-|#)?(\\d{1,9})$`, 'i'));
-	return m ? or(title, eq(issue.number, Number(m[1]))) : title;
+	if (m) conds.push(eq(issue.number, Number(m[1])));
+	if (/^[a-z][a-z0-9_]*-\d+$/i.test(kw)) conds.push(eq(issue.backlogKey, kw.toUpperCase()));
+	return or(...conds);
 }
 
 /** 一覧の絞り込み。プロジェクトは of で絞る（ID でもキーの副問い合わせでもよい）。キーは「ACME-12」の番号検索に使う */

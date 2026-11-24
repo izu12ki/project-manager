@@ -47,11 +47,22 @@
 	});
 	const summary = $derived.by(() => {
 		if (!preview) return '';
-		const { issues, comments, firstNumber } = preview.plan;
+		const { issues, comments, firstNumber, lastNumber } = preview.plan;
 		if (issues === 0) return '取り込める課題がありません';
-		const last = firstNumber + issues - 1;
-		const range = issues === 1 ? `#${firstNumber}` : `#${firstNumber}〜#${last}`;
+		const range =
+			firstNumber === lastNumber ? `#${firstNumber}` : `#${firstNumber}〜#${lastNumber}`;
 		return `課題 ${issues} 件（${range}）とコメント ${comments} 件を取り込みます`;
+	});
+	/** Backlog と違う番号になる課題を、理由ごとに「PROJ-2 → #10」の形で並べる（多いときは先頭だけ） */
+	const renumbered = $derived.by(() => {
+		const list = preview?.plan.renumbered ?? [];
+		const text = (reason: Plan['renumbered'][number]['reason']) => {
+			const items = list.filter((x) => x.reason === reason);
+			const shown = items.slice(0, 10).map((x) => `${x.key} → #${x.number}`);
+			if (items.length > 10) shown.push(`ほか ${items.length - 10} 件`);
+			return shown.join('、');
+		};
+		return { taken: text('taken'), key: text('key') };
 	});
 
 	const usesText = (u: Person['uses']) =>
@@ -175,6 +186,29 @@
 							{plan.backlogProjects.join('、')}
 						</span>
 					</p>
+				</div>
+			{/if}
+
+			{#if renumbered.taken || renumbered.key}
+				<div class="alert" data-testid="issue-import-renumbered">
+					<TriangleAlert color="var(--c-amber)" />
+					<div class="grid gap-1">
+						{#if renumbered.taken}
+							<p class="m-0">
+								次の課題は、同じ番号の課題がこのプロジェクトに既にあるため、Backlog
+								と違う番号になります: <span class="mono">{renumbered.taken}</span>
+							</p>
+						{/if}
+						{#if renumbered.key}
+							<p class="m-0">
+								キーがこのプロジェクトのキー（{projectKey}）と違う課題は、続きの番号になります:
+								<span class="mono">{renumbered.key}</span>
+							</p>
+						{/if}
+						<p class="m-0 text-[0.8125rem] text-muted-foreground">
+							本文やコメントに書かれたキーは書き換えません。元のキーでも課題一覧のキーワードで探せます。
+						</p>
+					</div>
 				</div>
 			{/if}
 

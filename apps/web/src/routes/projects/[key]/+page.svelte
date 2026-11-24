@@ -99,6 +99,7 @@
 			<label class="label text-[0.8125rem]" for="filter-status">ステータス</label>
 			<select class="select" id="filter-status" name="status">
 				<option value="">すべて</option>
+				<option value="open" selected={data.filters.status === 'open'}>完了以外</option>
 				{#each data.statuses as s (s.key)}
 					<option value={s.key} selected={data.filters.status === s.key}>{s.name}</option>
 				{/each}

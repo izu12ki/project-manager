@@ -344,6 +344,17 @@ describe('issues', () => {
 		expect(await listIssues(as(member), 'ACME', { q: 'Safari', status: 'done' })).toEqual([]);
 	});
 
+	it('ステータスの open は完了以外', async () => {
+		await createIssue(as(member), 'ACME', { title: 'A' });
+		await createIssue(as(member), 'ACME', { title: 'B', status: 'in_progress' });
+		await createIssue(as(member), 'ACME', { title: 'C', status: 'done' });
+		const numbers = async (status: string) =>
+			(await listIssues(as(member), 'ACME', { status })).map((i) => i.number).sort();
+
+		expect(await numbers('open')).toEqual([1, 2]);
+		expect(await numbers('done')).toEqual([3]);
+	});
+
 	it('Backlog から取り込んだ課題は、元のキーでも探せる（英字の大小は区別しない）', async () => {
 		await createIssue(as(member), 'ACME', { title: 'A' });
 		await createIssue(as(member), 'ACME', { title: 'B' });

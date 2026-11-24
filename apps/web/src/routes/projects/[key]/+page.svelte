@@ -371,8 +371,8 @@
 		background: var(--muted);
 	}
 	.pager-num.current {
-		background: var(--foreground);
-		color: var(--background);
+		background: var(--primary);
+		color: var(--primary-foreground);
 		font-weight: 600;
 	}
 	.pager-step[aria-disabled='true'] {

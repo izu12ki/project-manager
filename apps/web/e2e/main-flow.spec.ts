@@ -1400,6 +1400,19 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.getByLabel('課題 CSV').setInputFiles('src/lib/testdata/backlog/issues.csv');
 	await expect(page.getByText('既に取り込んだ課題があります')).toBeVisible();
 	await expect(page.getByRole('button', { name: '取り込む（6 件）' })).toBeDisabled();
+	// Backlog 記法の本文・コメントは見つけて、Markdown に変換して取り込む
+	await page.getByLabel('課題 CSV').setInputFiles('src/lib/testdata/backlog/issues-notation.csv');
+	await expect(page.getByTestId('issue-import-notation')).toContainText(
+		'Markdown に変換して取り込みます: NOTE-1'
+	);
+	await expect(page.getByLabel('本文とコメントの書き方')).toHaveValue('backlog');
+	await page.getByRole('button', { name: '取り込む（1 件）' }).click();
+	await expect(page.getByTestId('issue-import-result')).toContainText('課題 1 件（#7）');
+	await page.goto('/projects/DEMO/issues/7');
+	await expect(page.getByRole('heading', { name: '手順', level: 2 })).toBeVisible();
+	await expect(page.locator('.markdown strong', { hasText: '重要' })).toBeVisible();
+	await expect(page.locator('.markdown del', { hasText: '古い案' })).toBeVisible();
+	await expect(page.locator('.markdown pre')).toContainText("x = ''y''");
 
 	// 9. 管理者は /account で API キーを作成・無効化できる。メンバーには欄が出ない
 	await page.goto('/account');

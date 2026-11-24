@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import MarkdownIt from 'markdown-it';
 import { renderMarkdown } from './markdown';
+import { backlogToMarkdown } from '#lib/backlog-notation.ts';
 
 const legacy = new MarkdownIt({ html: false, linkify: true, breaks: true });
 const hrefs = (html: string) => [...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1]);
@@ -148,5 +149,23 @@ describe('renderMarkdown', () => {
 		});
 		it('キーを渡さなければリンクにしない', () =>
 			expect(renderMarkdown('DEMO-1')).not.toContain('<a'));
+	});
+});
+
+describe('Backlog 記法から変換した Markdown の表示', () => {
+	const view = (backlog: string) => renderMarkdown(backlogToMarkdown(backlog));
+
+	it('約物で終わる太字の後に文字が続いても太字になる', () => {
+		expect(view("''「重要」''です")).toBe('<p>「<strong>重要</strong>」です</p>');
+	});
+
+	it('Markdown の記号は書かれた文字のまま表示する', () => {
+		expect(view('__init__.py と *注* と 1~2 と `x`')).toBe(
+			'<p>__init__.py と *注* と 1~2 と `x`</p>'
+		);
+	});
+
+	it('チェックリストはタスクリストとして表示する', () => {
+		expect(view('- [ ] A\n- [x] B')).toContain('<input type="checkbox" checked disabled> B');
 	});
 });

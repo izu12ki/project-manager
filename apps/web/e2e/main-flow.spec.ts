@@ -69,6 +69,43 @@ async function slowDown(page: Page, url: string | RegExp, ms: number) {
 	return () => page.unroute(url, handler);
 }
 
+/**
+ * 課題詳細で未読数を取り直す通信（GET）があれば、既読コマンドより先にサーバーで件数を読ませ、
+ * 応答は既読コマンドの応答より後に返す。取り直しが送られなければ、既読コマンドは少し待ってから通す。
+ * 戻り値は、遅らせた応答が画面に届くまで待ってから元に戻す
+ */
+async function answerUnreadCountLate(page: Page) {
+	const sleep = (ms: number) => new Promise((f) => setTimeout(f, ms));
+	let counted!: () => void;
+	const countedFirst = new Promise<void>((f) => (counted = f));
+	let read!: () => void;
+	const readAnswered = new Promise<void>((f) => (read = f));
+	let lateCount: Promise<void> | undefined;
+	const count = async (route: Route) => {
+		const from = (await route.request().headerValue('referer')) ?? '';
+		if (!/\/projects\/[^/]+\/issues\/\d+/.test(from)) return route.continue();
+		const response = await route.fetch();
+		counted();
+		lateCount = readAnswered.then(() => sleep(200)).then(() => route.fulfill({ response }));
+		await lateCount;
+	};
+	const markRead = async (route: Route) => {
+		await Promise.race([countedFirst, sleep(500)]);
+		await route.fulfill({ response: await route.fetch() });
+		read();
+	};
+	await page.route('**/getUnreadCount', count);
+	await page.route('**/readIssueNotifications', markRead);
+	return async () => {
+		await readAnswered;
+		await lateCount;
+		// 届いた応答が画面に反映されるのを待つ
+		await sleep(300);
+		await page.unroute('**/getUnreadCount', count);
+		await page.unroute('**/readIssueNotifications', markRead);
+	};
+}
+
 /** スクリプトの読み込み前（ハイドレーション前）に入力しても、読み込み後に入力が消えずにログインできる */
 async function loginBeforeHydration(page: Page, email: string) {
 	const restore = await slowDown(page, '**/_app/immutable/**/*.js', 1000);
@@ -662,11 +699,16 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.getByRole('link', { name: /通知/ }).click();
 	await expect(page).toHaveURL(/\/notifications$/);
 	await expect(page.getByRole('button', { name: /担当者に設定しました/ })).toBeVisible();
+	// 課題詳細へ移ったときに未読数を別に取り直すと、既読にする前の件数が既読コマンドより後に届き、
+	// バッジが戻ることがあった（CI で時々落ちた）。その順番を作っても既読コマンドの件数が残る
+	const restoreUnreadCount = await answerUnreadCountLate(page);
 	await page
 		.getByRole('button', { name: /メンションしました: @顧客 太郎 確認お願いします/ })
 		.click();
 	await expect(page).toHaveURL(/\/projects\/ACME\/issues\/1#comment-[0-9a-f-]{36}$/);
 	// 課題を開くと、その課題の通知はすべて既読になる
+	await expect(badge).toBeHidden();
+	await restoreUnreadCount();
 	await expect(badge).toBeHidden();
 	await page.goto('/projects/ACME/board');
 	const movedCard = savedResponse(page);

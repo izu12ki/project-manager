@@ -44,9 +44,12 @@
 		path === `/projects/${key}` || path.startsWith(`/projects/${key}/`);
 
 	const unread = getUnreadCount();
-	// 遷移ごとと、表示中は 60 秒ごとに取り直す
-	afterNavigate(() => {
+	// 遷移ごとと、表示中は 60 秒ごとに取り直す。
+	// 課題詳細へ移ったときは、IssueView の既読コマンドが既読にした後の件数を返すので取り直さない。
+	// 同時に取り直すと、既読にする前の件数が後から届いてバッジを上書きすることがある
+	afterNavigate(({ to }) => {
 		menuOpen = false;
+		if (to?.route.id === '/projects/[key]/issues/[number=int]') return;
 		void unread.refresh();
 	});
 	$effect(() => {

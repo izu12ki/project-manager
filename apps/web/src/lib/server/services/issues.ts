@@ -12,7 +12,7 @@ import {
 	type SQLWrapper
 } from 'drizzle-orm';
 import { inList } from '../db/limits';
-import { alias } from 'drizzle-orm/sqlite-core';
+import { alias, type SQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
@@ -183,20 +183,32 @@ export async function withCategories<T extends { categoryIds: string[] }>(
 
 /** 課題の一覧の select。batch にも入れられる。結果は toIssueListItems で直す */
 export function issueListQuery(db: DB, where: SQL | undefined, order: SQL[]) {
-	return db
-		.select(listColumns)
-		.from(issue)
-		.leftJoin(parent, eq(issue.parentId, parent.id))
-		.leftJoin(issueType, eq(issue.typeId, issueType.id))
-		.leftJoin(milestone, eq(issue.milestoneId, milestone.id))
+	return selectIssueList(db, {})
 		.where(where)
 		.orderBy(...order);
 }
 
+/**
+ * issueListQuery の列に extra の列を足した select（join まで）。プロジェクトをまたぐ一覧で、
+ * プロジェクトやステータスの列を足すのに使う。extra の式にも別名を付けること
+ */
+export function selectIssueList<T extends Record<string, SQL.Aliased | SQLiteColumn>>(
+	db: DB,
+	extra: T
+) {
+	return db
+		.select({ ...listColumns, ...extra })
+		.from(issue)
+		.leftJoin(parent, eq(issue.parentId, parent.id))
+		.leftJoin(issueType, eq(issue.typeId, issueType.id))
+		.leftJoin(milestone, eq(issue.milestoneId, milestone.id))
+		.$dynamic();
+}
+
 type IssueListRow = Awaited<ReturnType<typeof issueListQuery>>[number];
 
-/** issueListQuery の行の JSON の列を assignees・categories に直す */
-export function toIssueListItems(rows: IssueListRow[]) {
+/** issueListQuery（selectIssueList）の行の JSON の列を assignees・categories に直す */
+export function toIssueListItems<R extends IssueListRow>(rows: R[]) {
 	return rows.map(({ assigneesJson, categoriesJson, ...r }) => ({
 		...r,
 		assignees: JSON.parse(assigneesJson) as AssigneeRef[],
@@ -209,7 +221,7 @@ async function selectIssues(db: DB, where: SQL | undefined, order: SQL[]) {
 }
 
 /** ID の配列の列で絞る。'none' は空配列、それ以外はその ID を含む課題 */
-function idsCond(
+export function idsCond(
 	col: typeof issue.assigneeIds | typeof issue.categoryIds,
 	value: string | undefined
 ): SQL | undefined {
@@ -218,7 +230,8 @@ function idsCond(
 	return sql`exists (select 1 from json_each(${col}) where value = ${value})`;
 }
 
-function statusCond(value: string | undefined): SQL | undefined {
+/** ステータスで絞る。'open' は完了以外 */
+export function statusCond(value: string | undefined): SQL | undefined {
 	if (!value) return undefined;
 	return value === 'open' ? ne(issue.status, DONE_STATUS) : eq(issue.status, value);
 }

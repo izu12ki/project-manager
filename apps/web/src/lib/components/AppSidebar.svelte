@@ -7,6 +7,7 @@
 		CircleUser,
 		FolderKanban,
 		LayoutGrid,
+		ListTodo,
 		LogOut,
 		Smile,
 		Users
@@ -85,6 +86,9 @@
 		<div class="group">
 			<a href="/" class="item" aria-current={path === '/' ? 'page' : undefined}>
 				<LayoutGrid size={16} class="muted-icon" />すべてのプロジェクト
+			</a>
+			<a href="/issues" class="item row" aria-current={path === '/issues' ? 'page' : undefined}>
+				<ListTodo size={16} class="muted-icon" />自分の課題
 			</a>
 			<a
 				href="/notifications"

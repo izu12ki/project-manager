@@ -8,6 +8,7 @@
 		readBacklogIssues,
 		type BacklogIssueRow
 	} from '#lib/backlog-issues.ts';
+	import { convertBacklogRows, keysWithBacklogNotation } from '#lib/backlog-notation.ts';
 	import { decodeCsv } from '#lib/csv.ts';
 	import { previewIssueImport, runIssueImport } from './issue-import.remote';
 
@@ -15,6 +16,7 @@
 
 	type Plan = Awaited<ReturnType<typeof previewIssueImport>>;
 	type Person = Plan['people'][number];
+	type Notation = 'markdown' | 'backlog';
 
 	const MATCH_LABEL: Record<Person['match'], string> = {
 		auto: '名前が一致',
@@ -24,7 +26,13 @@
 	};
 
 	let input = $state<HTMLInputElement>();
-	/** 確認画面。実行時は CSV の行と人の対応表を送る（サーバーが計画を作り直す） */
+	/** CSV から読んだままの行 */
+	let read = $state.raw<BacklogIssueRow[]>([]);
+	/** 本文とコメントの書き方。Backlog 記法なら Markdown に変換して送る */
+	let notation = $state<Notation>('markdown');
+	/** Backlog 記法が見つかった課題のキー */
+	let notationKeys = $state.raw<string[]>([]);
+	/** 確認画面。rows は送る行（変換済み）。実行時は行と人の対応表を送る（サーバーが計画を作り直す） */
 	let preview = $state.raw<{ plan: Plan; rows: BacklogIssueRow[] } | null>(null);
 	/** Backlog の名前ごとの対応先の user id。'' は不明なユーザー */
 	let chosen = $state<Record<string, string>>({});
@@ -53,15 +61,15 @@
 			firstNumber === lastNumber ? `#${firstNumber}` : `#${firstNumber}〜#${lastNumber}`;
 		return `課題 ${issues} 件（${range}）とコメント ${comments} 件を取り込みます`;
 	});
-	/** Backlog と違う番号になる課題を、理由ごとに「PROJ-2 → #10」の形で並べる（多いときは先頭だけ） */
+	/** 「、」で並べる（多いときは先頭だけ） */
+	const keyList = (keys: string[]) =>
+		[...keys.slice(0, 10), ...(keys.length > 10 ? [`ほか ${keys.length - 10} 件`] : [])].join('、');
+
+	/** Backlog と違う番号になる課題を、理由ごとに「PROJ-2 → #10」の形で並べる */
 	const renumbered = $derived.by(() => {
 		const list = preview?.plan.renumbered ?? [];
-		const text = (reason: Plan['renumbered'][number]['reason']) => {
-			const items = list.filter((x) => x.reason === reason);
-			const shown = items.slice(0, 10).map((x) => `${x.key} → #${x.number}`);
-			if (items.length > 10) shown.push(`ほか ${items.length - 10} 件`);
-			return shown.join('、');
-		};
+		const text = (reason: Plan['renumbered'][number]['reason']) =>
+			keyList(list.filter((x) => x.reason === reason).map((x) => `${x.key} → #${x.number}`));
 		return { taken: text('taken'), key: text('key') };
 	});
 
@@ -83,7 +91,27 @@
 	/** 確認画面を閉じる。同じ CSV を選び直しても読み込めるように選択も空にする */
 	function close() {
 		preview = null;
+		read = [];
 		if (input) input.value = '';
+	}
+
+	/** 選んだ書き方で行を作り、確認画面を作り直す。人の対応付けは選び直した分を保つ */
+	async function load() {
+		const rows = notation === 'backlog' ? convertBacklogRows(read) : read;
+		pending = true;
+		message = '';
+		try {
+			const plan = await previewIssueImport({ key: projectKey, rows });
+			chosen = Object.fromEntries(
+				plan.people.map((p) => [p.name, chosen[p.name] ?? p.userId ?? ''])
+			);
+			preview = { plan, rows };
+		} catch (err) {
+			message = failure(err, '読み込めませんでした');
+			close();
+		} finally {
+			pending = false;
+		}
 	}
 
 	async function pick(file: File | undefined) {
@@ -96,23 +124,17 @@
 			close();
 			return;
 		}
-		const read = readBacklogIssues(decodeCsv(new Uint8Array(await file.arrayBuffer())));
-		if (!read.ok) {
-			message = read.message;
+		const parsed = readBacklogIssues(decodeCsv(new Uint8Array(await file.arrayBuffer())));
+		if (!parsed.ok) {
+			message = parsed.message;
 			close();
 			return;
 		}
-		pending = true;
-		try {
-			const plan = await previewIssueImport({ key: projectKey, rows: read.rows });
-			chosen = Object.fromEntries(plan.people.map((p) => [p.name, p.userId ?? '']));
-			preview = { plan, rows: read.rows };
-		} catch (err) {
-			message = failure(err, '読み込めませんでした');
-			close();
-		} finally {
-			pending = false;
-		}
+		read = parsed.rows;
+		notationKeys = keysWithBacklogNotation(read);
+		notation = notationKeys.length > 0 ? 'backlog' : 'markdown';
+		chosen = {};
+		await load();
 	}
 
 	async function run() {
@@ -185,6 +207,41 @@
 						複数の Backlog プロジェクトの課題が含まれています: <span class="mono">
 							{plan.backlogProjects.join('、')}
 						</span>
+					</p>
+				</div>
+			{/if}
+
+			<div class="field max-w-[420px]">
+				<label class="label" for="backlog-notation">本文とコメントの書き方</label>
+				<select
+					class="select w-full"
+					id="backlog-notation"
+					value={notation}
+					disabled={pending}
+					onchange={(e) => {
+						notation = e.currentTarget.value as Notation;
+						load();
+					}}
+				>
+					<option value="markdown">Markdown（そのまま取り込む）</option>
+					<option value="backlog">Backlog 記法（Markdown に変換して取り込む）</option>
+				</select>
+				<p class="m-0 text-[0.8125rem] text-muted-foreground">
+					Backlog のプロジェクト設定「テキスト整形のルール」に合わせて選んでください。
+				</p>
+			</div>
+			{#if notationKeys.length > 0}
+				<div class="alert" data-testid="issue-import-notation">
+					<TriangleAlert color="var(--c-amber)" />
+					<p class="m-0">
+						{#if notation === 'backlog'}
+							次の課題の本文・コメントに Backlog 記法（''太字''、{'{code}'}
+							など）があるため、Markdown に変換して取り込みます:
+						{:else}
+							次の課題の本文・コメントに Backlog 記法（''太字''、{'{code}'}
+							など）があります。Markdown のまま取り込むと、記号がそのまま表示されます:
+						{/if}
+						<span class="mono">{keyList(notationKeys)}</span>
 					</p>
 				</div>
 			{/if}

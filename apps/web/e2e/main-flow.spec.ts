@@ -1374,6 +1374,17 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(personRow('山田 太郎')).toContainText('招待中（未承諾）');
 	await expect(personRow('架空商事 小林')).toContainText('該当なし');
 	await expect(page.getByText('未承諾の招待がある人がいます')).toBeVisible();
+	// 新しく作るマイルストーンのリリース予定日を入れる（CSV に日付はない）
+	await expect(page.getByTestId('issue-import-milestones')).toContainText('v1.0');
+	const releaseDate = page.getByLabel('v1.0 のリリース予定日');
+	await releaseDate.fill('2026-12-15');
+	// 書き方を切り替えて計画を作り直しても、入れた日付は残る
+	const notation = page.getByLabel('本文とコメントの書き方');
+	const notationBefore = await notation.inputValue();
+	await notation.selectOption(notationBefore === 'markdown' ? 'backlog' : 'markdown');
+	await expect(releaseDate).toHaveValue('2026-12-15');
+	await notation.selectOption(notationBefore);
+	await expect(releaseDate).toHaveValue('2026-12-15');
 	await page.getByRole('button', { name: '取り込む（6 件）' }).click();
 	const imported = page.getByTestId('issue-import-result');
 	await expect(imported).toContainText(
@@ -1384,6 +1395,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 		page.locator('.card').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
 	await expect(settingsCard('ステータス')).toContainText('保留');
 	await expect(settingsCard('カテゴリー')).toContainText('確定度 60%');
+	await expect(settingsCard('マイルストーン')).toContainText('2026/12/15 リリース');
 	await imported.getByRole('link', { name: '課題一覧を見る' }).click();
 	await expect(page).toHaveURL(/\/projects\/DEMO$/);
 	await expect(page.getByRole('link', { name: 'ログイン API', exact: true })).toBeVisible();

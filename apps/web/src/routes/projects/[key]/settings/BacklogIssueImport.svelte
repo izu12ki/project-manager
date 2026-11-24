@@ -36,6 +36,8 @@
 	let preview = $state.raw<{ plan: Plan; rows: BacklogIssueRow[] } | null>(null);
 	/** Backlog の名前ごとの対応先の user id。'' は不明なユーザー */
 	let chosen = $state<Record<string, string>>({});
+	/** 新しく作るマイルストーンの名前ごとのリリース予定日（'YYYY-MM-DD'。'' は日付なし） */
+	let releaseDates = $state<Record<string, string>>({});
 	let pending = $state(false);
 	let message = $state('');
 	let result = $state('');
@@ -48,8 +50,7 @@
 		const kinds: [string, string[]][] = [
 			['ステータス', c.statuses],
 			['種別', c.types],
-			['カテゴリー', c.categories],
-			['マイルストーン', c.milestones]
+			['カテゴリー', c.categories]
 		];
 		return kinds.filter(([, names]) => names.length > 0);
 	});
@@ -95,7 +96,7 @@
 		if (input) input.value = '';
 	}
 
-	/** 選んだ書き方で行を作り、確認画面を作り直す。人の対応付けは選び直した分を保つ */
+	/** 選んだ書き方で行を作り、確認画面を作り直す。人の対応付けとリリース予定日は入れた分を保つ */
 	async function load() {
 		const rows = notation === 'backlog' ? convertBacklogRows(read) : read;
 		pending = true;
@@ -104,6 +105,9 @@
 			const plan = await previewIssueImport({ key: projectKey, rows });
 			chosen = Object.fromEntries(
 				plan.people.map((p) => [p.name, chosen[p.name] ?? p.userId ?? ''])
+			);
+			releaseDates = Object.fromEntries(
+				plan.created.milestones.map((name) => [name, releaseDates[name] ?? ''])
 			);
 			preview = { plan, rows };
 		} catch (err) {
@@ -134,6 +138,7 @@
 		notationKeys = keysWithBacklogNotation(read);
 		notation = notationKeys.length > 0 ? 'backlog' : 'markdown';
 		chosen = {};
+		releaseDates = {};
 		await load();
 	}
 
@@ -145,7 +150,11 @@
 			const r = await runIssueImport({
 				key: projectKey,
 				rows: preview.rows,
-				people: preview.plan.people.map((p) => ({ name: p.name, userId: chosen[p.name] || null }))
+				people: preview.plan.people.map((p) => ({ name: p.name, userId: chosen[p.name] || null })),
+				milestones: preview.plan.created.milestones.map((name) => ({
+					name,
+					releaseDate: releaseDates[name] ?? ''
+				}))
 			});
 			close();
 			result = formatIssueImportResult(r);
@@ -269,12 +278,33 @@
 				</div>
 			{/if}
 
-			{#if created.length > 0}
+			{#if created.length > 0 || plan.created.milestones.length > 0}
 				<div class="grid gap-1" data-testid="issue-import-created">
 					<p class="m-0 text-[0.8125rem] font-medium">新しく作るもの</p>
 					{#each created as [label, names] (label)}
 						<p class="m-0 text-[0.8125rem]">{label}: {names.join('、')}</p>
 					{/each}
+					{#if plan.created.milestones.length > 0}
+						<div class="grid gap-1.5" data-testid="issue-import-milestones">
+							<p class="m-0 text-[0.8125rem]">マイルストーン（リリース予定日）</p>
+							{#each plan.created.milestones as name (name)}
+								<div class="flex flex-wrap items-center gap-2 pl-3">
+									<span class="min-w-[96px] text-[0.8125rem]">{name}</span>
+									<input
+										class="input w-auto"
+										type="date"
+										aria-label={`${name} のリリース予定日`}
+										bind:value={releaseDates[name]}
+										disabled={pending}
+									/>
+								</div>
+							{/each}
+							<p class="m-0 text-[0.8125rem] text-muted-foreground">
+								CSV には日付が含まれないので、Backlog
+								の「バージョン・マイルストーン」の画面を見て入れてください。空欄でも取り込めます。
+							</p>
+						</div>
+					{/if}
 				</div>
 			{/if}
 

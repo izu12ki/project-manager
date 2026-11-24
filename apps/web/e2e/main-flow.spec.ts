@@ -1378,12 +1378,15 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page.getByTestId('issue-import-milestones')).toContainText('v1.0');
 	const releaseDate = page.getByLabel('v1.0 のリリース予定日');
 	await releaseDate.fill('2026-12-15');
-	// 書き方を切り替えて計画を作り直しても、入れた日付は残る
+	// 書き方を切り替えて計画を作り直しても、入れた日付は残る。
+	// 作り直している間は選択が無効になるので、有効に戻るのを待ってから見る
 	const notation = page.getByLabel('本文とコメントの書き方');
 	const notationBefore = await notation.inputValue();
 	await notation.selectOption(notationBefore === 'markdown' ? 'backlog' : 'markdown');
+	await expect(notation).toBeEnabled();
 	await expect(releaseDate).toHaveValue('2026-12-15');
 	await notation.selectOption(notationBefore);
+	await expect(notation).toBeEnabled();
 	await expect(releaseDate).toHaveValue('2026-12-15');
 	await page.getByRole('button', { name: '取り込む（6 件）' }).click();
 	const imported = page.getByTestId('issue-import-result');

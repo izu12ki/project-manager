@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+	carryOver,
 	formatIssueImportResult,
 	parseBacklogComment,
 	personKey,
@@ -234,6 +235,35 @@ describe('parseBacklogComment', () => {
 		expect(parseBacklogComment('2024/01/01 10:00 鈴木 花子')).toBeNull();
 		expect(parseBacklogComment('2024/01/01 10:00 鈴木 花子\n  ')).toBeNull();
 		expect(parseBacklogComment('')).toBeNull();
+	});
+});
+
+describe('carryOver', () => {
+	it('入れた値を名前ごとに引き継ぎ、新しい名前は初期値にする', () => {
+		expect(carryOver({ 'v1.0': '2026-12-15' }, ['v1.0', 'v2.0'], () => '')).toEqual({
+			'v1.0': '2026-12-15',
+			'v2.0': ''
+		});
+		// 空文字（「不明なユーザー」を選び直したなど）も入れた値として保つ
+		expect(carryOver({ 山田: '' }, ['山田'], () => 'u1')).toEqual({ 山田: '' });
+	});
+
+	it('今回の名前にないものも残す（書き方の切り替えで一時的に消えても、戻せば元の値）', () => {
+		const once = carryOver({ 'v1.0': '2026-12-15' }, ['v2.0'], () => '');
+		expect(carryOver(once, ['v1.0', 'v2.0'], () => '')).toEqual({
+			'v1.0': '2026-12-15',
+			'v2.0': ''
+		});
+	});
+
+	it('Object のプロパティ名（constructor など）も、ほかの名前と同じく初期値にする', () => {
+		expect(carryOver({}, ['constructor', 'toString', '__proto__'], () => '')).toEqual(
+			Object.fromEntries([
+				['constructor', ''],
+				['toString', ''],
+				['__proto__', '']
+			])
+		);
 	});
 });
 

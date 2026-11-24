@@ -92,6 +92,22 @@ export function personKey(name: string): string {
 	return name.replace(/\s/g, '');
 }
 
+/**
+ * 確認画面を作り直すときに、名前ごとに入れた値（人の対応先・リリース予定日）を引き継ぐ。
+ * 今回の names にない名前も残す（書き方の切り替えで行が一時的に外れても、戻せば元の値になる）。
+ * constructor などの名前で Object のプロパティを読まないよう、自分のプロパティだけを見る
+ */
+export function carryOver<T>(
+	prev: Record<string, T>,
+	names: string[],
+	initial: (name: string) => T
+): Record<string, T> {
+	return {
+		...prev,
+		...Object.fromEntries(names.map((n) => [n, Object.hasOwn(prev, n) ? prev[n] : initial(n)]))
+	};
+}
+
 const DATE_TIME = /^(\d{4})\/(\d{1,2})\/(\d{1,2}) (\d{1,2}):(\d{2})(?::(\d{2}))?$/;
 
 /** 'YYYY/MM/DD HH:MM(:SS)' をローカル時刻の epoch ミリ秒にする。読めなければ null */

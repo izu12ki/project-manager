@@ -33,7 +33,7 @@ describe('issue-sort', () => {
 		expect(nextIssueSort({ key: 'updated', order: 'asc' }, 'number')).toEqual(DEFAULT_ISSUE_SORT);
 	});
 
-	it('絞り込みは残して並びだけ差し替え、既定の並びは URL に出さない', () => {
+	it('絞り込みは残して並びだけ差し替え（ページは 1 ページ目に戻す）、既定の並びは URL に出さない', () => {
 		const q = params('status=todo&q=ログイン&sort=start&order=asc');
 		expect(withIssueSort(q, { key: 'updated', order: 'desc' })).toBe(
 			'?status=todo&q=%E3%83%AD%E3%82%B0%E3%82%A4%E3%83%B3&sort=updated&order=desc'
@@ -42,5 +42,9 @@ describe('issue-sort', () => {
 			'?status=todo&q=%E3%83%AD%E3%82%B0%E3%82%A4%E3%83%B3'
 		);
 		expect(withIssueSort(params('sort=due&order=asc'), DEFAULT_ISSUE_SORT)).toBe('');
+		// ページは 1 ページ目に戻す
+		expect(withIssueSort(params('status=todo&page=3'), { key: 'due', order: 'asc' })).toBe(
+			'?status=todo&sort=due&order=asc'
+		);
 	});
 });

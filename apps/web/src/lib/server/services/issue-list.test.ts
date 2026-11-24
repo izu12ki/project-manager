@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ISSUE_SORT_KEYS, type IssueSort } from '#lib/issue-sort.ts';
+import { ISSUE_PAGE_SIZE } from '#lib/pagination.ts';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
 import { issue } from '../db/schema';
@@ -79,9 +80,11 @@ describe('getIssueListRows', () => {
 	async function expected(actor: Actor, filters: IssueFilters, sort: IssueSort) {
 		const ctx = as(actor);
 		const p = await requireProject(ctx, 'ACME');
+		const issues = await listIssues(ctx, 'ACME', filters, sort);
 		return {
 			project: p,
-			issues: await listIssues(ctx, 'ACME', filters, sort),
+			issues,
+			total: issues.length,
 			assignees: await listAssignableUsers(db, p.id),
 			categories: await listCategories(ctx, 'ACME'),
 			milestones: await listMilestones(ctx, 'ACME'),
@@ -177,6 +180,42 @@ describe('getIssueListRows', () => {
 		await expect(
 			getIssueListRows(as(admin), '(a+)+', { q: `${'a'.repeat(28)}!` }, sort)
 		).rejects.toMatchObject({ code: 'not_found' });
+	});
+
+	it('returns one page of ISSUE_PAGE_SIZE issues and the total that matches the filters', async () => {
+		const p = await requireProject(as(admin), 'ACME');
+		// 既にある 3 件（#1〜#3、削除した #4）に足して、#5〜#124 の 120 件を入れる
+		const rows = Array.from({ length: 120 }, (_, i) => ({
+			id: `bulk-${i + 5}`,
+			projectId: p.id,
+			number: i + 5,
+			title: `まとめて入れた課題 ${i + 5}`,
+			status: i % 2 === 0 ? 'todo' : 'done',
+			reporterId: admin.id,
+			position: `a${i + 5}`
+		}));
+		// D1 の 1 文の変数は 100 個まで
+		for (let i = 0; i < rows.length; i += 5) await db.insert(issue).values(rows.slice(i, i + 5));
+		const sort: IssueSort = { key: 'number', order: 'asc' };
+		const numbers = (rows: { issues: { number: number }[] }) => rows.issues.map((i) => i.number);
+
+		const first = await getIssueListRows(as(member), 'ACME', {}, sort);
+		expect(first.total).toBe(123);
+		expect(numbers(first)).toEqual([1, 2, 3, ...Array.from({ length: 47 }, (_, i) => i + 5)]);
+		expect(numbers(await getIssueListRows(as(member), 'ACME', {}, sort, 2))).toEqual(
+			Array.from({ length: ISSUE_PAGE_SIZE }, (_, i) => i + 52)
+		);
+		const third = await getIssueListRows(as(member), 'ACME', {}, sort, 3);
+		expect(numbers(third)).toEqual(Array.from({ length: 23 }, (_, i) => i + 102));
+		// 最後のページを越えると空。総数は変わらない（ページの補正は呼び出し側で行う）
+		const beyond = await getIssueListRows(as(member), 'ACME', {}, sort, 4);
+		expect(beyond.issues).toEqual([]);
+		expect(beyond.total).toBe(123);
+
+		// 総数は絞り込みの後の件数（#5 からの偶数番目 60 件が todo、#1・#3 は todo、#2 は in_progress）
+		const todo = await getIssueListRows(as(member), 'ACME', { status: 'todo' }, sort, 2);
+		expect(todo.total).toBe(62);
+		expect(todo.issues).toHaveLength(12);
 	});
 
 	it('reads everything in one round trip', async () => {

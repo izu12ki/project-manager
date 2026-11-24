@@ -3,6 +3,8 @@
 		ArrowDown,
 		ArrowUp,
 		ArrowUpDown,
+		ChevronLeft,
+		ChevronRight,
 		CornerDownRight,
 		Flag,
 		Inbox,
@@ -29,6 +31,7 @@
 		isDueAlert,
 		milestoneLabel
 	} from '#lib/labels.ts';
+	import { ISSUE_PAGE_SIZE, lastPage, pageItems, withPage } from '#lib/pagination.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -38,6 +41,10 @@
 	const sortHref = (key: IssueSortKey) =>
 		base + withIssueSort(page.url.searchParams, nextIssueSort(data.sort, key));
 	const clearFiltersHref = $derived(base + withIssueSort(new URLSearchParams(), data.sort));
+	const last = $derived(lastPage(data.total, ISSUE_PAGE_SIZE));
+	const pageHref = (p: number) => base + withPage(page.url.searchParams, p);
+	const firstShown = $derived((data.page - 1) * ISSUE_PAGE_SIZE + 1);
+	const count = (n: number) => n.toLocaleString('ja-JP');
 	// キーは 0.8125rem の等幅フォント（JetBrains Mono は 1 文字 0.6em）で出す。
 	// プロジェクトのキーは 25 文字まであるので、いちばん長い課題キーが 1 行に収まる幅をキー列に取る。
 	// 16px はセルの左右の余白、2px は丸めの誤差の分
@@ -167,7 +174,13 @@
 			<input type="hidden" name="order" value={data.sort.order} />
 		{/if}
 		<noscript><button type="submit" class="btn btn-outline">絞り込む</button></noscript>
-		<span class="ml-auto pb-2 text-[0.8125rem] text-muted-foreground">{data.issues.length} 件</span>
+		<span class="ml-auto pb-2 text-[0.8125rem] text-muted-foreground tabular-nums">
+			{#if last > 1}
+				{count(data.total)} 件中 {count(firstShown)}〜{count(firstShown + data.issues.length - 1)} 件
+			{:else}
+				{count(data.total)} 件
+			{/if}
+		</span>
 	</form>
 
 	{#if data.issues.length === 0}
@@ -281,6 +294,33 @@
 				{/each}
 			</div>
 		</div>
+		{#if last > 1}
+			<nav class="pager" aria-label="ページ送り">
+				{#if data.page > 1}
+					<a class="pager-step" href={pageHref(data.page - 1)} rel="prev">
+						<ChevronLeft size={16} />前へ
+					</a>
+				{:else}
+					<span class="pager-step" aria-disabled="true"><ChevronLeft size={16} />前へ</span>
+				{/if}
+				{#each pageItems(data.page, last) as p, idx (p ?? `gap-${idx}`)}
+					{#if p === null}
+						<span class="pager-gap" aria-hidden="true">…</span>
+					{:else if p === data.page}
+						<span class="pager-num current" aria-current="page">{p}</span>
+					{:else}
+						<a class="pager-num" href={pageHref(p)} aria-label={`${p} ページ目`}>{p}</a>
+					{/if}
+				{/each}
+				{#if data.page < last}
+					<a class="pager-step" href={pageHref(data.page + 1)} rel="next">
+						次へ<ChevronRight size={16} />
+					</a>
+				{:else}
+					<span class="pager-step" aria-disabled="true">次へ<ChevronRight size={16} /></span>
+				{/if}
+			</nav>
+		{/if}
 	{/if}
 
 	{#if data.deletedIssues.length > 0}
@@ -306,6 +346,44 @@
 </section>
 
 <style>
+	.pager {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: center;
+		gap: 4px;
+		font-size: 0.8125rem;
+	}
+	.pager-num,
+	.pager-step {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 2px;
+		min-width: 32px;
+		height: 32px;
+		padding: 0 8px;
+		border-radius: var(--radius-sm);
+		font-variant-numeric: tabular-nums;
+	}
+	a.pager-num:hover,
+	a.pager-step:hover {
+		background: var(--muted);
+	}
+	.pager-num.current {
+		background: var(--foreground);
+		color: var(--background);
+		font-weight: 600;
+	}
+	.pager-step[aria-disabled='true'] {
+		color: var(--muted-foreground);
+		opacity: 0.5;
+	}
+	.pager-gap {
+		min-width: 20px;
+		text-align: center;
+		color: var(--muted-foreground);
+	}
 	.deleted summary {
 		display: inline-flex;
 		align-items: center;

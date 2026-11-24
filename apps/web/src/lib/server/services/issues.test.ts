@@ -25,6 +25,7 @@ import {
 	moveIssue,
 	updateIssue
 } from './issues';
+import { addComment, deleteComment, listComments } from './comments';
 import { getIssueDetailRows } from './issue-detail';
 import {
 	createCategory,
@@ -318,6 +319,29 @@ describe('issues', () => {
 		expect(await titles(long.slice(2, 40))).toEqual([long]);
 		expect(await titles('%_')).toEqual(['進捗 100%_done']);
 		expect(await titles('login')).toEqual(['Login Bug']);
+	});
+
+	it('キーワードは本文とコメントの部分一致でも探せる。削除したコメントや他の課題のコメントでは当たらない', async () => {
+		await createIssue(as(member), 'ACME', {
+			title: 'A',
+			description: '手順: Safari で Login する'
+		});
+		await createIssue(as(member), 'ACME', { title: 'B' });
+		await createIssue(as(member), 'ACME', { title: 'C' });
+		await addComment(as(member), 'ACME', 2, { body: '再現ログを添付しました' });
+		await addComment(as(member), 'ACME', 2, { body: '再現ログをもう一度取りました' });
+		await addComment(as(member), 'ACME', 3, { body: '一時的なメモ' });
+		const [memo] = await listComments(as(member), 'ACME', 3);
+		await deleteComment(as(member), 'ACME', 3, memo.id);
+		const numbers = async (q: string) =>
+			(await listIssues(as(member), 'ACME', { q })).map((i) => i.number);
+
+		expect(await numbers('safari で login')).toEqual([1]);
+		// 同じ課題の複数のコメントに当たっても 1 行
+		expect(await numbers('再現ログ')).toEqual([2]);
+		expect(await numbers('一時的なメモ')).toEqual([]);
+		// ほかの条件とも組み合わさる
+		expect(await listIssues(as(member), 'ACME', { q: 'Safari', status: 'done' })).toEqual([]);
 	});
 
 	it('Backlog から取り込んだ課題は、元のキーでも探せる（英字の大小は区別しない）', async () => {

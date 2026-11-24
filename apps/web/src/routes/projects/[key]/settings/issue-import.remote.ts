@@ -11,6 +11,12 @@ export const previewIssueImport = command(
 );
 
 export const runIssueImport = command(
-	v.object({ key: v.string(), rows: v.array(v.unknown()), people: v.array(v.unknown()) }),
-	({ key, rows, people }) => runCommand(() => importIssues(remoteContext(), key, { rows, people }))
+	v.object({
+		key: v.string(),
+		rows: v.array(v.unknown()),
+		people: v.array(v.unknown()),
+		milestones: v.optional(v.array(v.unknown()))
+	}),
+	({ key, rows, people, milestones }) =>
+		runCommand(() => importIssues(remoteContext(), key, { rows, people, milestones }))
 );

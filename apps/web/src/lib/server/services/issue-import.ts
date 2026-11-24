@@ -146,6 +146,17 @@ const ImportInput = v.object({
 	people: v.pipe(
 		v.array(v.object({ name: Short, userId: v.nullable(Short) })),
 		v.maxLength(MAX_IMPORT_ISSUES * 2 + MAX_IMPORT_COMMENTS)
+	),
+	/**
+	 * 新しく作るマイルストーンのリリース予定日（CSV に日付がないので確認画面で入れる）。
+	 * 作り直した計画で新しく作るものにだけ使い、既にあるマイルストーンの日付は変えない
+	 */
+	milestones: v.optional(
+		v.pipe(
+			v.array(v.object({ name: Short, releaseDate: DateOrEmptySchema })),
+			v.maxLength(MAX_IMPORT_ISSUES)
+		),
+		[]
 	)
 });
 
@@ -568,7 +579,10 @@ export async function importIssues(
 	input: unknown
 ): Promise<IssueImportResult> {
 	authorize(ctx.actor, 'project:manage');
-	const { rows, people } = parse(ImportInput, input);
+	const { rows, people, milestones } = parse(ImportInput, input);
+	const releaseDates = new Map(
+		milestones.filter((m) => m.releaseDate).map((m) => [m.name, m.releaseDate])
+	);
 	const built = await buildImport(ctx, key, rows);
 	const { plan, project: p, issues } = built;
 	if (plan.alreadyImported.length > 0) {
@@ -708,7 +722,12 @@ export async function importIssues(
 		stmts.push(
 			...insertChunks(
 				milestone,
-				built.newMilestones.map((m) => ({ id: m.id, projectId: p.id, name: m.name }))
+				built.newMilestones.map((m) => ({
+					id: m.id,
+					projectId: p.id,
+					name: m.name,
+					releaseDate: releaseDates.get(m.name) ?? null
+				}))
 			).map((part) => ctx.db.insert(milestone).values(part))
 		);
 	}

@@ -660,4 +660,67 @@ describe('issue-import: run', () => {
 			'機能B'
 		]);
 	});
+
+	it('新しく作るマイルストーンに、確認画面で入れたリリース予定日を付ける', async () => {
+		const rows = fixture('issues.csv'); // DEMO-1・DEMO-2 のマイルストーンは v1.0
+		const plan = await planIssueImport(ctx(), 'DEMO', { rows });
+		expect(plan.created.milestones).toEqual(['v1.0']);
+		await importIssues(ctx(), 'DEMO', {
+			rows,
+			people: autoPeople(plan),
+			milestones: [{ name: 'v1.0', releaseDate: '2026-12-15' }]
+		});
+		const [m] = await db.select().from(milestone).where(eq(milestone.projectId, projectId));
+		expect(m).toMatchObject({ name: 'v1.0', releaseDate: '2026-12-15' });
+	});
+
+	it('空の日付は日付なしにし、計画にない名前の日付は無視する', async () => {
+		const rows = [row({ milestones: ['v2.0'] }), row({ milestones: ['v3.0'] })];
+		await importIssues(ctx(), 'DEMO', {
+			rows,
+			people: [],
+			milestones: [
+				{ name: 'v2.0', releaseDate: '' },
+				{ name: 'v3.0', releaseDate: '2027-01-31' },
+				{ name: 'v9.9', releaseDate: '2027-03-01' }
+			]
+		});
+		const ms = await db
+			.select({ name: milestone.name, releaseDate: milestone.releaseDate })
+			.from(milestone)
+			.where(eq(milestone.projectId, projectId))
+			.orderBy(asc(milestone.name));
+		expect(ms).toEqual([
+			{ name: 'v2.0', releaseDate: null },
+			{ name: 'v3.0', releaseDate: '2027-01-31' }
+		]);
+	});
+
+	it('既にあるマイルストーンの日付は書き換えない', async () => {
+		// 確認画面の後に設定画面で同名のマイルストーンが作られた場合も、ここに当たる
+		await db
+			.insert(milestone)
+			.values({ id: 'm-existing', projectId, name: 'v1.0', releaseDate: '2026-11-30' });
+		await importIssues(ctx(), 'DEMO', {
+			rows: [row({ milestones: ['v1.0'] })],
+			people: [],
+			milestones: [{ name: 'v1.0', releaseDate: '2026-12-15' }]
+		});
+		const ms = await db.select().from(milestone).where(eq(milestone.projectId, projectId));
+		expect(ms).toHaveLength(1);
+		expect(ms[0]).toMatchObject({ id: 'm-existing', releaseDate: '2026-11-30' });
+		expect((await issuesByKey()).get('DEMO-1')!.milestoneId).toBe('m-existing');
+	});
+
+	it('リリース予定日が暦にない日付なら validation で、何も書かない', async () => {
+		await expect(
+			importIssues(ctx(), 'DEMO', {
+				rows: [row({ milestones: ['v1.0'] })],
+				people: [],
+				milestones: [{ name: 'v1.0', releaseDate: '2026-02-30' }]
+			})
+		).rejects.toMatchObject({ code: 'validation', message: '日付の形式が正しくありません' });
+		expect(await count(issue)).toBe(0);
+		expect((await db.select().from(milestone)).length).toBe(0);
+	});
 });

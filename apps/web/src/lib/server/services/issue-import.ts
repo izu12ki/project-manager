@@ -55,7 +55,14 @@ export interface IssueImportUser {
 export interface IssueImportPlan {
 	issues: number;
 	comments: number;
+	/** 振る番号の最小と最大（Backlog の番号のままの課題があるので、連番とは限らない） */
 	firstNumber: number;
+	lastNumber: number;
+	/**
+	 * Backlog と違う番号になる課題（キー ID 順）。続きの番号を振る。
+	 * key: キーの接頭辞がプロジェクトのキーと違う、taken: その番号の課題が既にある
+	 */
+	renumbered: { key: string; number: number; reason: 'key' | 'taken' }[];
 	/** キーの接頭辞（昇順） */
 	backlogProjects: string[];
 	created: { statuses: string[]; types: string[]; categories: string[]; milestones: string[] };
@@ -142,6 +149,14 @@ const ImportInput = v.object({
 /** 1 文のパラメーターが 999 を超えないように、複数行の insert を分ける */
 
 const KEY = /^[A-Z][A-Z0-9_]*-\d+$/;
+/** 課題番号の上限（検索で番号として読む桁数に合わせる） */
+const MAX_NUMBER = 999_999_999;
+
+/** 形式を検査済みのキー（PROJ-12）を接頭辞と番号に分ける */
+function splitKey(key: string): { prefix: string; number: number } {
+	const at = key.lastIndexOf('-');
+	return { prefix: key.slice(0, at), number: Number(key.slice(at + 1)) };
+}
 
 /**
  * 件名を TITLE_MAX 文字に収める。超える分は「…」にし、絵文字などのサロゲートペアの途中では切らない。
@@ -225,6 +240,8 @@ export interface PreparedIssue {
 	parentId: string | null;
 	/** 親にできなかった親課題キー（本文末尾に残す） */
 	parentNote: string | null;
+	/** Backlog の番号をそのまま使うときの番号。null は続きの番号を振る */
+	number: number | null;
 }
 
 export interface BuiltImport {
@@ -239,6 +256,8 @@ export interface BuiltImport {
 	/** 新しいステータスを入れる位置（「完了」の位置。なければ末尾） */
 	statusInsertAt: number;
 	typeNextPosition: number;
+	/** 続きの番号は、プロジェクトの次の番号とこの値の大きいほうから振る（Backlog の番号のままの課題の最大 + 1） */
+	renumberFrom: number;
 }
 
 /** 計画と実行で共通の組み立て（人の対応付けは除く） */
@@ -263,8 +282,14 @@ export async function buildImport(
 	const lookupKeys = [
 		...new Set(valid.flatMap((r) => (r.parentKey ? [r.key, r.parentKey] : [r.key])))
 	];
+	/** Backlog の番号のままにできるか確かめる番号（キーの接頭辞がプロジェクトのキーと同じもの） */
+	const ownNumber = (r: BacklogIssueRow): number | null => {
+		const k = splitKey(r.key);
+		return k.prefix === p.key && k.number >= 1 && k.number <= MAX_NUMBER ? k.number : null;
+	};
+	const wantedNumbers = valid.map(ownNumber).filter((x) => x !== null);
 
-	const [statuses, types, categories, milestones, users, members, pending, imported] =
+	const [statuses, types, categories, milestones, users, members, pending, imported, taken] =
 		await Promise.all([
 			ctx.db
 				.select({ key: issueStatus.key, name: issueStatus.name, position: issueStatus.position })
@@ -312,7 +337,14 @@ export async function buildImport(
 							deletedAt: issue.deletedAt
 						})
 						.from(issue)
-						.where(and(eq(issue.projectId, p.id), inList(issue.backlogKey, lookupKeys)))
+						.where(and(eq(issue.projectId, p.id), inList(issue.backlogKey, lookupKeys))),
+			// 削除した課題も番号を持ち続けるので含める
+			wantedNumbers.length === 0
+				? Promise.resolve([])
+				: ctx.db
+						.select({ number: issue.number })
+						.from(issue)
+						.where(and(eq(issue.projectId, p.id), inList(issue.number, wantedNumbers)))
 		]);
 
 	// ---- 分類項目（なければ作る。作る順はキー ID 順で最初に出た順） ----
@@ -348,8 +380,10 @@ export async function buildImport(
 	const categorySet = named(categories);
 	const milestoneSet = named(milestones);
 
+	const takenNumbers = new Set(taken.map((x) => x.number));
 	const prepared = valid.map((r): PreparedIssue => {
 		const categoryIds = r.categories.map(categorySet.idOf);
+		const own = ownNumber(r);
 		return {
 			id: uuidv7(),
 			row: r,
@@ -360,9 +394,23 @@ export async function buildImport(
 			priority: BACKLOG_PRIORITY[r.priority] ?? 'none',
 			resolution: RESOLUTION_BY_LABEL.get(r.resolution) ?? null,
 			parentId: null,
-			parentNote: null
+			parentNote: null,
+			number: own !== null && !takenNumbers.has(own) ? own : null
 		};
 	});
+
+	// ---- 番号（Backlog の番号のままにできないものは、最大の番号の続きから振る） ----
+	const kept = prepared.flatMap((it) => (it.number === null ? [] : [it.number]));
+	const renumberFrom = kept.reduce((max, x) => Math.max(max, x), 0) + 1;
+	const renumberStart = Math.max(p.nextIssueNumber, renumberFrom);
+	const renumbered = prepared
+		.filter((it) => it.number === null)
+		.map((it, i) => ({
+			key: it.row.key,
+			number: renumberStart + i,
+			reason: splitKey(it.row.key).prefix === p.key ? ('taken' as const) : ('key' as const)
+		}));
+	const numbers = [...kept, ...renumbered.map((x) => x.number)];
 	// 課題のカテゴリーはプロジェクトのカテゴリー順（既存の後に、作る順）
 	const categoryOrder = [...categories.map((c) => c.id), ...categorySet.created.map((c) => c.id)];
 	for (const it of prepared) {
@@ -435,7 +483,9 @@ export async function buildImport(
 	const plan: IssueImportPlan = {
 		issues: prepared.length,
 		comments: valid.reduce((n, r) => n + r.comments.length, 0),
-		firstNumber: p.nextIssueNumber,
+		firstNumber: numbers.length > 0 ? Math.min(...numbers) : p.nextIssueNumber,
+		lastNumber: numbers.length > 0 ? Math.max(...numbers) : p.nextIssueNumber,
+		renumbered,
 		backlogProjects: [...new Set(valid.map((r) => r.key.replace(/-\d+$/, '')))].sort(),
 		created: {
 			statuses: newStatuses.map((s) => s.name),
@@ -461,7 +511,8 @@ export async function buildImport(
 		newCategories: categorySet.created,
 		newMilestones: milestoneSet.created,
 		statusInsertAt: done ? done.position : Math.max(-1, ...statuses.map((s) => s.position)) + 1,
-		typeNextPosition: Math.max(-1, ...types.map((t) => t.position)) + 1
+		typeNextPosition: Math.max(-1, ...types.map((t) => t.position)) + 1,
+		renumberFrom
 	};
 }
 
@@ -480,6 +531,10 @@ const raced = (label: string) =>
 /** 一意インデックスの列（SQLite の「UNIQUE constraint failed: 表.列」に出る形）と、当たったときの文言 */
 const CONFLICTS: [column: string, message: string][] = [
 	['issue.backlog_key', '既に取り込んだ課題があります。CSV を読み込み直してください'],
+	[
+		'issue.number',
+		'取り込み中に課題が起票されたため、何も書き込んでいません。CSV を読み込み直してください'
+	],
 	['issue_type.name', raced('種別')],
 	['category.name', raced('カテゴリー')],
 	['milestone.name', raced('マイルストーン')]
@@ -541,7 +596,11 @@ export async function importIssues(
 		issues.map((it) => it.statusKey)
 	);
 	const csvIds = new Set(issues.map((it) => it.id));
-	const issueValues = issues.map((it, i) => {
+	// 続きの番号は、確認の後に起票された課題とも重ならないよう、書き込む時点のプロジェクトの次の番号から振る。
+	// 定数は自前の整数なので文に埋め込む（1 行あたりのバインド変数を増やさない）
+	const renumberFrom = sql.raw(String(built.renumberFrom));
+	let renumberedCount = 0;
+	const issueValues = issues.map((it) => {
 		const r = it.row;
 		const reporter = userOf(r.reporter);
 		const assignee = userOf(r.assignee);
@@ -549,8 +608,10 @@ export async function importIssues(
 		return {
 			id: it.id,
 			projectId: p.id,
-			// 番号はキー ID 順。挿入の順（親が先）とは別に、プロジェクトの続きから振る
-			number: sql`(select ${project.nextIssueNumber} from ${project} where ${project.id} = ${p.id}) + ${i}`,
+			// Backlog の番号のままにできないものは、キー ID 順に続きから振る（挿入の順は親が先で、これとは別）
+			number:
+				it.number ??
+				sql`max((select ${project.nextIssueNumber} from ${project} where ${project.id} = ${p.id}), ${renumberFrom}) + ${sql.raw(String(renumberedCount++))}`,
 			title: clipTitle(r.title),
 			description: composeDescription(r, {
 				reporterName: reporter ? null : r.reporter || null,
@@ -662,7 +723,9 @@ export async function importIssues(
 	stmts.push(
 		ctx.db
 			.update(project)
-			.set({ nextIssueNumber: sql`${project.nextIssueNumber} + ${issues.length}` })
+			.set({
+				nextIssueNumber: sql`max(${project.nextIssueNumber}, ${renumberFrom}) + ${renumberedCount}`
+			})
 			.where(eq(project.id, p.id))
 	);
 	const range = ctx.db

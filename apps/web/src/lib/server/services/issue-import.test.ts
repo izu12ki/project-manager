@@ -229,7 +229,30 @@ describe('issue-import: plan', () => {
 		});
 		const p = await plan([row(), row()]);
 		expect(p.alreadyImported).toEqual(['DEMO-1']);
-		expect(p.firstNumber).toBe(1);
+		expect(p.firstNumber).toBe(2);
+	});
+
+	it('番号は Backlog のキーの番号をそのまま使い、使えないものだけ続きから振る', async () => {
+		await db.insert(issue).values({
+			id: 'x',
+			projectId,
+			number: 2,
+			title: 'x',
+			reporterId: admin.id,
+			position: 'a0'
+		});
+		await db.update(project).set({ nextIssueNumber: 3 });
+		const p = await plan([
+			row({ key: 'DEMO-9', keyId: 9 }),
+			row({ key: 'DEMO-2', keyId: 2 }),
+			row({ key: 'OLD-3', keyId: 3 }),
+			row({ key: 'DEMO-5', keyId: 5 })
+		]);
+		expect([p.firstNumber, p.lastNumber]).toEqual([5, 11]);
+		expect(p.renumbered).toEqual([
+			{ key: 'DEMO-2', number: 10, reason: 'taken' },
+			{ key: 'OLD-3', number: 11, reason: 'key' }
+		]);
 	});
 
 	it('上限を超えた入力は validation', async () => {
@@ -383,7 +406,21 @@ describe('issue-import: run', () => {
 		expect(unknown.name).toBe('不明なユーザー');
 	});
 
-	it('課題がある既存のプロジェクトでは、番号と並びの続きから入る', async () => {
+	it('Backlog の番号のまま取り込み、後から起票した課題は最大の番号の続きになる', async () => {
+		const result = await run([
+			row({ key: 'DEMO-3', keyId: 3 }),
+			row({ key: 'DEMO-10', keyId: 10 })
+		]);
+		expect([result.firstNumber, result.lastNumber]).toEqual([3, 10]);
+		const byKey = await issuesByKey();
+		expect(byKey.get('DEMO-3')!.number).toBe(3);
+		expect(byKey.get('DEMO-10')!.number).toBe(10);
+		const [{ nextIssueNumber }] = await db.select().from(project);
+		expect(nextIssueNumber).toBe(11);
+		expect((await createIssue(ctx(), 'DEMO', { title: '新規' })).number).toBe(11);
+	});
+
+	it('課題がある既存のプロジェクトでは、使われている番号の課題だけ続きから振る', async () => {
 		await createIssue(ctx(), 'DEMO', { title: '既存 1' });
 		await createIssue(ctx(), 'DEMO', { title: '既存 2' });
 		const result = await run([row(), row()]);
@@ -421,11 +458,31 @@ describe('issue-import: run', () => {
 	it('分けて取り込むと、前回の課題を親にし、子課題の子にはしない', async () => {
 		await run(fixture('issues.csv'));
 		const result = await run(fixture('issues-2.csv'));
-		expect([result.firstNumber, result.lastNumber]).toEqual([7, 8]);
+		expect([result.firstNumber, result.lastNumber]).toEqual([8, 9]);
 		const byKey = await issuesByKey();
 		expect(byKey.get('DEMO-8')!.parentId).toBe(byKey.get('DEMO-1')!.id);
 		expect(byKey.get('DEMO-9')!.parentId).toBeNull();
 		expect(byKey.get('DEMO-9')!.description).toContain('- 親課題（Backlog）: DEMO-2');
+	});
+
+	it('後の範囲を先に取り込んでも、番号は Backlog のまま', async () => {
+		await run(fixture('issues-2.csv'));
+		await run(fixture('issues.csv'));
+		const numbers = [...(await issuesByKey()).entries()]
+			.map(([k, i]) => [k, i.number])
+			.sort((a, b) => Number(a[1]) - Number(b[1]));
+		expect(numbers).toEqual([
+			['DEMO-1', 1],
+			['DEMO-2', 2],
+			['DEMO-3', 3],
+			['DEMO-4', 4],
+			['DEMO-5', 5],
+			['DEMO-6', 6],
+			['DEMO-8', 8],
+			['DEMO-9', 9]
+		]);
+		const [{ nextIssueNumber }] = await db.select().from(project);
+		expect(nextIssueNumber).toBe(10);
 	});
 
 	it('取り込み済みのキーがあれば何も書かない', async () => {
@@ -514,6 +571,20 @@ describe('issue-import: run', () => {
 			expect(await count(issue)).toBe(0);
 		}
 	);
+
+	it('確認の後に同じ番号の課題が起票されたら、何も書かずにそう伝える', async () => {
+		const rows = fixture('issues.csv');
+		const plan = await planIssueImport(ctx(), 'DEMO', { rows });
+		const racing = racingDb(() => createIssue(ctx(), 'DEMO', { title: '割り込み' }));
+		await expect(
+			importIssues({ ...ctx(), db: racing }, 'DEMO', { rows, people: autoPeople(plan) })
+		).rejects.toMatchObject({
+			code: 'conflict',
+			message:
+				'取り込み中に課題が起票されたため、何も書き込んでいません。CSV を読み込み直してください'
+		});
+		expect(await count(issue)).toBe(1);
+	});
 
 	it('対応先を手で選べ、候補にない人は validation', async () => {
 		const rows = fixture('issues.csv');

@@ -10,6 +10,7 @@ import {
 	deletedIssuesQuery,
 	filterConds,
 	issueListQuery,
+	parentByNumberQuery,
 	parentCandidatesQuery,
 	sortOrder,
 	toIssueListItems,
@@ -58,18 +59,31 @@ export async function getIssueListRows(
 	};
 }
 
-/** 起票の画面。起票できない人（閲覧者）は forbidden */
-export async function getNewIssueRows(ctx: AppContext, key: string) {
+/**
+ * 起票の画面。起票できない人（閲覧者）は forbidden。
+ * parentNumber（「子課題を追加」から来たときの親）は、候補（新しいものから一定数）に入らない古い課題でも引く
+ */
+export async function getNewIssueRows(ctx: AppContext, key: string, parentNumber?: number) {
 	const { db } = ctx;
 	const of = ofProject(db, key);
-	const [access, assignable, categories, milestones, parentCandidates] = await ctx.readBatch([
-		projectAccessQuery(ctx, key),
-		assignableUsersQuery(db, of),
-		categoriesQuery(db, of),
-		milestonesQuery(db, of),
-		parentCandidatesQuery(db, of)
-	]);
+	const [access, assignable, categories, milestones, parentCandidates, parents] =
+		await ctx.readBatch([
+			projectAccessQuery(ctx, key),
+			assignableUsersQuery(db, of),
+			categoriesQuery(db, of),
+			milestonesQuery(db, of),
+			parentCandidatesQuery(db, of),
+			// 番号は 1 から振るので、0 はどの課題にも当たらない
+			parentByNumberQuery(db, of, parentNumber ?? 0)
+		]);
 	const project = checkProjectAccess(ctx, access);
 	authorize(ctx.actor, 'issue:create');
-	return { project, assignable, categories, milestones, parentCandidates };
+	return {
+		project,
+		assignable,
+		categories,
+		milestones,
+		parentCandidates,
+		parent: parents[0] ?? null
+	};
 }

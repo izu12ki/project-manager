@@ -516,10 +516,15 @@ export async function getIssue(ctx: AppContext, key: string, number: number) {
 }
 
 /**
- * 親にできる課題（新しい順）。子課題は 1 階層までなので、子課題でない課題だけ。
- * 削除したものと、exceptNumber（親を設定しようとしている課題自身）は除く
+ * 親課題の欄の候補に出す課題の数。番号を入力すれば、候補にない課題も親にできる。
+ * 課題の多いプロジェクトで、起票の画面を開くたびに全件を読まないようにする
  */
-/** 親課題の候補（子課題でない、削除していない課題を新しい順に）。batch にも入れられる */
+export const PARENT_CANDIDATE_LIMIT = 100;
+
+/**
+ * 親課題の候補（子課題でない、削除していない課題を新しい順に PARENT_CANDIDATE_LIMIT 件まで）。batch にも入れられる。
+ * 子課題は 1 階層までなので、子課題でない課題だけ。exceptNumber（親を設定しようとしている課題自身）は除く
+ */
 export function parentCandidatesQuery(db: DB, of: ProjectCond, exceptNumber?: number) {
 	return db
 		.select({ number: issue.number, title: issue.title })
@@ -532,7 +537,23 @@ export function parentCandidatesQuery(db: DB, of: ProjectCond, exceptNumber?: nu
 				exceptNumber === undefined ? undefined : ne(issue.number, exceptNumber)
 			)
 		)
-		.orderBy(desc(issue.number));
+		.orderBy(desc(issue.number))
+		.limit(PARENT_CANDIDATE_LIMIT);
+}
+
+/** 番号で指定した課題が親にできるなら、その番号とタイトル（なければ空の配列）。batch にも入れられる */
+export function parentByNumberQuery(db: DB, of: ProjectCond, number: number) {
+	return db
+		.select({ number: issue.number, title: issue.title })
+		.from(issue)
+		.where(
+			and(
+				of(issue.projectId),
+				eq(issue.number, number),
+				isNull(issue.parentId),
+				isNull(issue.deletedAt)
+			)
+		);
 }
 
 export async function listParentCandidates(ctx: AppContext, key: string, exceptNumber?: number) {

@@ -27,6 +27,7 @@ import {
 	listDeletedIssues,
 	listIssues,
 	listParentCandidates,
+	PARENT_CANDIDATE_LIMIT,
 	type IssueFilters
 } from './issues';
 import { listAssignableUsers, requireProject } from './projects';
@@ -252,13 +253,40 @@ describe('getNewIssueRows', () => {
 			assignable: await listAssignableUsers(db, p.id),
 			categories: await listCategories(ctx, 'ACME'),
 			milestones: await listMilestones(ctx, 'ACME'),
-			parentCandidates: await listParentCandidates(ctx, 'ACME')
+			parentCandidates: await listParentCandidates(ctx, 'ACME'),
+			parent: null
 		});
+		// 親に指定した課題も同じ 1 往復で引く。子課題（#2）は親にできない
+		const withParent = await getNewIssueRows(ctx, 'ACME', 1);
+		expect(withParent.parent).toEqual({ number: 1, title: 'ACME 親' });
+		expect((await getNewIssueRows(ctx, 'ACME', 2)).parent).toBeNull();
 		await expect(getNewIssueRows(as(outsider), 'ACME')).rejects.toMatchObject({
 			code: 'not_found'
 		});
 		await expect(getNewIssueRows(as(viewer), 'ACME')).rejects.toMatchObject({
 			code: 'forbidden'
 		});
+	});
+
+	it(`offers the newest ${PARENT_CANDIDATE_LIMIT} parents and still finds an older one by number`, async () => {
+		const db = await createTestDb();
+		const base = createTestBase(db);
+		const admin = await seedUser(db, 'admin', 'Admin');
+		const { id: projectId } = await seedProject(db, { key: 'ACME', members: [] });
+		const rows = Array.from({ length: PARENT_CANDIDATE_LIMIT + 5 }, (_, i) => ({
+			id: `p-${i + 1}`,
+			projectId,
+			number: i + 1,
+			title: `課題 ${i + 1}`,
+			reporterId: admin.id,
+			position: `a${i + 1}`
+		}));
+		// D1 の 1 文の変数は 100 個まで
+		for (let i = 0; i < rows.length; i += 5) await db.insert(issue).values(rows.slice(i, i + 5));
+		const got = await getNewIssueRows(ctxOf(base, admin), 'ACME', 3);
+		expect(got.parentCandidates.map((c) => c.number)).toEqual(
+			Array.from({ length: PARENT_CANDIDATE_LIMIT }, (_, i) => PARENT_CANDIDATE_LIMIT + 5 - i)
+		);
+		expect(got.parent).toEqual({ number: 3, title: '課題 3' });
 	});
 });

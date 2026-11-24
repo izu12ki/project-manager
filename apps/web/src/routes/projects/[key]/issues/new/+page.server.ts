@@ -10,13 +10,13 @@ import type { Actions, PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const ctx = appContext(locals);
 	return handleLoad(async () => {
-		const { assignable, categories, milestones, parentCandidates } = await getNewIssueRows(
+		const wanted = Number(url.searchParams.get('parent'));
+		const { assignable, categories, milestones, parentCandidates, parent } = await getNewIssueRows(
 			ctx,
-			params.key
+			params.key,
+			Number.isSafeInteger(wanted) && wanted > 0 ? wanted : undefined
 		);
 		const canAssign = can(ctx.actor, 'issue:assign');
-		const wanted = Number(url.searchParams.get('parent'));
-		const parent = parentCandidates.find((c) => c.number === wanted) ?? null;
 		return {
 			canAssign,
 			canSetStatus: can(ctx.actor, 'issue:changeStatus'),

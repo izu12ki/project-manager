@@ -65,7 +65,7 @@ Issue や Pull Request の送り方は [CONTRIBUTING.md](CONTRIBUTING.md) を参
 
 ## 外部 API と AI エージェント
 
-REST API（`/api/v1`）で、課題の一括起票やスケジュール作成、一括修正ができます。Claude Code 用の Skill も同梱しています。エンドポイントと項目は [`skills/project-manager/reference.md`](skills/project-manager/reference.md) を参照してください。
+REST API（`/api/v1`）で、課題の一括起票やスケジュール作成、一括修正、コメントの取得と投稿ができます。Claude Code 用の Skill も同梱しています。エンドポイントと項目は [`skills/project-manager/reference.md`](skills/project-manager/reference.md) を参照してください。
 
 1. API キーを発行します。管理者でログインし、アカウント設定の「API キー」カードで作成します（管理者だけが使えます）。平文は発行直後に一度しか表示されません。
 2. Skill を導入します。

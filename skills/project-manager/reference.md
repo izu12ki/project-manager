@@ -168,6 +168,43 @@ curl -sS -X PATCH "$PM_API_URL/api/v1/projects/PROJ/issues/12" \
   -d '{"dueDate":"2026-11-20","assigneeIds":null}'
 ```
 
+## GET /projects/{key}/issues/{number}/comments
+
+課題のコメントを古い順に返す。`limit`（1〜500、既定 100）と `offset` で区切れる。削除された課題は 404。
+
+```json
+{
+  "items": [
+    {
+      "id": "0193...",
+      "author": { "id": "u1", "name": "山田" },
+      "body": "確認しました",
+      "createdAt": "2026-11-24T03:00:00.000Z",
+      "updatedAt": "2026-11-24T03:00:00.000Z",
+      "url": "https://pm.example.com/projects/PROJ/issues/12#comment-0193...",
+      "reactions": [
+        { "emoji": "👍", "users": [{ "id": "u2", "name": "佐藤" }] }
+      ]
+    }
+  ],
+  "total": 1,
+  "limit": 100,
+  "offset": 0
+}
+```
+
+## POST /projects/{key}/issues/{number}/comments
+
+コメントを 1 件投稿する。送れる項目は `body`（Markdown、20,000 文字まで）だけで、投稿者は API キーの持ち主になる。成功すると 201 で、作成したコメント（一覧の要素と同じ形）を返す。削除された課題とアーカイブしたプロジェクトには投稿できない（409）。
+
+画面から投稿したときと同じく、起票者・担当者・それまでにコメントした人に通知が届く。本文に `@[名前](user:ユーザー ID)` と書くと、その人へのメンションになる（ID は `GET /projects/{key}` の `members`）。
+
+```bash
+curl -sS -X POST "$PM_API_URL/api/v1/projects/PROJ/issues/12/comments" \
+  -H "Authorization: Bearer $PM_API_KEY" -H "Content-Type: application/json" \
+  -d '{"body":"期限を 11/20 に延ばしました"}'
+```
+
 ## POST /projects/{key}/issues/bulk
 
 一括起票。リクエストは `{ "items": [ <起票の項目>, ... ] }`。
@@ -216,7 +253,7 @@ curl -sS -X PATCH "$PM_API_URL/api/v1/projects/PROJ/issues/12" \
 - `?dryRun=true` を付けると検証だけ行い、何も書かずに `{ "numbers": [] }` を 200 で返す（一括起票も 200）。検証で落ちるときは通常どおり 400。`dryRun` に指定できるのは未指定・`true`・`false` だけ。`1` や `TRUE` など他の値は、誤って書き込まないよう 400（`fields.dryRun`）にする。
 - 本文のトップレベルのキーは `items` だけ。ほかのキーは 400（`fields` のキーはそのキー名）。
 - 通知は、一括では課題ごとではなく、受け取る人ごとの「まとめ通知」1 件になる（リクエストごと）。担当者に設定された、メンションされた、それ以外の更新、のうち最も優先度の高い理由が文面になる。
-- アーカイブ済みのプロジェクトへの書き込み（起票・更新・一括。dryRun も含む）は 409 `conflict`。
+- アーカイブ済みのプロジェクトへの書き込み（起票・更新・一括・コメント。dryRun も含む）は 409 `conflict`。
 
 ## 課題の項目
 

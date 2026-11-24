@@ -122,7 +122,7 @@ export async function addComment(
 	key: string,
 	number: number,
 	input: unknown
-): Promise<void> {
+): Promise<{ id: string }> {
 	const { project, issue } = await getIssue(ctx, key, number);
 	assertWritable(project);
 	assertNotDeleted(issue);
@@ -139,6 +139,7 @@ export async function addComment(
 		issue: { id: issue.id, number: issue.number, title: issue.title },
 		events: [{ kind: 'commented', commentId: id, body }]
 	});
+	return { id };
 }
 
 async function findOwnedComment(ctx: AppContext, key: string, number: number, commentId: string) {

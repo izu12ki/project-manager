@@ -11,14 +11,22 @@ import {
 	recordPasswordChangeSuccess
 } from '#lib/server/ratelimit.ts';
 import { createApiKey, listApiKeys, revokeApiKey } from '#lib/server/services/api-keys.ts';
-import { disableSlack, enableSlack, getSlackStatus } from '#lib/server/services/integrations.ts';
+import {
+	disableSlack,
+	enableSlack,
+	getEmailNotificationStatus,
+	getSlackStatus,
+	setEmailNotifications
+} from '#lib/server/services/integrations.ts';
 import { formObject, NameSchema, parse, PasswordKeySchema } from '#lib/server/validation.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	const ctx = appContext(locals);
+	const [slack, email] = await Promise.all([getSlackStatus(ctx), getEmailNotificationStatus(ctx)]);
 	return {
-		slack: await getSlackStatus(ctx),
+		slack,
+		email,
 		// 閲覧者（公開デモの共用アカウントなど）は表示名・パスワード・通知を変えられない
 		canModifyAccount: can(ctx.actor, 'account:modify'),
 		// API キーは管理者だけが使う。それ以外には欄ごと出さない
@@ -100,6 +108,16 @@ export const actions: Actions = {
 		slackAction(async () => {
 			await disableSlack(appContext(locals));
 			return { slackDisabled: true };
+		}),
+	enableEmail: async ({ locals }) =>
+		handleAction(async () => {
+			await setEmailNotifications(appContext(locals), true);
+			return { emailEnabled: true };
+		}),
+	disableEmail: async ({ locals }) =>
+		handleAction(async () => {
+			await setEmailNotifications(appContext(locals), false);
+			return { emailDisabled: true };
 		}),
 	createApiKey: async ({ request, locals }) =>
 		apiKeyAction(async () => {

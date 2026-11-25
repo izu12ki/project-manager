@@ -1,11 +1,12 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { inList, insertChunks } from '../db/limits';
 import { uuidv7 } from 'uuidv7';
 import { extractMentionIds } from '#lib/mentions.ts';
 import type { Priority } from '#lib/labels.ts';
 import type { AppContext } from '../context';
 import type { DB } from '../db';
-import { comment, issue, notification, userIntegration } from '../db/schema';
+import { comment, issue, notification, user, userIntegration } from '../db/schema';
+import type { MailMessage } from '../mailer';
 import { listStatusesOf } from '../services/issue-fields';
 import { listAssignableUsers } from '../services/projects';
 import {
@@ -17,6 +18,12 @@ import {
 	type DirectMessage,
 	type DmSource
 } from './channels';
+import {
+	EMAIL_NOTIFICATION_TYPES,
+	MAX_NOTIFICATION_MAILS,
+	NOTIFICATION_MAIL_INTERVAL_MS,
+	notificationMail
+} from './email';
 import type { BulkNotifyInput, IssueEvent, NotifyInput } from './events';
 import { planNotifications, type Change, type PlannedNotification } from './recipients';
 
@@ -102,6 +109,39 @@ async function slackLinks(ctx: AppContext, userIds: string[]) {
 	return links.length > 0 ? { cfg, links } : null;
 }
 
+/** メールで受け取る人（メールの通知をオフにした人・無効化された人を除く）のアドレス */
+async function emailRecipients(db: DB, userIds: string[]) {
+	if (userIds.length === 0) return [];
+	return db
+		.select({ id: user.id, email: user.email })
+		.from(user)
+		.where(
+			and(inList(user.id, userIds), eq(user.emailNotifications, true), isNull(user.disabledAt))
+		);
+}
+
+/** 通知メールをレスポンス後に 1 通ずつ間隔を空けて送る。失敗はログだけ（宛先は userId で残す） */
+function sendMailsLater(ctx: AppContext, mails: { userId: string; mail: MailMessage }[]): void {
+	if (mails.length === 0) return;
+	if (mails.length > MAX_NOTIFICATION_MAILS) {
+		console.error(
+			`[mail] notification: ${mails.length - MAX_NOTIFICATION_MAILS} mails skipped (over ${MAX_NOTIFICATION_MAILS} per request)`
+		);
+	}
+	ctx.waitUntil(
+		(async () => {
+			for (const [i, { userId, mail }] of mails.slice(0, MAX_NOTIFICATION_MAILS).entries()) {
+				if (i > 0) await new Promise((r) => setTimeout(r, NOTIFICATION_MAIL_INTERVAL_MS));
+				try {
+					await ctx.mailer.send(mail);
+				} catch (e) {
+					console.error(`[mail] notification ${userId} failed`, e);
+				}
+			}
+		})()
+	);
+}
+
 /** 1 通をレスポンス後に送る。失敗はログだけ */
 function sendLater(
 	ctx: AppContext,
@@ -116,21 +156,29 @@ function sendLater(
 	);
 }
 
-/** オンにしている受信者に DM を送る。送信はレスポンス後に行う */
-async function sendDirectMessages(
+/** Slack をオンにしている受信者に DM を、担当・メンションの受信者にメールを送る。送信はレスポンス後に行う */
+async function sendExternal(
 	ctx: AppContext,
 	input: NotifyInput,
 	priority: Priority,
 	planned: PlannedNotification[]
 ): Promise<void> {
-	const target = await slackLinks(
-		ctx,
-		planned.map((n) => n.userId)
-	);
-	if (!target) return;
-	const statuses = planned.some((n) => n.type === 'status_changed')
-		? await listStatusesOf(ctx.db, input.project.id)
-		: [];
+	const [target, mailUsers] = await Promise.all([
+		slackLinks(
+			ctx,
+			planned.map((n) => n.userId)
+		),
+		emailRecipients(
+			ctx.db,
+			planned.filter((n) => EMAIL_NOTIFICATION_TYPES.has(n.type)).map((n) => n.userId)
+		)
+	]);
+	if (!target && mailUsers.length === 0) return;
+	// ステータス名は Slack の DM にだけ使う（ステータスの変更はメールで送らない）
+	const statuses =
+		target && planned.some((n) => n.type === 'status_changed')
+			? await listStatusesOf(ctx.db, input.project.id)
+			: [];
 	const byUser = new Map(planned.map((n) => [n.userId, n]));
 	const src: DmSource = {
 		baseUrl: ctx.baseUrl,
@@ -140,8 +188,18 @@ async function sendDirectMessages(
 		events: input.events,
 		statuses
 	};
-	for (const l of target.links)
-		sendLater(ctx, target.cfg, l, toDirectMessage(src, byUser.get(l.userId)!));
+	if (target) {
+		for (const l of target.links)
+			sendLater(ctx, target.cfg, l, toDirectMessage(src, byUser.get(l.userId)!));
+	}
+	const accountUrl = `${ctx.baseUrl}/account`;
+	sendMailsLater(
+		ctx,
+		mailUsers.map((u) => ({
+			userId: u.id,
+			mail: notificationMail(u.email, toDirectMessage(src, byUser.get(u.id)!), accountUrl)
+		}))
+	);
 }
 
 /** 更新が確定した後に呼ぶ。失敗しても元の操作には影響させない */
@@ -166,7 +224,7 @@ export async function notify(ctx: AppContext, input: NotifyInput): Promise<void>
 			).map((part) => ctx.db.insert(notification).values(part));
 			await ctx.db.batch([first, ...rest]);
 		}
-		await sendDirectMessages(ctx, input, facts.priority, planned);
+		await sendExternal(ctx, input, facts.priority, planned);
 	} catch (e) {
 		console.error('[notify] failed', e);
 	}
@@ -250,24 +308,39 @@ export async function notifyBulk(ctx: AppContext, input: BulkNotifyInput): Promi
 			}))
 		).map((part) => ctx.db.insert(notification).values(part));
 		await ctx.db.batch([first, ...rest]);
-		await sendBulkDirectMessages(ctx, input.project, rows);
+		await sendBulkExternal(ctx, input.project, rows);
 	} catch (e) {
 		console.error('[notify] bulk failed', e);
 	}
 }
 
-async function sendBulkDirectMessages(
+async function sendBulkExternal(
 	ctx: AppContext,
 	project: BulkNotifyInput['project'],
 	rows: BulkRow[]
 ): Promise<void> {
-	const target = await slackLinks(
-		ctx,
-		rows.map((r) => r.userId)
-	);
-	if (!target) return;
+	const [target, mailUsers] = await Promise.all([
+		slackLinks(
+			ctx,
+			rows.map((r) => r.userId)
+		),
+		emailRecipients(
+			ctx.db,
+			rows.filter((r) => EMAIL_NOTIFICATION_TYPES.has(r.type)).map((r) => r.userId)
+		)
+	]);
 	const byUser = new Map(rows.map((r) => [r.userId, r]));
 	const src = { baseUrl: ctx.baseUrl, project, actorName: ctx.actor.name };
-	for (const l of target.links)
-		sendLater(ctx, target.cfg, l, bulkDirectMessage(src, byUser.get(l.userId)!));
+	if (target) {
+		for (const l of target.links)
+			sendLater(ctx, target.cfg, l, bulkDirectMessage(src, byUser.get(l.userId)!));
+	}
+	const accountUrl = `${ctx.baseUrl}/account`;
+	sendMailsLater(
+		ctx,
+		mailUsers.map((u) => ({
+			userId: u.id,
+			mail: notificationMail(u.email, bulkDirectMessage(src, byUser.get(u.id)!), accountUrl)
+		}))
+	);
 }

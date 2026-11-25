@@ -5,6 +5,7 @@
 	import IssueTypeTag from '#lib/components/IssueTypeTag.svelte';
 	import PriorityPill from '#lib/components/PriorityPill.svelte';
 	import {
+		DONE_STATUS,
 		colorFor,
 		colorVar,
 		formatDue,
@@ -31,6 +32,15 @@
 		Object.fromEntries(Object.entries(c).map(([s, items]) => [s, [...items]]));
 
 	let columns = $derived(clone(board.columns));
+	/** 列の課題の数。上限で出していない分も含め、ドラッグ中の出入りも反映する */
+	const total = (status: Status) =>
+		board.totals[status] - board.columns[status].length + columns[status].length;
+	/** 上限で出していない課題の数 */
+	const hidden = (status: Status) => board.totals[status] - board.columns[status].length;
+	/** その列のステータス（とマイルストーン）で絞り込んだ課題一覧 */
+	const listHref = (status: Status) =>
+		`/projects/${data.project.key}?status=${encodeURIComponent(status)}` +
+		(ref.milestone ? `&milestone=${encodeURIComponent(ref.milestone)}` : '');
 	let snapshot: Columns | null = null;
 	let message = $state<string | null>(null);
 	let pending = $state(false);
@@ -145,7 +155,7 @@
 			>
 				<h2 class="column-head">
 					{name}
-					<span class="count">{columns[status].length}</span>
+					<span class="count">{total(status)}</span>
 				</h2>
 				<ul
 					use:dndzone={{
@@ -231,6 +241,13 @@
 						</li>
 					{/each}
 				</ul>
+				{#if hidden(status) > 0}
+					<a class="more" href={listHref(status)}>
+						{status === DONE_STATUS
+							? `以前に完了した ${hidden(status)} 件を一覧で見る`
+							: `ほか ${hidden(status)} 件を一覧で見る`}
+					</a>
+				{/if}
 			</section>
 		{/each}
 	</div>
@@ -302,6 +319,16 @@
 		gap: 10px;
 		min-height: 80px;
 		border-radius: var(--radius-sm);
+	}
+	.more {
+		padding: 4px;
+		text-align: center;
+		font-size: 0.8125rem;
+		color: var(--muted-foreground);
+	}
+	.more:hover {
+		color: var(--foreground);
+		text-decoration: underline;
 	}
 	.card-item {
 		background: var(--card);

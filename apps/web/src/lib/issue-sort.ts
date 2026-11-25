@@ -39,9 +39,13 @@ export function isDefaultIssueSort(sort: IssueSort): boolean {
 	return sort.key === DEFAULT_ISSUE_SORT.key && sort.order === DEFAULT_ISSUE_SORT.order;
 }
 
-/** 絞り込みの条件を残したまま、並びだけを差し替えたクエリ文字列（先頭の ? 付き。空なら ''） */
+/**
+ * 絞り込みの条件を残したまま、並びだけを差し替えたクエリ文字列（先頭の ? 付き。空なら ''）。
+ * 並びが変わると何ページ目かの意味も変わるので、ページは 1 ページ目に戻す
+ */
 export function withIssueSort(params: { toString(): string }, sort: IssueSort): string {
 	const next = new URLSearchParams(params.toString());
+	next.delete('page');
 	next.delete('sort');
 	next.delete('order');
 	if (!isDefaultIssueSort(sort)) {

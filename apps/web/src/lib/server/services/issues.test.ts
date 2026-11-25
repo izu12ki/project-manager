@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
 import { eq, sql } from 'drizzle-orm';
+import { generateNKeysBetween } from 'fractional-indexing';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { project as projectTable, issue as issueTable, user as userTable } from '../db/schema';
@@ -14,6 +15,7 @@ import {
 	seedUser
 } from '../test-utils';
 import {
+	BOARD_LIMIT,
 	createIssue,
 	deleteIssue,
 	getIssue,
@@ -23,7 +25,10 @@ import {
 	listIssues,
 	listTimeline,
 	moveIssue,
-	updateIssue
+	SCHEDULED_LIMIT,
+	UNSCHEDULED_LIMIT,
+	updateIssue,
+	type TimelineView
 } from './issues';
 import { addComment, deleteComment, listComments } from './comments';
 import { getIssueDetailRows } from './issue-detail';
@@ -210,6 +215,87 @@ describe('issues', () => {
 		const { columns: board } = await listBoard(as(member), 'ACME');
 		expect(board.in_review.map((i) => i.title)).toEqual(['B']);
 		expect(board.todo.map((i) => i.title)).toEqual(['A', 'C']);
+	});
+
+	describe('カンバンの列の上限', () => {
+		/**
+		 * 課題を直接入れる（createIssue を数百回呼ぶと遅い）。position は列の中で numbers の順（reverse なら逆順）、
+		 * updatedAt は番号の大きいものほど新しい
+		 */
+		async function insertMany(numbers: number[], status: string, reverse = false) {
+			const p = await requireProject(as(admin), 'ACME');
+			const keys = generateNKeysBetween(null, null, numbers.length);
+			if (reverse) keys.reverse();
+			const rows = numbers.map((n, i) => ({
+				id: `bulk-${n}`,
+				projectId: p.id,
+				number: n,
+				title: `課題 ${n}`,
+				status,
+				reporterId: admin.id,
+				position: keys[i],
+				updatedAt: new Date(Date.UTC(2026, 0, 1) + n * 60_000)
+			}));
+			// D1 の 1 文の変数は 100 個まで
+			for (let i = 0; i < rows.length; i += 5)
+				await db.insert(issueTable).values(rows.slice(i, i + 5));
+			await db
+				.update(projectTable)
+				.set({ nextIssueNumber: Math.max(...numbers) + 1 })
+				.where(eq(projectTable.id, p.id));
+		}
+		const range = (from: number, to: number) =>
+			Array.from({ length: to - from + 1 }, (_, i) => from + i);
+
+		it('完了の列は最近更新した課題を上限まで、それ以外の列は上から上限まで出し、総数も返す', async () => {
+			await insertMany(range(1, BOARD_LIMIT.other + 5), 'todo');
+			// 完了の列の position は番号と逆順（新しいものほど上）にして、選ぶ基準が position でないことを確かめる
+			const done = range(1001, 1000 + BOARD_LIMIT.done + 10);
+			await insertMany(done, 'done', true);
+			await insertMany([2001, 2002], 'in_progress');
+			const { columns, totals } = await listBoard(as(member), 'ACME');
+			expect(columns.todo.map((i) => i.number)).toEqual(range(1, BOARD_LIMIT.other));
+			// 最近更新した 30 件を、列の並び（position）で出す
+			expect(columns.done.map((i) => i.number)).toEqual(done.slice(10).reverse());
+			expect(columns.in_progress.map((i) => i.number)).toEqual([2001, 2002]);
+			expect(totals).toEqual({
+				todo: BOARD_LIMIT.other + 5,
+				in_progress: 2,
+				in_review: 0,
+				done: BOARD_LIMIT.done + 10
+			});
+		});
+
+		it('総数は絞り込んだ後の数。削除した課題は数えない', async () => {
+			await createIssue(as(admin), 'ACME', { title: 'A' });
+			await createIssue(as(admin), 'ACME', { title: 'B' });
+			await deleteIssue(as(admin), 'ACME', 2);
+			await createMilestone(as(admin), 'ACME', { name: 'v1' });
+			const [v1] = await listMilestones(as(admin), 'ACME');
+			await createIssue(as(admin), 'ACME', { title: 'C', milestoneId: v1.id });
+			expect((await listBoard(as(member), 'ACME')).totals.todo).toBe(2);
+			expect((await listBoard(as(member), 'ACME', { milestoneId: v1.id })).totals.todo).toBe(1);
+		});
+
+		it('後ろの課題を指定しない移動は、見えていない課題も含めた列の末尾に入る', async () => {
+			await insertMany(range(1, BOARD_LIMIT.other + 5), 'todo');
+			await createIssue(as(member), 'ACME', { title: '新しい課題', status: 'in_progress' });
+			const { columns } = await listBoard(as(member), 'ACME');
+			const moving = columns.in_progress[0];
+			// 見えている最後の課題の後へ落としても、上限で出していない 5 件の後ろに入る
+			await moveIssue(as(member), 'ACME', {
+				issueId: moving.id,
+				status: 'todo',
+				beforeId: columns.todo.at(-1)!.id,
+				afterId: ''
+			});
+			const all = await listIssues(as(member), 'ACME', { status: 'todo' });
+			const byPosition = [...all].sort((a, b) =>
+				a.position < b.position ? -1 : a.position > b.position ? 1 : a.number - b.number
+			);
+			expect(byPosition.at(-1)?.number).toBe(moving.number);
+			expect(new Set(all.map((i) => i.position)).size).toBe(all.length);
+		});
 	});
 
 	it('カンバン移動: 隣接 ID が別の列のもの（古い画面）なら validation', async () => {
@@ -728,6 +814,123 @@ describe('issues', () => {
 			expect(t.scheduled.map((i) => i.number)).toEqual([1, 2, 5]);
 			expect(t.scheduled[0]).toMatchObject({ startDate: '2026-10-06', dueDate: '2026-10-08' });
 			expect(t.unscheduled.map((i) => i.number)).toEqual([3]);
+		});
+
+		it('完了した課題は表示の開始日より前に終わったものを除く。未完了の課題は残す', async () => {
+			const from = '2026-10-05';
+			await createIssue(as(member), 'ACME', {
+				title: '前に完了',
+				status: 'done',
+				dueDate: '2026-10-04'
+			});
+			await createIssue(as(member), 'ACME', {
+				title: '開始日だけで前に完了',
+				status: 'done',
+				startDate: '2026-10-01'
+			});
+			await createIssue(as(member), 'ACME', {
+				title: '開始日の当日に完了',
+				status: 'done',
+				dueDate: '2026-10-05'
+			});
+			await createIssue(as(member), 'ACME', {
+				title: '開始日をまたいで完了',
+				status: 'done',
+				startDate: '2026-09-20',
+				dueDate: '2026-10-10'
+			});
+			await createIssue(as(member), 'ACME', { title: '期限切れで未完了', dueDate: '2026-09-01' });
+			expect(
+				(await listTimeline(as(member), 'ACME', { from })).scheduled.map((i) => i.number)
+			).toEqual([3, 4, 5]);
+			// 開始日を指定しなければすべて
+			expect((await listTimeline(as(member), 'ACME')).scheduled.map((i) => i.number)).toEqual([
+				1, 2, 3, 4, 5
+			]);
+		});
+
+		it('絞り込みはサーバーで行い、未スケジュールにも効く', async () => {
+			await createCategory(as(admin), 'ACME', { name: 'X' });
+			const [x] = await listCategories(as(admin), 'ACME');
+			await createIssue(as(member), 'ACME', {
+				title: 'A',
+				dueDate: '2026-10-10',
+				assigneeIds: [guest.id],
+				categoryIds: [x.id]
+			});
+			await createIssue(as(member), 'ACME', { title: 'B', dueDate: '2026-10-10' });
+			await createIssue(as(member), 'ACME', { title: 'C', assigneeIds: [guest.id] });
+			await createIssue(as(member), 'ACME', { title: 'D' });
+			await createIssue(as(member), 'ACME', {
+				title: 'E',
+				status: 'in_progress',
+				dueDate: '2026-10-11'
+			});
+			const numbers = async (filters: TimelineView['filters']) => {
+				const t = await listTimeline(as(member), 'ACME', { filters });
+				return [
+					t.scheduled.map((i) => i.number),
+					t.unscheduled.map((i) => i.number),
+					t.unscheduledTotal
+				];
+			};
+			expect(await numbers({})).toEqual([[1, 2, 5], [4, 3], 2]);
+			expect(await numbers({ assigneeId: guest.id })).toEqual([[1], [3], 1]);
+			expect(await numbers({ assigneeId: 'none' })).toEqual([[2, 5], [4], 1]);
+			expect(await numbers({ categoryId: x.id })).toEqual([[1], [], 0]);
+			expect(await numbers({ status: 'in_progress' })).toEqual([[5], [], 0]);
+			expect(await numbers({ status: 'open' })).toEqual([[1, 2, 5], [4, 3], 2]);
+		});
+
+		it(`日付のある課題は表示の開始日に近い順に ${SCHEDULED_LIMIT} 件まで。総数は別に返す`, async () => {
+			const p = await requireProject(as(admin), 'ACME');
+			const from = '2026-10-05';
+			// #1〜#(上限+2) は from から番号の日数だけ前に期限があり、#(上限+3) は from をまたぐ
+			const n = SCHEDULED_LIMIT + 3;
+			const rows = Array.from({ length: n }, (_, i) => {
+				const number = i + 1;
+				const due = new Date(Date.UTC(2026, 9, 5) - number * 86_400_000).toISOString().slice(0, 10);
+				return {
+					id: `s-${number}`,
+					projectId: p.id,
+					number,
+					title: `日付あり ${number}`,
+					reporterId: admin.id,
+					position: `a${number}`,
+					...(number === n ? { startDate: '2026-09-01', dueDate: '2026-10-20' } : { dueDate: due })
+				};
+			});
+			// D1 の 1 文の変数は 100 個まで
+			for (let i = 0; i < rows.length; i += 5)
+				await db.insert(issueTable).values(rows.slice(i, i + 5));
+			const t = await listTimeline(as(member), 'ACME', { from });
+			expect(t.scheduledTotal).toBe(n);
+			// from をまたぐ #n と、期限の近い #1〜#(上限-1)。遠い 3 件は出さない。並びは番号順
+			expect(t.scheduled.map((i) => i.number)).toEqual([
+				...Array.from({ length: SCHEDULED_LIMIT - 1 }, (_, i) => i + 1),
+				n
+			]);
+		});
+
+		it(`未スケジュールは新しい順に ${UNSCHEDULED_LIMIT} 件まで。総数は別に返す`, async () => {
+			const p = await requireProject(as(admin), 'ACME');
+			const n = UNSCHEDULED_LIMIT + 3;
+			const rows = Array.from({ length: n }, (_, i) => ({
+				id: `u-${i + 1}`,
+				projectId: p.id,
+				number: i + 1,
+				title: `日付なし ${i + 1}`,
+				reporterId: admin.id,
+				position: `a${i + 1}`
+			}));
+			// D1 の 1 文の変数は 100 個まで
+			for (let i = 0; i < rows.length; i += 5)
+				await db.insert(issueTable).values(rows.slice(i, i + 5));
+			const t = await listTimeline(as(member), 'ACME');
+			expect(t.unscheduledTotal).toBe(n);
+			expect(t.unscheduled.map((i) => i.number)).toEqual(
+				Array.from({ length: UNSCHEDULED_LIMIT }, (_, i) => n - i)
+			);
 		});
 
 		it('canEdit: ゲストも全課題 true、アーカイブ済みは全員 false', async () => {

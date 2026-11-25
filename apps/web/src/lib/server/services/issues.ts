@@ -320,8 +320,15 @@ export async function listIssues(
 }
 
 /**
+ * カンバンの列に出すカードの上限。完了の列は最近更新したもの、それ以外の列は上（position の小さい方）から。
+ * Backlog から移した数千件のプロジェクトでも、1 回の表示の CPU 時間が増え続けないようにする
+ */
+export const BOARD_LIMIT = { done: 30, other: 50 } as const;
+
+/**
  * カンバン（remote query の getBoard）に要るもの。1 回の batch（D1 への 1 往復）で引く。
  * 列はプロジェクトのステータス順。絞り込んだ場合も、カード間の並び順は全体の position を保つ。
+ * 各列は BOARD_LIMIT までに絞り、totals に列ごとの課題の数（絞り込んだ後、上限で切る前）を返す
  */
 export async function listBoard(
 	ctx: AppContext,
@@ -330,62 +337,149 @@ export async function listBoard(
 ): Promise<{
 	statuses: StatusDef[];
 	columns: Record<Status, IssueListItem[]>;
+	totals: Record<Status, number>;
 	milestones: MilestoneRow[];
 }> {
 	const { db } = ctx;
 	const of = ofProject(db, key);
-	const [access, statuses, rows, milestones] = await ctx.readBatch([
+	const where = filterConds(key, of, { ...filters, status: undefined });
+	// 列ごとに順位を付けて上限までを残す。副問い合わせの "issue" は内側の from を指す
+	const shown = sql`${issue.id} in (
+		select id from (
+			select ${issue.id} as id, ${issue.status} as status, row_number() over (
+				partition by ${issue.status}
+				order by case when ${issue.status} = ${DONE_STATUS} then -${issue.updatedAt} else 0 end,
+					${issue.position}, ${issue.number}
+			) as rn
+			from ${issue} where ${where ?? sql`1 = 1`}
+		) where rn <= case when status = ${DONE_STATUS} then ${BOARD_LIMIT.done} else ${BOARD_LIMIT.other} end
+	)`;
+	const [access, statuses, rows, counts, milestones] = await ctx.readBatch([
 		projectAccessQuery(ctx, key),
 		statusesQuery(db, of),
-		issueListQuery(db, filterConds(key, of, { ...filters, status: undefined }), [
-			asc(issue.position),
-			asc(issue.number)
-		]),
+		issueListQuery(db, and(where, shown), [asc(issue.position), asc(issue.number)]),
+		db
+			.select({ status: issue.status, n: sql<number>`count(*)`.as('board_count') })
+			.from(issue)
+			.where(where)
+			.groupBy(issue.status),
 		milestonesQuery(db, of)
 	]);
 	checkProjectAccess(ctx, access);
 	const columns: Record<Status, IssueListItem[]> = Object.fromEntries(
 		statuses.map((s) => [s.key, [] as IssueListItem[]])
 	);
+	const totals: Record<Status, number> = Object.fromEntries(statuses.map((s) => [s.key, 0]));
 	// 定義が消えたステータスの課題は初期ステータスの列に出す
-	for (const r of toIssueListItems(rows)) (columns[r.status] ?? columns[INITIAL_STATUS])?.push(r);
-	return { statuses, columns, milestones };
+	const columnOf = (status: Status) => (status in columns ? status : INITIAL_STATUS);
+	for (const r of toIssueListItems(rows)) columns[columnOf(r.status)]?.push(r);
+	for (const { status, n } of counts) {
+		const c = columnOf(status);
+		if (c in totals) totals[c] += n;
+	}
+	return { statuses, columns, totals, milestones };
 }
 
 export type TimelineItem = IssueListItem & { canEdit: boolean };
 
+/** タイムラインに行を出す課題（日付のある課題）の数。表示の開始日に近いものから */
+export const SCHEDULED_LIMIT = 300;
+/** タイムラインの「未スケジュール」に出す課題の数。新しいものから */
+export const UNSCHEDULED_LIMIT = 50;
+
+export interface TimelineView {
+	/**
+	 * 表示の開始日（'YYYY-MM-DD'）。完了した課題のうち、この日より前に終わったもの（期限、なければ開始日が前）は返さない。
+	 * 省略すると完了した課題もすべて返す
+	 */
+	from?: string;
+	filters?: Pick<IssueFilters, 'status' | 'assigneeId' | 'categoryId' | 'milestoneId'>;
+}
+
 /**
  * タイムライン（remote query の getTimeline）に要るもの。1 回の batch（D1 への 1 往復）で引く。
- * 日付のある課題はすべて（完了を含む）、日付のない課題は未完了のものだけ返す。
- * 表示範囲では絞らない（範囲外の課題にも行を出すため）。並べ替え・グループ化はクライアント側で行う。
+ * 日付のある課題（完了したものは view.from 以降に終わるものだけ。view.from に近い順に SCHEDULED_LIMIT 件まで）と、
+ * 日付がなく未完了の課題（新しい順に UNSCHEDULED_LIMIT 件まで）を、絞り込んで返す。*Total は上限で切る前の数。
+ * 未完了の課題は表示範囲の外でも返す（範囲外の課題にも行を出すため）。並べ替え・グループ化はクライアント側で行う。
+ * Backlog から移した数千件のプロジェクトでは、課題をすべて返すと 1 回の表示の CPU 時間が 100ms を超える
  */
 export async function listTimeline(
 	ctx: AppContext,
-	key: string
+	key: string,
+	view: TimelineView = {}
 ): Promise<{
 	scheduled: TimelineItem[];
+	scheduledTotal: number;
 	unscheduled: TimelineItem[];
+	unscheduledTotal: number;
 	milestones: MilestoneRow[];
 	categories: CategoryRow[];
 	assignees: Awaited<ReturnType<typeof assignableUsersQuery>>;
 }> {
 	const { db } = ctx;
 	const of = ofProject(db, key);
-	const [access, rows, milestones, categories, assignees] = await ctx.readBatch([
+	const where = filterConds(key, of, view.filters ?? {});
+	const scheduledWhere = and(
+		where,
+		or(isNotNull(issue.startDate), isNotNull(issue.dueDate)),
+		view.from
+			? or(
+					ne(issue.status, DONE_STATUS),
+					sql`coalesce(${issue.dueDate}, ${issue.startDate}) >= ${view.from}`
+				)
+			: undefined
+	);
+	// 開始日から期限までの間と view.from との隔たり（日数）。間に view.from を含めば 0。view.from がなければ番号順
+	const distance = view.from
+		? sql`max(0, julianday(coalesce(${issue.startDate}, ${issue.dueDate})) - julianday(${view.from}),
+			julianday(${view.from}) - julianday(coalesce(${issue.dueDate}, ${issue.startDate})))`
+		: sql`${issue.number}`;
+	const scheduledShown = sql`${issue.id} in (
+		select ${issue.id} from ${issue} where ${scheduledWhere ?? sql`1 = 1`}
+		order by ${distance}, ${issue.number} limit ${SCHEDULED_LIMIT}
+	)`;
+	const unscheduledWhere = and(
+		where,
+		isNull(issue.startDate),
+		isNull(issue.dueDate),
+		ne(issue.status, DONE_STATUS)
+	);
+	const [
+		access,
+		scheduledRows,
+		[{ scheduledTotal }],
+		unscheduledRows,
+		[{ unscheduledTotal }],
+		milestones,
+		categories,
+		assignees
+	] = await ctx.readBatch([
 		projectAccessQuery(ctx, key),
-		issueListQuery(db, filterConds(key, of, {}), [asc(issue.number)]),
+		issueListQuery(db, and(scheduledWhere, scheduledShown), [asc(issue.number)]),
+		db
+			.select({ scheduledTotal: sql<number>`count(*)`.as('scheduled_total') })
+			.from(issue)
+			.where(scheduledWhere),
+		issueListQuery(db, unscheduledWhere, [desc(issue.number)]).limit(UNSCHEDULED_LIMIT),
+		db
+			.select({ unscheduledTotal: sql<number>`count(*)`.as('unscheduled_total') })
+			.from(issue)
+			.where(unscheduledWhere),
 		milestonesQuery(db, of),
 		categoriesQuery(db, of),
 		assignableUsersQuery(db, of)
 	]);
 	const p = checkProjectAccess(ctx, access);
-	const items = toIssueListItems(rows).map((r) => ({
-		...r,
-		canEdit: !p.archivedAt && can(ctx.actor, 'issue:edit', { reporterId: r.reporterId })
-	}));
+	const withCanEdit = (rows: typeof scheduledRows) =>
+		toIssueListItems(rows).map((r) => ({
+			...r,
+			canEdit: !p.archivedAt && can(ctx.actor, 'issue:edit', { reporterId: r.reporterId })
+		}));
 	return {
-		scheduled: items.filter((i) => i.startDate || i.dueDate),
-		unscheduled: items.filter((i) => !i.startDate && !i.dueDate && i.status !== DONE_STATUS),
+		scheduled: withCanEdit(scheduledRows),
+		scheduledTotal,
+		unscheduled: withCanEdit(unscheduledRows),
+		unscheduledTotal,
 		milestones,
 		categories,
 		assignees
@@ -422,10 +516,15 @@ export async function getIssue(ctx: AppContext, key: string, number: number) {
 }
 
 /**
- * 親にできる課題（新しい順）。子課題は 1 階層までなので、子課題でない課題だけ。
- * 削除したものと、exceptNumber（親を設定しようとしている課題自身）は除く
+ * 親課題の欄の候補に出す課題の数。番号を入力すれば、候補にない課題も親にできる。
+ * 課題の多いプロジェクトで、起票の画面を開くたびに全件を読まないようにする
  */
-/** 親課題の候補（子課題でない、削除していない課題を新しい順に）。batch にも入れられる */
+export const PARENT_CANDIDATE_LIMIT = 100;
+
+/**
+ * 親課題の候補（子課題でない、削除していない課題を新しい順に PARENT_CANDIDATE_LIMIT 件まで）。batch にも入れられる。
+ * 子課題は 1 階層までなので、子課題でない課題だけ。exceptNumber（親を設定しようとしている課題自身）は除く
+ */
 export function parentCandidatesQuery(db: DB, of: ProjectCond, exceptNumber?: number) {
 	return db
 		.select({ number: issue.number, title: issue.title })
@@ -438,7 +537,23 @@ export function parentCandidatesQuery(db: DB, of: ProjectCond, exceptNumber?: nu
 				exceptNumber === undefined ? undefined : ne(issue.number, exceptNumber)
 			)
 		)
-		.orderBy(desc(issue.number));
+		.orderBy(desc(issue.number))
+		.limit(PARENT_CANDIDATE_LIMIT);
+}
+
+/** 番号で指定した課題が親にできるなら、その番号とタイトル（なければ空の配列）。batch にも入れられる */
+export function parentByNumberQuery(db: DB, of: ProjectCond, number: number) {
+	return db
+		.select({ number: issue.number, title: issue.title })
+		.from(issue)
+		.where(
+			and(
+				of(issue.projectId),
+				eq(issue.number, number),
+				isNull(issue.parentId),
+				isNull(issue.deletedAt)
+			)
+		);
 }
 
 export async function listParentCandidates(ctx: AppContext, key: string, exceptNumber?: number) {
@@ -655,6 +770,22 @@ export async function moveIssue(ctx: AppContext, key: string, input: unknown): P
 	const afterId = emptyToNull(data.afterId);
 	let lo = await neighbor(beforeId);
 	let hi = await neighbor(afterId);
+	if (!afterId) {
+		// 後ろの課題がなければ列の末尾へ。カンバンは列の一部しか出さないことがある（BOARD_LIMIT・絞り込み）ので、
+		// 見えている最後の課題の直後ではなく、列のすべての課題の後に置く
+		const [last] = await ctx.db
+			.select({ max: sql<string | null>`max(${issue.position})` })
+			.from(issue)
+			.where(
+				and(
+					eq(issue.projectId, p.id),
+					eq(issue.status, data.status),
+					ne(issue.id, cur.id),
+					isNull(issue.deletedAt)
+				)
+			);
+		if (last?.max != null && (lo === null || last.max > lo)) lo = last.max;
+	}
 	if (lo !== null && hi !== null) {
 		if (lo > hi) throw new AppError('validation', STALE);
 		if (lo === hi) {

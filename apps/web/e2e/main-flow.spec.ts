@@ -457,7 +457,30 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 		'/projects/ACME/attachments/00000000-0000-7000-8000-000000000000'
 	);
 	expect(missing.status()).toBe(404);
-	await logout(page);
+
+	// 5c. 別のタブでログアウトした後、開いたままの画面でリンクを押すと、ログイン画面をページごと読み込み直す
+	// （ページ内の遷移のままだと、ログイン中のサイドバーが残ったり、課題の詳細が 500 になったりした）
+	async function logoutInAnotherTab() {
+		const other = await page.context().newPage();
+		await other.goto('/projects/ACME');
+		await logout(other);
+		await other.close();
+	}
+	// 画面のデータ（__data.json）を読む遷移: ボード → 一覧
+	await page.goto('/projects/ACME/board');
+	await logoutInAnotherTab();
+	await page.getByRole('link', { name: '一覧' }).click();
+	await expect(page).toHaveURL(/\/login\?redirectTo=%2Fprojects%2FACME$/);
+	await expect(page.getByRole('heading', { name: 'ログイン' })).toBeVisible();
+	await expect(page.getByTestId('user-menu-trigger')).toBeHidden();
+	// 画面の関数（remote functions）で読む遷移: 一覧 → 課題の詳細
+	await login(page, 'admin@example.com');
+	await page.goto('/projects/ACME');
+	await logoutInAnotherTab();
+	await page.getByRole('link', { name: 'ログインできない' }).click();
+	await expect(page).toHaveURL(/\/login\?redirectTo=%2Fprojects%2FACME%2Fissues%2F1$/);
+	await expect(page.getByRole('heading', { name: 'ログイン' })).toBeVisible();
+	await expect(page.getByTestId('user-menu-trigger')).toBeHidden();
 
 	// 6. メンバーが登録し、ゲストを担当者にする
 	await acceptInvite(page, memberUrl, '開発 花子');

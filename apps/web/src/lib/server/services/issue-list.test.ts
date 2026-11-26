@@ -215,23 +215,25 @@ describe('getIssueListRows', () => {
 		const sort: IssueSort = { key: 'number', order: 'asc' };
 		const numbers = (rows: { issues: { number: number }[] }) => rows.issues.map((i) => i.number);
 
-		const first = await getIssueListRows(as(member), 'ACME', {}, sort);
-		expect(first.total).toBe(123);
-		expect(numbers(first)).toEqual([1, 2, 3, ...Array.from({ length: 47 }, (_, i) => i + 5)]);
-		expect(numbers(await getIssueListRows(as(member), 'ACME', {}, sort, 2))).toEqual(
-			Array.from({ length: ISSUE_PAGE_SIZE }, (_, i) => i + 52)
-		);
-		const third = await getIssueListRows(as(member), 'ACME', {}, sort, 3);
-		expect(numbers(third)).toEqual(Array.from({ length: 23 }, (_, i) => i + 102));
+		const all = [1, 2, 3, ...Array.from({ length: 120 }, (_, i) => i + 5)];
+		const pages = Math.ceil(all.length / ISSUE_PAGE_SIZE);
+		for (let page = 1; page <= pages; page++) {
+			const rows = await getIssueListRows(as(member), 'ACME', {}, sort, page);
+			expect(rows.total).toBe(123);
+			expect(numbers(rows), `page ${page}`).toEqual(
+				all.slice((page - 1) * ISSUE_PAGE_SIZE, page * ISSUE_PAGE_SIZE)
+			);
+		}
 		// 最後のページを越えると空。総数は変わらない（ページの補正は呼び出し側で行う）
-		const beyond = await getIssueListRows(as(member), 'ACME', {}, sort, 4);
+		const beyond = await getIssueListRows(as(member), 'ACME', {}, sort, pages + 1);
 		expect(beyond.issues).toEqual([]);
 		expect(beyond.total).toBe(123);
 
 		// 総数は絞り込みの後の件数（#5 からの偶数番目 60 件が todo、#1・#3 は todo、#2 は in_progress）
-		const todo = await getIssueListRows(as(member), 'ACME', { status: 'todo' }, sort, 2);
+		const todoPages = Math.ceil(62 / ISSUE_PAGE_SIZE);
+		const todo = await getIssueListRows(as(member), 'ACME', { status: 'todo' }, sort, todoPages);
 		expect(todo.total).toBe(62);
-		expect(todo.issues).toHaveLength(12);
+		expect(todo.issues).toHaveLength(62 - (todoPages - 1) * ISSUE_PAGE_SIZE);
 	});
 
 	it('reads everything in one round trip', async () => {

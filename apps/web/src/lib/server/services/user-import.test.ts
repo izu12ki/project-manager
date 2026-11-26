@@ -293,6 +293,25 @@ describe('user-import', () => {
 		expect(err).toHaveBeenCalledWith('invitation mail failed', expect.any(Error));
 	});
 
+	it('Cloudflare の無料プランで確認していない宛先に送れなかったら、そのことを結果に入れる', async () => {
+		const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+		onTestFinished(() => err.mockRestore());
+		const restricted = createTestBase(db, {
+			mailer: {
+				send: async () => {
+					throw Object.assign(new Error('recipient not allowed by plan'), {
+						code: 'E_RECIPIENT_PLAN_RESTRICTED'
+					});
+				}
+			}
+		});
+		const result = await importUsers(ctxOf(restricted, admin), {
+			rows: [send(row({ email: 'a@example.com' }))]
+		});
+		expect(result.mailFailed).toHaveLength(1);
+		expect(result.mailRestricted).toBe(true);
+	});
+
 	it('途中の人の招待に失敗しても、残りの人を招待し、作れた招待のメールを送る', async () => {
 		const err = vi.spyOn(console, 'error').mockImplementation(() => {});
 		onTestFinished(() => err.mockRestore());

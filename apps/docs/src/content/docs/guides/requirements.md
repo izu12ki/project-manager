@@ -9,7 +9,7 @@ description: デプロイの前に用意するアカウントと、手元の PC 
 |---|---|---|---|
 | [Cloudflare](https://dash.cloudflare.com/sign-up) | **必須** | アプリの実行環境（Workers）とデータベース（D1） | 無料プランで動く（下記「Workers のプラン」参照） |
 | Cloudflare R2 | **必須** | 添付ファイルの保存 | 10GB まで無料。初回はダッシュボードの「R2」で利用を開始する |
-| [SMTP2GO](https://www.smtp2go.com)、[Resend](https://resend.com)、Cloudflare Email Sending のどれか | 任意 | 招待・パスワードリセット・通知のメールの送信 | SMTP2GO・Resend は無料枠あり。Email Sending は Workers Paid プランのみ（月 3,000 通まで含まれる。送信元ドメインの DNS を Cloudflare で管理している場合）（[メール送信の設定](/guides/mail/)） |
+| [SMTP2GO](https://www.smtp2go.com)、[Resend](https://resend.com)、Cloudflare Email Sending のどれか | 任意 | 招待・パスワードリセット・通知のメールの送信 | SMTP2GO・Resend は無料枠あり。Email Sending は送信元ドメインの DNS を Cloudflare で管理している場合に使え、Workers の無料プランでは Cloudflare アカウントで確認したアドレスにだけ送れる（誰にでも送るには Workers Paid プラン。月 3,000 通まで含まれる）（[メール送信の設定](/guides/mail/)） |
 
 :::note
 Cloudflare アカウントの作成が必要です。このツールは Cloudflare Workers 上でのみ動作します。
@@ -35,7 +35,7 @@ Cloudflare は上限を超えるリクエストをある程度許しますが、
 
 次のどれかに当てはまるなら、Workers Paid プラン（月額 5 ドル〜）にしてください。
 
-- Cloudflare Email Sending でメールを送りたい（[メール送信の設定](/guides/mail/)）
+- Cloudflare Email Sending で、Cloudflare アカウントに登録していないアドレスにもメールを送りたい（[メール送信の設定](/guides/mail/)）
 - 利用者が多く、1 日のリクエスト数や D1 の読み書きが上限に近い
 - 「Worker exceeded resource limits」（1102 エラー）が出る
 

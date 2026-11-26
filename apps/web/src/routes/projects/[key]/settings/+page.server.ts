@@ -113,8 +113,8 @@ export const actions: Actions = {
 		return handleAction(async () => {
 			const ctx = appContext(locals);
 			const p = await requireProject(ctx, params.key);
-			const { url } = await createInvitation(ctx, { email, role, projectIds: [p.id] });
-			return { inviteUrl: url };
+			const { url, mailError } = await createInvitation(ctx, { email, role, projectIds: [p.id] });
+			return { inviteUrl: url, mailError };
 		});
 	},
 	reissue: async ({ request, locals }) => {

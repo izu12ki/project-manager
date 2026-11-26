@@ -13,6 +13,7 @@ import {
 	type BacklogUserRow
 } from '#lib/backlog-users.ts';
 import { decodeCsv } from '#lib/csv.ts';
+import { MAIL_PLAN_RESTRICTED } from '#lib/mail.ts';
 
 const fixture = readFileSync(new URL('./testdata/backlog/users.csv', import.meta.url));
 const KEY_HEADER = '参加中のプロジェクトキー（アーカイブ済みを除く）';
@@ -157,6 +158,21 @@ describe('formatImportResult', () => {
 		);
 	});
 
+	it('Cloudflare の無料プランの宛先の制限で送れなかったら、その説明を足す', () => {
+		expect(
+			formatImportResult({
+				invited: 1,
+				joined: 0,
+				skipped: {},
+				inviteFailed: [],
+				mailFailed: [{ name: '', email: 'c@example.com' }],
+				mailRestricted: true
+			})
+		).toBe(
+			`招待 1 人、参加の追加 0 人、取り込まなかった人 0 人。招待メールを送れなかった人 1 人: c@example.com。${MAIL_PLAN_RESTRICTED}。招待中の一覧の「リンクを再発行」でリンクを渡してください`
+		);
+	});
+
 	it('招待できなかった人がいれば、メールを送れなかった人より前に足す', () => {
 		expect(
 			formatImportResult({
@@ -213,7 +229,8 @@ describe('mergeImportResults', () => {
 					joined: 0,
 					skipped: { unselected: 1, already_joined: 1 },
 					inviteFailed: [],
-					mailFailed: [b]
+					mailFailed: [b],
+					mailRestricted: true
 				}
 			])
 		).toEqual({
@@ -221,7 +238,8 @@ describe('mergeImportResults', () => {
 			joined: 1,
 			skipped: { inactive: 1, unselected: 3, already_joined: 1 },
 			inviteFailed: [a],
-			mailFailed: [b]
+			mailFailed: [b],
+			mailRestricted: true
 		});
 	});
 });

@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { MAIL_PLAN_RESTRICTED } from '#lib/mail.ts';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
 import { invitation, invitationProject, projectMember, user } from '../db/schema';
@@ -31,6 +32,38 @@ describe('invitations', () => {
 		({ id: projectId } = await seedProject(db, { name: 'Acme' }));
 	});
 
+	it('招待メールを送れなかったら、招待はしたうえで画面に出す説明を返す', async () => {
+		const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+		onTestFinished(() => err.mockRestore());
+		const failing = (e: Error) =>
+			createTestBase(db, {
+				mailer: {
+					send: async () => {
+						throw e;
+					}
+				}
+			});
+		const input = (email: string) => ({ email, role: 'member', projectIds: [projectId] });
+
+		// Cloudflare Email Sending の無料プランで、確認していない宛先に送ったとき
+		const restricted = Object.assign(new Error('recipient not allowed by plan'), {
+			code: 'E_RECIPIENT_PLAN_RESTRICTED'
+		});
+		const a = await createInvitation(ctxOf(failing(restricted), admin), input('a@example.com'));
+		expect(a.mailError).toBe(`招待メールを送れませんでした。${MAIL_PLAN_RESTRICTED}。`);
+
+		// それ以外の失敗は理由を出さない（ログで見る）
+		const b = await createInvitation(
+			ctxOf(failing(new Error('500')), admin),
+			input('b@example.com')
+		);
+		expect(b.mailError).toBe('招待メールを送れませんでした。');
+
+		const rows = await db.select({ email: invitation.email }).from(invitation);
+		expect(rows.map((r) => r.email).sort()).toEqual(['a@example.com', 'b@example.com']);
+		expect(err).toHaveBeenCalledWith('invitation mail failed', restricted);
+	});
+
 	it('admin 以外は招待できない', async () => {
 		const member = await seedUser(db, 'member');
 		await expect(
@@ -43,12 +76,13 @@ describe('invitations', () => {
 	});
 
 	it('招待するとリンクを返し、メールを送り、DB にはハッシュだけ保存する', async () => {
-		const { url } = await createInvitation(ctxOf(base, admin), {
+		const { url, mailError } = await createInvitation(ctxOf(base, admin), {
 			email: 'Guest@Example.com',
 			role: 'guest',
 			projectIds: [projectId]
 		});
 		expect(url).toMatch(/^http:\/\/localhost:5173\/invite\/[A-Za-z0-9_-]{43}$/);
+		expect(mailError).toBeNull();
 		expect(base.sent).toHaveLength(1);
 		expect(base.sent[0].to).toBe('guest@example.com');
 		expect(base.sent[0].text).toContain(url);

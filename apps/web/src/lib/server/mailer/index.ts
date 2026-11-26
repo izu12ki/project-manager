@@ -1,3 +1,5 @@
+import { MAIL_PLAN_RESTRICTED } from '#lib/mail.ts';
+
 export interface MailMessage {
 	to: string;
 	subject: string;
@@ -38,6 +40,15 @@ const RESERVED_DOMAIN = /(^|\.)(example\.(com|net|org)|example|test|invalid|loca
 /** 予約ドメイン宛てか。デモやテストの架空ユーザー（example.com など）に送ってバウンスさせないために使う */
 export function isReservedAddress(to: string): boolean {
 	return RESERVED_DOMAIN.test(to.slice(to.lastIndexOf('@') + 1).trim());
+}
+
+/**
+ * 送信の失敗のうち、画面で理由を伝えるもの。Cloudflare Email Sending の無料プランで、確認していない宛先に
+ * 送ったときだけ理由を返す。それ以外は null（原因は Workers のログで見る）
+ */
+export function mailFailureReason(e: unknown): string | null {
+	const code = typeof e === 'object' && e !== null && 'code' in e ? e.code : undefined;
+	return code === 'E_RECIPIENT_PLAN_RESTRICTED' ? MAIL_PLAN_RESTRICTED : null;
 }
 
 /** "名前 <addr>" をバインディングの形 { name, email } にする。名前が無ければアドレスだけ */

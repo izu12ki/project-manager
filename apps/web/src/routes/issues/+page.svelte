@@ -1,12 +1,19 @@
 <script lang="ts">
 	import { CornerDownRight, Inbox } from '@lucide/svelte';
+	import { page } from '$app/state';
 	import IssueTypeTag from '#lib/components/IssueTypeTag.svelte';
+	import Pager from '#lib/components/Pager.svelte';
 	import PriorityPill from '#lib/components/PriorityPill.svelte';
 	import StatusPill from '#lib/components/StatusPill.svelte';
 	import { formatDate, formatDateTime, formatDue, isDueAlert } from '#lib/labels.ts';
+	import { ISSUE_PAGE_SIZE, lastPage, withPage } from '#lib/pagination.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
+	const last = $derived(lastPage(data.total, ISSUE_PAGE_SIZE));
+	const pageHref = (p: number) => `/issues${withPage(page.url.searchParams, p)}`;
+	const firstShown = $derived((data.page - 1) * ISSUE_PAGE_SIZE + 1);
+	const count = (n: number) => n.toLocaleString('ja-JP');
 	// キー列の幅は課題一覧と同じ考え方。プロジェクトごとにキーの長さが違うので、いちばん長いものに合わせる
 	const keyColumnWidth = $derived.by(() => {
 		const chars = data.issues.reduce(
@@ -44,8 +51,12 @@
 			</select>
 		</div>
 		<noscript><button type="submit" class="btn btn-outline">絞り込む</button></noscript>
-		<span class="ml-auto pb-2 text-[0.8125rem] text-muted-foreground">
-			{#if data.truncated}期限の近い {data.limit} 件を表示{:else}{data.issues.length} 件{/if}
+		<span class="ml-auto pb-2 text-[0.8125rem] text-muted-foreground tabular-nums">
+			{#if last > 1}
+				{count(data.total)} 件中 {count(firstShown)}〜{count(firstShown + data.issues.length - 1)} 件
+			{:else}
+				{count(data.total)} 件
+			{/if}
 		</span>
 	</form>
 
@@ -140,6 +151,7 @@
 				{/each}
 			</div>
 		</div>
+		<Pager current={data.page} {last} href={pageHref} />
 	{/if}
 </section>
 

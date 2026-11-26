@@ -1,9 +1,8 @@
 <script lang="ts">
-	import { Calendar, CircleAlert, CornerDownRight, Flag, X } from '@lucide/svelte';
+	import { CircleAlert, X } from '@lucide/svelte';
 	import { page } from '$app/state';
 	import { dndzone, type DndEvent } from 'svelte-dnd-action';
 	import IssueTypeTag from '#lib/components/IssueTypeTag.svelte';
-	import PriorityPill from '#lib/components/PriorityPill.svelte';
 	import {
 		DONE_STATUS,
 		colorFor,
@@ -11,6 +10,8 @@
 		formatDue,
 		isDueAlert,
 		milestoneLabel,
+		PRIORITY_CLASS,
+		PRIORITY_LABEL,
 		type Status
 	} from '#lib/labels.ts';
 	import IssueSheet from '../IssueSheet.svelte';
@@ -175,65 +176,64 @@
 							data-testid={`card-${card.number}`}
 							onclick={(e) => openSheet(e, card)}
 						>
-							<div class="flex items-center justify-between gap-2">
-								<span class="flex min-w-0 items-center gap-1.5">
+							<div class="head">
+								<span class="ident">
 									{#if card.typeName}<IssueTypeTag
 											name={card.typeName}
 											color={card.typeColor}
 										/>{/if}
-									<span class="mono text-xs text-muted-foreground">
-										{data.project.key}-{card.number}
-									</span>
+									<span class="key">{data.project.key}-{card.number}</span>
 									{#if card.parentNumber !== null}
 										<span
-											class="flex items-center gap-0.5 text-xs text-muted-foreground"
+											class="parent"
 											title={`${data.project.key}-${card.parentNumber} の子課題`}
 										>
-											<CornerDownRight size={12} />{card.parentNumber}
+											<svg width="12" height="12" aria-hidden="true">
+												<use href="#bi-parent" />
+											</svg>{card.parentNumber}
 										</span>
 									{/if}
 								</span>
-								{#if card.priority !== 'none'}<PriorityPill priority={card.priority} small />{/if}
+								{#if card.priority !== 'none'}<span class="pill {PRIORITY_CLASS[card.priority]}">
+										{PRIORITY_LABEL[card.priority]}
+									</span>{/if}
 							</div>
 							<a href={`/projects/${data.project.key}/issues/${card.number}`} class="title">
 								{card.title}
 							</a>
-							{#if card.categories.length > 0 || card.milestoneName}
-								<div class="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-									{#each card.categories as c (c.id)}<span class="tag">{c.name}</span>{/each}
-									{#if card.milestoneName}<span class="flex min-w-0 items-center gap-1">
-											<Flag size={12} class="shrink-0" /><span class="truncate">
-												{card.milestoneName}
-											</span>
+							{#if card.categoryNames.length > 0 || card.milestoneName}
+								<div class="tags">
+									{#each card.categoryNames as name, i (i)}<span class="tag">{name}</span>{/each}
+									{#if card.milestoneName}<span class="ms">
+											<svg width="12" height="12" aria-hidden="true">
+												<use href="#bi-flag" />
+											</svg><span class="truncate">{card.milestoneName}</span>
 										</span>{/if}
 								</div>
 							{/if}
-							<div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-								<span class="flex min-w-0 items-center gap-1.5">
-									{#if card.assignees.length === 0}
-										<span class="avatar" style="--size: 20px">–</span>
+							<div class="foot">
+								<span class="who">
+									{#if card.assigneeNames.length === 0}
+										<span class="avatar">–</span>
 									{:else}
 										<span class="avatars">
-											{#each card.assignees.slice(0, 3) as u (u.id)}
-												<span class="avatar" style="--size: 20px" style:--c={colorFor(u.name)}>
-													{u.name[0]}
-												</span>
+											{#each card.assigneeNames.slice(0, 3) as name, i (i)}
+												<span class="avatar" style:--c={colorFor(name)}>{name[0]}</span>
 											{/each}
 										</span>
 									{/if}
 									<span class="truncate">
-										{card.assignees.length === 0
+										{card.assigneeNames.length === 0
 											? '未割当'
-											: card.assignees.length === 1
-												? card.assignees[0].name
-												: `${card.assignees[0].name} 他${card.assignees.length - 1}名`}
+											: card.assigneeNames.length === 1
+												? card.assigneeNames[0]
+												: `${card.assigneeNames[0]} 他${card.assigneeNames.length - 1}名`}
 									</span>
 								</span>
-								<span
-									class="flex shrink-0 items-center gap-1"
-									style:color={isDueAlert(card.dueDate, status) ? 'var(--destructive)' : undefined}
-								>
-									<Calendar size={12} />{formatDue(card.dueDate)}
+								<span class="due" class:late={isDueAlert(card.dueDate, status)}>
+									<svg width="12" height="12" aria-hidden="true">
+										<use href="#bi-calendar" />
+									</svg>{formatDue(card.dueDate)}
 								</span>
 							</div>
 						</li>
@@ -262,6 +262,50 @@
 		/>
 	{/if}
 </section>
+
+<!--
+	カードごとのアイコンは、@lucide/svelte と同じ図形を 1 回だけ symbol に置き、<use> で参照する。lucide のコンポーネントや
+	SVG をカードごとに書くと、カードが数百枚あるときにサーバーでの描画と HTML が大きくなるため
+-->
+<svg class="sprite" aria-hidden="true">
+	<symbol
+		id="bi-calendar"
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+	>
+		<path d="M8 2v3" /><path d="M16 2v3" /><rect x="3" y="3" width="18" height="18" rx="2" /><path
+			d="M3 9h18"
+		/>
+	</symbol>
+	<symbol
+		id="bi-parent"
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+	>
+		<path d="m15 10 5 5-5 5" /><path d="M4 4v7a4 4 0 0 0 4 4h12" />
+	</symbol>
+	<symbol
+		id="bi-flag"
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+	>
+		<path
+			d="M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528"
+		/>
+	</symbol>
+</svg>
 
 <style>
 	.board {
@@ -328,53 +372,127 @@
 		color: var(--foreground);
 		text-decoration: underline;
 	}
-	.card-item {
-		background: var(--card);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-card);
-		padding: 12px;
-		display: grid;
-		gap: 10px;
-		box-shadow: var(--card-shadow);
-		cursor: grab;
-		transition:
-			border-color 0.15s ease,
-			box-shadow 0.15s ease;
+	.sprite {
+		display: none;
 	}
-	.card-item:hover {
-		border-color: var(--primary);
-		box-shadow: var(--card-shadow-hover);
-	}
-	.card-item.selected {
-		border-color: var(--primary);
-		background: color-mix(in oklch, var(--primary) 8%, var(--card));
-		box-shadow:
-			inset 3px 0 0 var(--primary),
-			var(--card-shadow);
-	}
-	.title {
-		font-weight: 500;
-		line-height: 1.45;
-		text-wrap: pretty;
-	}
-	.title:hover {
-		text-decoration: underline;
-	}
-	.tag {
-		max-width: 12em;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		padding: 0 6px;
-		border: 1px solid var(--border);
-		border-radius: var(--radius-pill);
-	}
-	.avatars {
-		display: flex;
-		flex-shrink: 0;
-	}
-	.avatars .avatar + .avatar {
-		margin-left: -6px;
-		box-shadow: 0 0 0 2px var(--card);
+	/*
+	 * カードの中は、要素ごとに Tailwind のクラスやコンポーネントのスコープのクラスを付けず、短いクラス 1 つで見た目を付ける。
+	 * カードが数百枚あると、クラスの文字列だけで HTML が 100KB 近くになり、サーバーでの描画が延びるため。
+	 * 値は元の Tailwind のクラスと同じ（text-xs は Tailwind の変数をそのまま使う。calc(1 / 0.75) と書くと
+	 * CSS の圧縮で 1.33333 になり、行の高さが 16px からずれる。gap-1.5 は 0.375rem など）
+	 */
+	.column :global {
+		.card-item {
+			background: var(--card);
+			border: 1px solid var(--border);
+			border-radius: var(--radius-card);
+			padding: 12px;
+			display: grid;
+			gap: 10px;
+			box-shadow: var(--card-shadow);
+			cursor: grab;
+			transition:
+				border-color 0.15s ease,
+				box-shadow 0.15s ease;
+		}
+		.card-item:hover {
+			border-color: var(--primary);
+			box-shadow: var(--card-shadow-hover);
+		}
+		.card-item.selected {
+			border-color: var(--primary);
+			background: color-mix(in oklch, var(--primary) 8%, var(--card));
+			box-shadow:
+				inset 3px 0 0 var(--primary),
+				var(--card-shadow);
+		}
+		.head,
+		.foot {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 0.5rem;
+		}
+		.ident,
+		.who {
+			display: flex;
+			min-width: 0;
+			align-items: center;
+			gap: 0.375rem;
+		}
+		.key,
+		.parent,
+		.tags,
+		.foot {
+			font-size: var(--text-xs);
+			line-height: var(--text-xs--line-height);
+			color: var(--muted-foreground);
+		}
+		.key {
+			font-family: var(--font-mono);
+		}
+		.parent {
+			display: flex;
+			align-items: center;
+			gap: 0.125rem;
+		}
+		.pill {
+			--c: var(--c-orange);
+			height: 20px;
+			font-size: 11px;
+			padding: 0 8px;
+		}
+		.title {
+			font-weight: 500;
+			line-height: 1.45;
+			text-wrap: pretty;
+		}
+		.title:hover {
+			text-decoration: underline;
+		}
+		.tags {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 0.375rem;
+		}
+		.tag {
+			max-width: 12em;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+			padding: 0 6px;
+			border: 1px solid var(--border);
+			border-radius: var(--radius-pill);
+		}
+		.ms {
+			display: flex;
+			min-width: 0;
+			align-items: center;
+			gap: 0.25rem;
+		}
+		.ms svg {
+			flex-shrink: 0;
+		}
+		.avatar {
+			--size: 20px;
+		}
+		.avatars {
+			display: flex;
+			flex-shrink: 0;
+		}
+		.avatars .avatar + .avatar {
+			margin-left: -6px;
+			box-shadow: 0 0 0 2px var(--card);
+		}
+		.due {
+			display: flex;
+			flex-shrink: 0;
+			align-items: center;
+			gap: 0.25rem;
+		}
+		.due.late {
+			color: var(--destructive);
+		}
 	}
 </style>

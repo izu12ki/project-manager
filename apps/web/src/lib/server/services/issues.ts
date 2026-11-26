@@ -8,6 +8,7 @@ import {
 	ne,
 	or,
 	sql,
+	type Placeholder,
 	type SQL,
 	type SQLWrapper
 } from 'drizzle-orm';
@@ -26,6 +27,7 @@ import {
 	type StatusDef
 } from '#lib/labels.ts';
 import { DEFAULT_ISSUE_SORT, type IssueSort } from '#lib/issue-sort.ts';
+import { cachedRead } from '../db/cached-read';
 import { authorize, can } from '../authz';
 import type { AppContext } from '../context';
 import type { DB } from '../db';
@@ -395,13 +397,49 @@ export async function listBoard(
 	filters: Omit<IssueFilters, 'status'> = {}
 ): Promise<{
 	statuses: StatusDef[];
-	columns: Record<Status, IssueListItem[]>;
+	columns: Record<Status, BoardCard[]>;
 	totals: Record<Status, number>;
 	milestones: MilestoneRow[];
 }> {
 	const { db } = ctx;
-	const of = ofProject(db, key);
-	const where = filterConds(key, of, { ...filters, status: undefined });
+	const filtered = Object.values(filters).some((v) => v !== undefined);
+	const where = filtered
+		? filterConds(key, ofProject(db, key), { ...filters, status: undefined })
+		: undefined;
+	const [access, statuses, rows, counts, milestones] = await ctx.readBatch([
+		// アクセスとステータスはレイアウトも引く（同じ文は 1 回だけ送る。db/read-batch.ts）
+		projectAccessRead(ctx, key),
+		cachedByKey(statusesQuery)(db, key),
+		filtered ? boardCardsQuery(db, where) : unfilteredBoardCards(db, key),
+		filtered ? boardCountsQuery(db, where) : unfilteredBoardCounts(db, key),
+		cachedByKey(milestonesQuery)(db, key)
+	]);
+	checkProjectAccess(ctx, access);
+	const columns: Record<Status, BoardCard[]> = Object.fromEntries(
+		statuses.map((s) => [s.key, [] as BoardCard[]])
+	);
+	const totals: Record<Status, number> = Object.fromEntries(statuses.map((s) => [s.key, 0]));
+	// 定義が消えたステータスの課題は初期ステータスの列に出す
+	const columnOf = (status: Status) => (status in columns ? status : INITIAL_STATUS);
+	for (const { status, assigneesJson, categoriesJson, ...card } of rows) {
+		columns[columnOf(status)]?.push({
+			...card,
+			assigneeNames: JSON.parse(assigneesJson) as string[],
+			categoryNames: JSON.parse(categoriesJson) as string[]
+		});
+	}
+	for (const { status, n } of counts) {
+		const c = columnOf(status);
+		if (c in totals) totals[c] += n;
+	}
+	return { statuses, columns, totals, milestones };
+}
+
+/**
+ * カンバンのカード（列ごとに BOARD_LIMIT まで）。カードに出すものと、列に分けるステータス・移動に使う ID だけを読む。
+ * カードの数（数百）だけ、D1 の結果の解釈・画面へ渡すデータの書き出しが増えるため（担当者・カテゴリーも名前だけ）
+ */
+function boardCardsQuery(db: DB, where: SQL | undefined) {
 	// 列ごとに順位を付けて上限までを残す。副問い合わせの "issue" は内側の from を指す
 	const shown = sql`${issue.id} in (
 		select id from (
@@ -413,34 +451,50 @@ export async function listBoard(
 			from ${issue} where ${where ?? sql`1 = 1`}
 		) where rn <= case when status = ${DONE_STATUS} then ${BOARD_LIMIT.done} else ${BOARD_LIMIT.other} end
 	)`;
-	const [access, statuses, rows, counts, milestones] = await ctx.readBatch([
-		// アクセスとステータスはレイアウトも引く（同じ文は 1 回だけ送る。db/read-batch.ts）
-		projectAccessRead(ctx, key),
-		cachedByKey(statusesQuery)(db, key),
-		issueListQuery(db, and(where, shown), [asc(issue.position), asc(issue.number)]),
-		db
-			.select({ status: issue.status, n: sql<number>`count(*)`.as('board_count') })
-			.from(issue)
-			.where(where)
-			.groupBy(issue.status),
-		cachedByKey(milestonesQuery)(db, key)
-	]);
-	checkProjectAccess(ctx, access);
-	const columns: Record<Status, IssueListItem[]> = Object.fromEntries(
-		statuses.map((s) => [s.key, [] as IssueListItem[]])
-	);
-	const totals: Record<Status, number> = Object.fromEntries(statuses.map((s) => [s.key, 0]));
-	// 定義が消えたステータスの課題は初期ステータスの列に出す
-	const columnOf = (status: Status) => (status in columns ? status : INITIAL_STATUS);
-	for (const r of toIssueListItems(rows)) columns[columnOf(r.status)]?.push(r);
-	for (const { status, n } of counts) {
-		const c = columnOf(status);
-		if (c in totals) totals[c] += n;
-	}
-	return { statuses, columns, totals, milestones };
+	return db
+		.select({
+			id: issue.id,
+			number: issue.number,
+			title: issue.title,
+			typeName: shownColumns.typeName,
+			typeColor: shownColumns.typeColor,
+			status: issue.status,
+			priority: issue.priority,
+			dueDate: issue.dueDate,
+			parentNumber: shownColumns.parentNumber,
+			milestoneName: shownColumns.milestoneName,
+			assigneesJson: assigneeNamesJson.as('assignees_json'),
+			categoriesJson: categoryNamesJson.as('categories_json')
+		})
+		.from(issue)
+		.leftJoin(parent, eq(issue.parentId, parent.id))
+		.leftJoin(issueType, eq(issue.typeId, issueType.id))
+		.leftJoin(milestone, eq(issue.milestoneId, milestone.id))
+		.where(and(where, shown))
+		.orderBy(asc(issue.position), asc(issue.number));
 }
 
-export type TimelineItem = IssueListItem & { canEdit: boolean };
+/** 列ごとの課題の数（絞り込んだ後、BOARD_LIMIT で切る前） */
+function boardCountsQuery(db: DB, where: SQL | undefined) {
+	return db
+		.select({ status: issue.status, n: sql<number>`count(*)`.as('board_count') })
+		.from(issue)
+		.where(where)
+		.groupBy(issue.status);
+}
+
+// 絞り込みのないカンバン（開いたとき）は、組み立てを使い回す（db/cached-read.ts）。絞り込むと値によって文の形が変わる
+const unfilteredBoardCards = cachedByKey((db, of) => boardCardsQuery(db, filterConds('', of, {})));
+const unfilteredBoardCounts = cachedByKey((db, of) =>
+	boardCountsQuery(db, filterConds('', of, {}))
+);
+
+type BoardCardRow = Awaited<ReturnType<typeof boardCardsQuery>>[number];
+/** カンバンのカード 1 枚 */
+export type BoardCard = Omit<BoardCardRow, 'status' | 'assigneesJson' | 'categoriesJson'> & {
+	assigneeNames: string[];
+	categoryNames: string[];
+};
 
 /** タイムラインに行を出す課題（日付のある課題）の数。表示の開始日に近いものから */
 export const SCHEDULED_LIMIT = 300;
@@ -477,33 +531,18 @@ export async function listTimeline(
 	assignees: Awaited<ReturnType<typeof assignableUsersQuery>>;
 }> {
 	const { db } = ctx;
-	const of = ofProject(db, key);
-	const where = filterConds(key, of, view.filters ?? {});
-	const scheduledWhere = and(
-		where,
-		or(isNotNull(issue.startDate), isNotNull(issue.dueDate)),
-		view.from
-			? or(
-					ne(issue.status, DONE_STATUS),
-					sql`coalesce(${issue.dueDate}, ${issue.startDate}) >= ${view.from}`
-				)
-			: undefined
-	);
-	// 開始日から期限までの間と view.from との隔たり（日数）。間に view.from を含めば 0。view.from がなければ番号順
-	const distance = view.from
-		? sql`max(0, julianday(coalesce(${issue.startDate}, ${issue.dueDate})) - julianday(${view.from}),
-			julianday(${view.from}) - julianday(coalesce(${issue.dueDate}, ${issue.startDate})))`
-		: sql`${issue.number}`;
-	const scheduledShown = sql`${issue.id} in (
-		select ${issue.id} from ${issue} where ${scheduledWhere ?? sql`1 = 1`}
-		order by ${distance}, ${issue.number} limit ${SCHEDULED_LIMIT}
-	)`;
-	const unscheduledWhere = and(
-		where,
-		isNull(issue.startDate),
-		isNull(issue.dueDate),
-		ne(issue.status, DONE_STATUS)
-	);
+	const filters = view.filters ?? {};
+	const filtered = Object.values(filters).some((v) => v !== undefined);
+	// 絞り込みがなく開始日のあるとき（開いたとき）は、組み立てを使い回す（db/cached-read.ts）
+	const q =
+		filtered || view.from === undefined
+			? timelineQueries(db, filterConds(key, ofProject(db, key), filters), view.from)
+			: {
+					scheduled: unfilteredTimeline.scheduled(db, { key, from: view.from }),
+					scheduledTotal: unfilteredTimeline.scheduledTotal(db, { key, from: view.from }),
+					unscheduled: unfilteredTimeline.unscheduled(db, { key }),
+					unscheduledTotal: unfilteredTimeline.unscheduledTotal(db, { key })
+				};
 	const [
 		access,
 		scheduledRows,
@@ -515,36 +554,127 @@ export async function listTimeline(
 		assignees
 	] = await ctx.readBatch([
 		projectAccessRead(ctx, key),
-		issueListQuery(db, and(scheduledWhere, scheduledShown), [asc(issue.number)]),
-		db
-			.select({ scheduledTotal: sql<number>`count(*)`.as('scheduled_total') })
-			.from(issue)
-			.where(scheduledWhere),
-		issueListQuery(db, unscheduledWhere, [desc(issue.number)]).limit(UNSCHEDULED_LIMIT),
-		db
-			.select({ unscheduledTotal: sql<number>`count(*)`.as('unscheduled_total') })
-			.from(issue)
-			.where(unscheduledWhere),
+		q.scheduled,
+		q.scheduledTotal,
+		q.unscheduled,
+		q.unscheduledTotal,
 		cachedByKey(milestonesQuery)(db, key),
 		cachedByKey(categoriesQuery)(db, key),
 		cachedByKey(assignableUsersQuery)(db, key)
 	]);
 	const p = checkProjectAccess(ctx, access);
-	const withCanEdit = (rows: typeof scheduledRows) =>
-		toIssueListItems(rows).map((r) => ({
+	const toItems = (rows: TimelineRow[]): TimelineItem[] =>
+		rows.map(({ assigneesJson, reporterId, ...r }) => ({
 			...r,
-			canEdit: !p.archivedAt && can(ctx.actor, 'issue:edit', { reporterId: r.reporterId })
+			assignees: JSON.parse(assigneesJson) as AssigneeRef[],
+			canEdit: !p.archivedAt && can(ctx.actor, 'issue:edit', { reporterId })
 		}));
 	return {
-		scheduled: withCanEdit(scheduledRows),
+		scheduled: toItems(scheduledRows),
 		scheduledTotal,
-		unscheduled: withCanEdit(unscheduledRows),
+		unscheduled: toItems(unscheduledRows),
 		unscheduledTotal,
 		milestones,
 		categories,
 		assignees
 	};
 }
+
+/**
+ * タイムラインの文（日付のある課題とその数、日付のない未完了の課題とその数）。from は表示の開始日
+ * （cachedRead のプレースホルダーでもよい）。省略すると完了した課題もすべて対象にし、番号順に上限まで
+ */
+function timelineQueries(db: DB, where: SQL | undefined, from: string | Placeholder | undefined) {
+	const scheduledWhere = and(
+		where,
+		or(isNotNull(issue.startDate), isNotNull(issue.dueDate)),
+		from === undefined
+			? undefined
+			: or(
+					ne(issue.status, DONE_STATUS),
+					sql`coalesce(${issue.dueDate}, ${issue.startDate}) >= ${from}`
+				)
+	);
+	// 開始日から期限までの間と from との隔たり（日数）。間に from を含めば 0。from がなければ番号順
+	const distance =
+		from === undefined
+			? sql`${issue.number}`
+			: sql`max(0, julianday(coalesce(${issue.startDate}, ${issue.dueDate})) - julianday(${from}),
+			julianday(${from}) - julianday(coalesce(${issue.dueDate}, ${issue.startDate})))`;
+	const scheduledShown = sql`${issue.id} in (
+		select ${issue.id} from ${issue} where ${scheduledWhere ?? sql`1 = 1`}
+		order by ${distance}, ${issue.number} limit ${SCHEDULED_LIMIT}
+	)`;
+	const unscheduledWhere = and(
+		where,
+		isNull(issue.startDate),
+		isNull(issue.dueDate),
+		ne(issue.status, DONE_STATUS)
+	);
+	return {
+		scheduled: timelineRowsQuery(db, and(scheduledWhere, scheduledShown)).orderBy(
+			asc(issue.number)
+		),
+		scheduledTotal: db
+			.select({ scheduledTotal: sql<number>`count(*)`.as('scheduled_total') })
+			.from(issue)
+			.where(scheduledWhere),
+		unscheduled: timelineRowsQuery(db, unscheduledWhere)
+			.orderBy(desc(issue.number))
+			.limit(UNSCHEDULED_LIMIT),
+		unscheduledTotal: db
+			.select({ unscheduledTotal: sql<number>`count(*)`.as('unscheduled_total') })
+			.from(issue)
+			.where(unscheduledWhere)
+	};
+}
+
+/**
+ * タイムラインの行の列。行に出すものと、グループ分け（担当者・マイルストーン）・編集の可否に使うものだけを読む。
+ * 行の数（数百）だけ、D1 の結果の解釈・画面へ渡すデータの書き出しが増えるため
+ */
+function timelineRowsQuery(db: DB, where: SQL | undefined) {
+	return db
+		.select({
+			id: issue.id,
+			number: issue.number,
+			title: issue.title,
+			status: issue.status,
+			startDate: issue.startDate,
+			dueDate: issue.dueDate,
+			milestoneId: issue.milestoneId,
+			milestoneName: shownColumns.milestoneName,
+			assigneesJson: assigneesJson.as('assignees_json'),
+			reporterId: issue.reporterId
+		})
+		.from(issue)
+		.leftJoin(milestone, eq(issue.milestoneId, milestone.id))
+		.where(where)
+		.$dynamic();
+}
+
+type TimelineRow = Awaited<ReturnType<typeof timelineRowsQuery>>[number];
+/** タイムラインの行 1 つ */
+export type TimelineItem = Omit<TimelineRow, 'assigneesJson' | 'reporterId'> & {
+	assignees: AssigneeRef[];
+	canEdit: boolean;
+};
+
+// 絞り込みのないタイムライン（開いたとき）の文。開始日は日ごとに変わるのでプレースホルダーにする
+const unfilteredTimelineQueries = (db: DB, p: { key: Placeholder; from?: Placeholder }) =>
+	timelineQueries(db, filterConds('', ofProject(db, p.key), {}), p.from);
+const unfilteredTimeline = {
+	scheduled: cachedRead(['key', 'from'], (db, p) => unfilteredTimelineQueries(db, p).scheduled),
+	scheduledTotal: cachedRead(
+		['key', 'from'],
+		(db, p) => unfilteredTimelineQueries(db, p).scheduledTotal
+	),
+	unscheduled: cachedRead(['key'], (db, p) => unfilteredTimelineQueries(db, p).unscheduled),
+	unscheduledTotal: cachedRead(
+		['key'],
+		(db, p) => unfilteredTimelineQueries(db, p).unscheduledTotal
+	)
+};
 
 export async function getIssue(ctx: AppContext, key: string, number: number) {
 	const p = await requireProject(ctx, key);

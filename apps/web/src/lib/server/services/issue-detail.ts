@@ -1,12 +1,20 @@
-import { and, asc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql, type Placeholder } from 'drizzle-orm';
 import { inList } from '../db/limits';
 import { alias } from 'drizzle-orm/sqlite-core';
 import type { AppContext } from '../context';
+import type { DB } from '../db';
+import { cachedRead } from '../db/cached-read';
 import { issue, user } from '../db/schema';
 import { AppError } from '../errors';
 import { categoriesQuery, issueTypesQuery, milestonesQuery, statusesQuery } from './issue-fields';
 import type { AssigneeRef } from './issues';
-import { checkProjectAccess, ofProject, projectAccessQuery } from './project-access';
+import {
+	cachedByKey,
+	checkProjectAccess,
+	ofProject,
+	projectAccessRead,
+	type ProjectCond
+} from './project-access';
 import { assignableUsersQuery } from './projects';
 
 const parent = alias(issue, 'parent');
@@ -16,6 +24,79 @@ const deleter = alias(user, 'deleter');
 const assigned = alias(issue, 'assigned');
 const self = alias(issue, 'self');
 
+/** 課題 1 件と、親課題・報告者・削除した人の名前 */
+function issueRowQuery(db: DB, of: ProjectCond, number: number | Placeholder) {
+	return db
+		.select({
+			issue,
+			// batch では同じ名前の列が重なるので（D1 の仕様）、join した表の列には別名を付ける
+			parentNumber: sql<number | null>`${parent.number}`.as('parent_number'),
+			parentTitle: sql<string | null>`${parent.title}`.as('parent_title'),
+			reporterName: sql<string>`${reporter.name}`.as('reporter_name'),
+			deletedByName: sql<string | null>`${deleter.name}`.as('deleted_by_name')
+		})
+		.from(issue)
+		.leftJoin(parent, eq(issue.parentId, parent.id))
+		.innerJoin(reporter, eq(issue.reporterId, reporter.id))
+		.leftJoin(deleter, eq(issue.deletedBy, deleter.id))
+		.where(and(of(issue.projectId), eq(issue.number, number)));
+}
+
+/** 子課題（番号順）。削除したものは除く */
+function childrenQuery(db: DB, of: ProjectCond, number: number | Placeholder) {
+	return db
+		.select({
+			id: issue.id,
+			number: issue.number,
+			title: issue.title,
+			status: issue.status,
+			assigneeIds: issue.assigneeIds
+		})
+		.from(issue)
+		.where(
+			and(
+				of(issue.projectId),
+				inList(
+					issue.parentId,
+					db
+						.select({ id: parent.id })
+						.from(parent)
+						.where(and(of(parent.projectId), eq(parent.number, number)))
+				),
+				isNull(issue.deletedAt)
+			)
+		)
+		.orderBy(asc(issue.number));
+}
+
+/** 課題と子課題（削除したものも含めてよい。名前を引くだけ）の担当者。無効化・脱退した人も含む */
+function peopleQuery(db: DB, of: ProjectCond, number: number | Placeholder) {
+	return db
+		.select({ id: user.id, name: user.name, role: user.role })
+		.from(user)
+		.where(
+			sql`${user.id} in (select j.value from ${issue} as ${assigned}, json_each(${assigned.assigneeIds}) as j
+					where ${of(assigned.projectId)} and (${assigned.number} = ${number} or ${assigned.parentId} in ${db
+						.select({ id: self.id })
+						.from(self)
+						.where(and(of(self.projectId), eq(self.number, number)))}))`
+		);
+}
+
+// 組み立てを使い回す（db/cached-read.ts）
+const byKeyAndNumber = <Q>(query: (db: DB, of: ProjectCond, number: Placeholder) => Q) => {
+	const read = cachedRead(['key', 'number'], (db, p) => query(db, ofProject(db, p.key), p.number));
+	return (db: DB, key: string, number: number) => read(db, { key, number });
+};
+const issueRow = byKeyAndNumber(issueRowQuery);
+const childrenOf = byKeyAndNumber(childrenQuery);
+const peopleOf = byKeyAndNumber(peopleQuery);
+const assignableOf = cachedByKey(assignableUsersQuery);
+const statusesOf = cachedByKey(statusesQuery);
+const issueTypesOf = cachedByKey(issueTypesQuery);
+const categoriesOf = cachedByKey(categoriesQuery);
+const milestonesOf = cachedByKey(milestonesQuery);
+
 /**
  * 課題の詳細画面に要る行をまとめて引く。
  * DB（D1）への 1 往復ごとに待ち時間と CPU 時間がかかるので、プロジェクトの ID を待たずに引けるよう
@@ -24,7 +105,6 @@ const self = alias(issue, 'self');
  */
 export async function getIssueDetailRows(ctx: AppContext, key: string, number: number) {
 	const { db } = ctx;
-	const ofThis = ofProject(db, key);
 	const [
 		access,
 		issueRows,
@@ -36,61 +116,15 @@ export async function getIssueDetailRows(ctx: AppContext, key: string, number: n
 		milestones,
 		people
 	] = await ctx.readBatch([
-		projectAccessQuery(ctx, key),
-		db
-			.select({
-				issue,
-				// batch では同じ名前の列が重なるので（D1 の仕様）、join した表の列には別名を付ける
-				parentNumber: sql<number | null>`${parent.number}`.as('parent_number'),
-				parentTitle: sql<string | null>`${parent.title}`.as('parent_title'),
-				reporterName: sql<string>`${reporter.name}`.as('reporter_name'),
-				deletedByName: sql<string | null>`${deleter.name}`.as('deleted_by_name')
-			})
-			.from(issue)
-			.leftJoin(parent, eq(issue.parentId, parent.id))
-			.innerJoin(reporter, eq(issue.reporterId, reporter.id))
-			.leftJoin(deleter, eq(issue.deletedBy, deleter.id))
-			.where(and(ofThis(issue.projectId), eq(issue.number, number))),
-		// 子課題（番号順）。削除したものは除く
-		db
-			.select({
-				id: issue.id,
-				number: issue.number,
-				title: issue.title,
-				status: issue.status,
-				assigneeIds: issue.assigneeIds
-			})
-			.from(issue)
-			.where(
-				and(
-					ofThis(issue.projectId),
-					inList(
-						issue.parentId,
-						db
-							.select({ id: parent.id })
-							.from(parent)
-							.where(and(ofThis(parent.projectId), eq(parent.number, number)))
-					),
-					isNull(issue.deletedAt)
-				)
-			)
-			.orderBy(asc(issue.number)),
-		assignableUsersQuery(db, ofThis),
-		statusesQuery(db, ofThis),
-		issueTypesQuery(db, ofThis),
-		categoriesQuery(db, ofThis),
-		milestonesQuery(db, ofThis),
-		// 課題と子課題（削除したものも含めてよい。名前を引くだけ）の担当者。無効化・脱退した人も含む
-		db
-			.select({ id: user.id, name: user.name, role: user.role })
-			.from(user)
-			.where(
-				sql`${user.id} in (select j.value from ${issue} as ${assigned}, json_each(${assigned.assigneeIds}) as j
-						where ${ofThis(assigned.projectId)} and (${assigned.number} = ${number} or ${assigned.parentId} in ${db
-							.select({ id: self.id })
-							.from(self)
-							.where(and(ofThis(self.projectId), eq(self.number, number)))}))`
-			)
+		projectAccessRead(ctx, key),
+		issueRow(db, key, number),
+		childrenOf(db, key, number),
+		assignableOf(db, key),
+		statusesOf(db, key),
+		issueTypesOf(db, key),
+		categoriesOf(db, key),
+		milestonesOf(db, key),
+		peopleOf(db, key, number)
 	]);
 
 	const project = checkProjectAccess(ctx, access);

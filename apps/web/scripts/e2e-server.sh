@@ -15,11 +15,15 @@ MAIL_PROVIDER=console
 VARS
 trap 'rm -f "$ENV_FILE"' EXIT
 
-pnpm db:sync
-pnpm exec wrangler d1 migrations apply DB --local --persist-to "$STATE" >&2
+# マイグレーションの適用（CI で wrangler の起動を含めて約 10 秒）とビルドは互いに使わないので、並行して進める
+{ pnpm db:sync && pnpm exec wrangler d1 migrations apply DB --local --persist-to "$STATE" >&2; } &
+MIGRATE_PID=$!
+trap 'kill $MIGRATE_PID 2>/dev/null || true; rm -f "$ENV_FILE"' EXIT
 
 # pnpm build の wrangler types は型の生成だけでビルド結果は変わらないので省く（CI で 1 分以上止まることがあった）
 pnpm exec vite build
+# 失敗していれば set -e でここで止まる
+wait $MIGRATE_PID
 pnpm exec wrangler dev --port 4173 --env-file "$ENV_FILE" --persist-to "$STATE" &
 WRANGLER_PID=$!
 trap 'kill $WRANGLER_PID 2>/dev/null || true; rm -f "$ENV_FILE"' EXIT

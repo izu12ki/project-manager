@@ -272,7 +272,7 @@
 			</div>
 			<button type="submit" class="btn btn-outline">招待する</button>
 		</form>
-		{#if form?.inviteUrl}<InviteLinkBox url={form.inviteUrl} />{/if}
+		{#if form?.inviteUrl}<InviteLinkBox url={form.inviteUrl} mailError={form.mailError} />{/if}
 		{#if data.invitations.length > 0}
 			<div class="grid">
 				<div class="pb-1 text-[0.8125rem] font-medium text-muted-foreground">招待中</div>

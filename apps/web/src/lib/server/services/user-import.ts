@@ -16,7 +16,7 @@ import { authorize } from '../authz';
 import type { AppContext } from '../context';
 import { invitation, project, projectMember, user } from '../db/schema';
 import { AppError } from '../errors';
-import type { MailMessage } from '../mailer';
+import { mailFailureReason, type MailMessage } from '../mailer';
 import { EmailSchema, NameSchema, parse } from '../validation';
 import { createInvitation } from './invitations';
 
@@ -289,6 +289,7 @@ async function write(
 	// 一度に送るとメール送信サービスに断られるので、1 通ずつ間隔を空けて送る。
 	// 送れなかった人も招待はできているので、名前を返して「リンクを再発行」で渡してもらう
 	const mailFailed: ImportPerson[] = [];
+	let mailRestricted = false;
 	for (const [i, { person, mail }] of created.entries()) {
 		if (i > 0) await new Promise((resolve) => setTimeout(resolve, MAIL_INTERVAL_MS));
 		try {
@@ -296,7 +297,14 @@ async function write(
 		} catch (e) {
 			console.error('invitation mail failed', e);
 			mailFailed.push(person);
+			if (mailFailureReason(e)) mailRestricted = true;
 		}
 	}
-	return { invited: created.length, joined: joins.length, inviteFailed, mailFailed };
+	return {
+		invited: created.length,
+		joined: joins.length,
+		inviteFailed,
+		mailFailed,
+		...(mailRestricted ? { mailRestricted } : {})
+	};
 }

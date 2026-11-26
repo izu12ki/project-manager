@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { Check, Copy } from '@lucide/svelte';
+	import { Check, Copy, TriangleAlert } from '@lucide/svelte';
 
-	let { url }: { url: string } = $props();
+	// mailError: 招待メールを送れなかったときの説明（送れたとき・送らないときは null）
+	let { url, mailError = null }: { url: string; mailError?: string | null } = $props();
 	const inputId = $props.id();
 	let copied = $state(false);
 	let timer: ReturnType<typeof setTimeout>;
@@ -19,6 +20,12 @@
 </script>
 
 <div role="status" class="field">
+	{#if mailError}
+		<div class="alert mb-2" data-testid="invite-mail-error">
+			<TriangleAlert color="var(--c-amber)" />
+			<p class="m-0">{mailError}下のリンクを直接相手に渡してください。</p>
+		</div>
+	{/if}
 	<label class="label" for={inputId}>招待リンク</label>
 	<div class="box">
 		<input
@@ -32,7 +39,9 @@
 			{#if copied}<Check size={16} />コピーしました{:else}<Copy size={16} />コピー{/if}
 		</button>
 	</div>
-	<p class="hint">このリンクは 7 日間有効です。メールが届かない場合は直接相手に渡してください。</p>
+	<p class="hint">
+		このリンクは 7 日間有効です。{#if !mailError}メールが届かない場合は直接相手に渡してください。{/if}
+	</p>
 </div>
 
 <style>

@@ -19,8 +19,8 @@ export const actions: Actions = {
 		const fd = await request.formData();
 		const input = { ...formObject(fd), projectIds: fd.getAll('projectIds').map(String) };
 		return handleAction(async () => {
-			const { url } = await createInvitation(appContext(locals), input);
-			return { inviteUrl: url };
+			const { url, mailError } = await createInvitation(appContext(locals), input);
+			return { inviteUrl: url, mailError };
 		});
 	},
 	reissue: async ({ request, locals }) => {

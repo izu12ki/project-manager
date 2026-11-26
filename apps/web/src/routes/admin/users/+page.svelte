@@ -80,7 +80,7 @@
 			</div>
 			<div><button type="submit" class="btn btn-primary">招待する</button></div>
 		</form>
-		{#if form?.inviteUrl}<InviteLinkBox url={form.inviteUrl} />{/if}
+		{#if form?.inviteUrl}<InviteLinkBox url={form.inviteUrl} mailError={form.mailError} />{/if}
 	</div>
 
 	<BacklogUserImport />

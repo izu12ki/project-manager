@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createMailer, isReservedAddress, parseFrom } from './index';
+import { MAIL_PLAN_RESTRICTED } from '#lib/mail.ts';
+import { createMailer, isReservedAddress, mailFailureReason, parseFrom } from './index';
 
 const msg = { to: 'to@x.com', subject: 'S', text: 'T' };
 
@@ -158,5 +159,17 @@ describe('parseFrom', () => {
 		expect(parseFrom('"PM" <a@x.com>')).toEqual({ name: 'PM', email: 'a@x.com' });
 		expect(parseFrom('<a@x.com>')).toBe('a@x.com');
 		expect(parseFrom(' a@x.com ')).toBe('a@x.com');
+	});
+});
+
+describe('mailFailureReason', () => {
+	it('Cloudflare の無料プランで確認していない宛先に送ったときだけ理由を返す', () => {
+		const restricted = Object.assign(new Error('x'), { code: 'E_RECIPIENT_PLAN_RESTRICTED' });
+		expect(mailFailureReason(restricted)).toBe(MAIL_PLAN_RESTRICTED);
+		expect(mailFailureReason(Object.assign(new Error('x'), { code: 'E_DELIVERY_FAILED' }))).toBe(
+			null
+		);
+		expect(mailFailureReason(new Error('500'))).toBe(null);
+		expect(mailFailureReason(undefined)).toBe(null);
 	});
 });

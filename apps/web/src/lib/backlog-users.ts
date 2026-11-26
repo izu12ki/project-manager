@@ -1,6 +1,7 @@
 // Backlog のユーザー CSV の読み込み。ブラウザとサーバーの両方で使う（$lib/server を import しない）。
 import { columnIndex, parseCsv } from '#lib/csv.ts';
 import type { ROLE_LABEL } from '#lib/labels.ts';
+import { MAIL_PLAN_RESTRICTED } from '#lib/mail.ts';
 
 export type ImportRole = keyof typeof ROLE_LABEL;
 
@@ -107,6 +108,8 @@ export interface UserImportResult {
 	inviteFailed: ImportPerson[];
 	/** 招待はできたが、招待メールを送れなかった人 */
 	mailFailed: ImportPerson[];
+	/** 送れなかった理由に、Cloudflare Email Sending の無料プランの宛先の制限があった */
+	mailRestricted?: boolean;
 }
 
 const people = (xs: ImportPerson[]) =>
@@ -144,7 +147,7 @@ export function formatImportResult(r: UserImportResult): string {
 			: '';
 	const mail =
 		r.mailFailed.length > 0
-			? `。招待メールを送れなかった人 ${r.mailFailed.length} 人: ${people(r.mailFailed)}。招待中の一覧の「リンクを再発行」でリンクを渡してください`
+			? `。招待メールを送れなかった人 ${r.mailFailed.length} 人: ${people(r.mailFailed)}。${r.mailRestricted ? `${MAIL_PLAN_RESTRICTED}。` : ''}招待中の一覧の「リンクを再発行」でリンクを渡してください`
 			: '';
 	return `招待 ${r.invited} 人、参加の追加 ${r.joined} 人、取り込まなかった人 ${total} 人${detail}${invite}${mail}`;
 }
@@ -162,7 +165,8 @@ export function mergeImportResults(parts: UserImportResult[]): UserImportResult 
 		joined: parts.reduce((sum, p) => sum + p.joined, 0),
 		skipped,
 		inviteFailed: parts.flatMap((p) => p.inviteFailed),
-		mailFailed: parts.flatMap((p) => p.mailFailed)
+		mailFailed: parts.flatMap((p) => p.mailFailed),
+		...(parts.some((p) => p.mailRestricted) ? { mailRestricted: true } : {})
 	};
 }
 

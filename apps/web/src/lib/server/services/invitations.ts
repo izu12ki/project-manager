@@ -7,7 +7,7 @@ import type { AppContext, BaseContext } from '../context';
 import type { DB } from '../db';
 import { invitation, invitationProject, project, projectMember, user } from '../db/schema';
 import { AppError, isUniqueViolation } from '../errors';
-import type { MailMessage } from '../mailer';
+import { mailFailureReason, type MailMessage } from '../mailer';
 import { invitationMail } from '../mailer/templates';
 import { randomToken, sha256Hex } from '../tokens';
 import { EmailSchema, NameSchema, parse, PasswordKeySchema } from '../validation';
@@ -54,7 +54,7 @@ export async function createInvitation(
 	ctx: AppContext,
 	input: unknown,
 	opts: { sendMail?: boolean } = {}
-): Promise<{ url: string; mail: MailMessage }> {
+): Promise<{ url: string; mail: MailMessage; mailError: string | null }> {
 	authorize(ctx.actor, 'user:manage');
 	const data = parse(CreateInput, input);
 	const projectIds = [...new Set(data.projectIds.filter(Boolean))];
@@ -128,11 +128,19 @@ export async function createInvitation(
 			projectNames: projects.map((p) => p.name)
 		})
 	};
-	// sendMail: false のときは送らずに返す（まとめて招待するときは呼び出し側が間隔を空けて送る）
+	// sendMail: false のときは送らずに返す（まとめて招待するときは呼び出し側が間隔を空けて送る）。
+	// 送るときは結果を待ち、送れなければ画面で伝える（招待はできているので、リンクを直接渡してもらう）
+	let mailError: string | null = null;
 	if (opts.sendMail ?? true) {
-		ctx.waitUntil(ctx.mailer.send(mail).catch((e) => console.error('invitation mail failed', e)));
+		try {
+			await ctx.mailer.send(mail);
+		} catch (e) {
+			console.error('invitation mail failed', e);
+			const reason = mailFailureReason(e);
+			mailError = `招待メールを送れませんでした。${reason ? `${reason}。` : ''}`;
+		}
 	}
-	return { url, mail };
+	return { url, mail, mailError };
 }
 
 async function findPending(ctx: AppContext, invitationId: string) {

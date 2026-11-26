@@ -226,67 +226,43 @@
 					{@render sortHeader('created', '登録日')}
 					{@render sortHeader('updated', '更新日')}
 				</div>
-				{#each data.issues as i (i.id)}
-					<div role="row" class="row">
-						<span role="cell" class="mono text-[0.8125rem] whitespace-nowrap text-muted-foreground">
-							{data.project.key}-{i.number}
-						</span>
-						<span role="cell" class="flex min-w-0 items-center gap-2">
+				<!-- セルの見た目は layout.css の .issue-row の規則で付ける（HTML を小さくするため） -->
+				{#each data.issues as i (i.number)}
+					{@const assignees = i.assigneeNames.join('、')}
+					<div role="row" class="issue-row">
+						<span role="cell" class="key">{data.project.key}-{i.number}</span>
+						<span role="cell" class="main">
 							{#if i.parentNumber !== null}
-								<span
-									class="flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground"
-									title={`${data.project.key}-${i.parentNumber} の子課題`}
-								>
+								<span class="parent" title={`${data.project.key}-${i.parentNumber} の子課題`}>
 									<CornerDownRight size={14} />{i.parentNumber}
 								</span>
 							{/if}
 							{#if i.typeName}<IssueTypeTag name={i.typeName} color={i.typeColor} />{/if}
-							<a href={`${base}/issues/${i.number}`} class="title truncate">{i.title}</a>
-							{#if i.categories.length > 0}
+							<a href={`${base}/issues/${i.number}`} class="title">{i.title}</a>
+							{#if i.categoryNames.length > 0}
 								<span class="tags">
-									{#each i.categories as c (c.id)}<span class="tag">{c.name}</span>{/each}
+									{#each i.categoryNames as c, n (n)}<span class="tag">{c}</span>{/each}
 								</span>
 							{/if}
 						</span>
 						<span role="cell"><StatusPill status={i.status} /></span>
 						<span role="cell"><PriorityPill priority={i.priority} /></span>
-						<span
-							role="cell"
-							class:text-muted-foreground={i.assignees.length === 0}
-							class="truncate"
-							title={i.assignees.map((u) => u.name).join('、') || undefined}
-						>
-							{i.assignees.map((u) => u.name).join('、') || '未割当'}
+						<span role="cell" class={[assignees && 'who']} title={assignees || undefined}>
+							{assignees || '未割当'}
 						</span>
-						<span role="cell" class="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+						<span role="cell" class="milestone">
 							{#if i.milestoneName}<Flag size={14} class="shrink-0" /><span class="truncate">
 									{i.milestoneName}
 								</span>{:else}—{/if}
 						</span>
-						<span role="cell" class="text-muted-foreground tabular-nums">
-							{formatDue(i.startDate)}
-						</span>
-						<span
-							role="cell"
-							class="tabular-nums"
-							style:color={isDueAlert(i.dueDate, i.status)
-								? 'var(--destructive)'
-								: 'var(--muted-foreground)'}
-						>
+						<span role="cell" class="date">{formatDue(i.startDate)}</span>
+						<span role="cell" class={['date', isDueAlert(i.dueDate, i.status) && 'overdue']}>
 							{formatDue(i.dueDate)}
 						</span>
-						<span
-							role="cell"
-							class="text-muted-foreground tabular-nums"
-							title={formatDateTime(i.createdAt)}
-						>
+						<span role="cell" class="date" title={formatDateTime(i.createdAt)}>
 							{formatDate(i.createdAt)}
 						</span>
-						<span
-							role="cell"
-							class="text-muted-foreground tabular-nums"
-							title={formatDateTime(i.updatedAt)}
-						>
+						<span role="cell" class="date" title={formatDateTime(i.updatedAt)}>
 							{formatDate(i.updatedAt)}
 						</span>
 					</div>
@@ -363,36 +339,6 @@
 	.sort:hover :global(.sort-icon) {
 		opacity: 1;
 	}
-	.row {
-		position: relative;
-		min-height: 48px;
-	}
-	.row:hover {
-		background: var(--muted);
-	}
-	.title {
-		font-weight: 500;
-	}
-	/* 行は 1 行のまま。カテゴリーは列の半分までに収め、足りなければ各タグを省略表示にする */
-	.tags {
-		display: flex;
-		flex: 0 0 auto;
-		gap: 4px;
-		max-width: 50%;
-		overflow: hidden;
-	}
-	.tag {
-		min-width: 2.5em;
-		max-width: 10em;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		padding: 1px 8px;
-		border: 1px solid var(--border);
-		border-radius: var(--radius-pill);
-		font-size: 0.75rem;
-		color: var(--muted-foreground);
-	}
 	.search {
 		position: relative;
 	}
@@ -406,19 +352,5 @@
 	}
 	.search .input {
 		padding-left: 32px;
-	}
-	/* 行全体をクリック可能にする */
-	.title::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-	}
-	.title:focus-visible {
-		outline: none;
-	}
-	.title:focus-visible::after {
-		outline: 2px solid var(--ring);
-		outline-offset: -2px;
-		border-radius: var(--radius-sm);
 	}
 </style>

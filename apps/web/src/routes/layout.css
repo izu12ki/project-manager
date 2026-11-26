@@ -639,6 +639,91 @@
 		background: color-mix(in oklch, var(--muted) 70%, transparent);
 	}
 
+	/* 課題の一覧の行（課題一覧・自分の課題）。1 ページに 25 行並ぶので、セルの見た目は Tailwind のクラスを
+	   並べずに短いクラスで付ける（HTML の大きさと、描画にかかる Worker の CPU 時間を減らすため）。
+	   セルの既定は控えめな色で、タイトルと担当者だけ本文の色にする */
+	.issue-row {
+		position: relative;
+		min-height: 48px;
+		color: var(--muted-foreground);
+	}
+	.issue-row:hover {
+		background: var(--muted);
+	}
+	.issue-row .key {
+		font-family: var(--font-mono);
+		font-size: 0.8125rem;
+		white-space: nowrap;
+	}
+	.issue-row .main,
+	.issue-row .milestone {
+		display: flex;
+		min-width: 0;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.issue-row .milestone {
+		gap: 0.375rem;
+	}
+	.issue-row .parent {
+		display: flex;
+		flex-shrink: 0;
+		align-items: center;
+		gap: 0.125rem;
+		font-size: 0.75rem;
+		line-height: 1rem;
+	}
+	.issue-row .title,
+	.issue-row .who {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--foreground);
+	}
+	.issue-row .title {
+		font-weight: 500;
+	}
+	/* 行全体をクリック可能にする */
+	.issue-row .title::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+	}
+	.issue-row .title:focus-visible {
+		outline: none;
+	}
+	.issue-row .title:focus-visible::after {
+		outline: 2px solid var(--ring);
+		outline-offset: -2px;
+		border-radius: var(--radius-sm);
+	}
+	.issue-row .date {
+		font-variant-numeric: tabular-nums;
+	}
+	/* 期限切れ（.alert は警告の枠のクラスと重なるので使わない） */
+	.issue-row .overdue {
+		color: var(--destructive);
+	}
+	/* 行は 1 行のまま。カテゴリーは列の半分までに収め、足りなければ各タグを省略表示にする */
+	.issue-row .tags {
+		display: flex;
+		flex: 0 0 auto;
+		gap: 4px;
+		max-width: 50%;
+		overflow: hidden;
+	}
+	.issue-row .tag {
+		min-width: 2.5em;
+		max-width: 10em;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		padding: 1px 8px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-pill);
+		font-size: 0.75rem;
+	}
+
 	/* markdown */
 	.markdown {
 		/* flex / grid の子として置かれても、長い行で親の幅を押し広げない */

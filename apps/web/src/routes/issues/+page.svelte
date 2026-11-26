@@ -93,27 +93,22 @@
 					<span role="columnheader">期限</span>
 					<span role="columnheader">更新日</span>
 				</div>
-				{#each data.issues as i (i.id)}
+				<!-- セルの見た目は layout.css の .issue-row の規則で付ける（HTML を小さくするため） -->
+				{#each data.issues as i (`${i.projectKey}-${i.number}`)}
 					{@const base = `/projects/${i.projectKey}`}
-					<div role="row" class="row">
-						<span role="cell" class="mono text-[0.8125rem] whitespace-nowrap text-muted-foreground">
-							{i.projectKey}-{i.number}
-						</span>
-						<span role="cell" class="flex min-w-0 items-center gap-2">
+					{@const assignees = i.assigneeNames.join('、')}
+					<div role="row" class="issue-row">
+						<span role="cell" class="key">{i.projectKey}-{i.number}</span>
+						<span role="cell" class="main">
 							{#if i.parentNumber !== null}
-								<span
-									class="flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground"
-									title={`${i.projectKey}-${i.parentNumber} の子課題`}
-								>
+								<span class="parent" title={`${i.projectKey}-${i.parentNumber} の子課題`}>
 									<CornerDownRight size={14} />{i.parentNumber}
 								</span>
 							{/if}
 							{#if i.typeName}<IssueTypeTag name={i.typeName} color={i.typeColor} />{/if}
-							<a href={`${base}/issues/${i.number}`} class="title truncate">{i.title}</a>
+							<a href={`${base}/issues/${i.number}`} class="title">{i.title}</a>
 						</span>
-						<span role="cell" class="truncate text-muted-foreground" title={i.projectName}>
-							{i.projectName}
-						</span>
+						<span role="cell" class="truncate" title={i.projectName}>{i.projectName}</span>
 						<span role="cell">
 							<StatusPill
 								status={i.status}
@@ -123,28 +118,13 @@
 							/>
 						</span>
 						<span role="cell"><PriorityPill priority={i.priority} /></span>
-						<span
-							role="cell"
-							class:text-muted-foreground={i.assignees.length === 0}
-							class="truncate"
-							title={i.assignees.map((u) => u.name).join('、') || undefined}
-						>
-							{i.assignees.map((u) => u.name).join('、') || '未割当'}
+						<span role="cell" class={[assignees && 'who']} title={assignees || undefined}>
+							{assignees || '未割当'}
 						</span>
-						<span
-							role="cell"
-							class="tabular-nums"
-							style:color={isDueAlert(i.dueDate, i.status)
-								? 'var(--destructive)'
-								: 'var(--muted-foreground)'}
-						>
+						<span role="cell" class={['date', isDueAlert(i.dueDate, i.status) && 'overdue']}>
 							{formatDue(i.dueDate)}
 						</span>
-						<span
-							role="cell"
-							class="text-muted-foreground tabular-nums"
-							title={formatDateTime(i.updatedAt)}
-						>
+						<span role="cell" class="date" title={formatDateTime(i.updatedAt)}>
 							{formatDate(i.updatedAt)}
 						</span>
 					</div>
@@ -159,29 +139,5 @@
 	/* 更新日（2026/11/22）の列。文字サイズの設定に合わせて広げる */
 	.grid-table {
 		--stamp-col: 6rem;
-	}
-	.row {
-		position: relative;
-		min-height: 48px;
-	}
-	.row:hover {
-		background: var(--muted);
-	}
-	.title {
-		font-weight: 500;
-	}
-	/* 行全体をクリック可能にする */
-	.title::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-	}
-	.title:focus-visible {
-		outline: none;
-	}
-	.title:focus-visible::after {
-		outline: 2px solid var(--ring);
-		outline-offset: -2px;
-		border-radius: var(--radius-sm);
 	}
 </style>

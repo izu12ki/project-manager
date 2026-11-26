@@ -34,6 +34,9 @@ import { listAssignableUsers, requireProject } from './projects';
 
 /** listIssues の列のうち、一覧の画面（getIssueListRows）では読まないもの */
 const NOT_IN_LIST_VIEW = [
+	'id',
+	'assignees',
+	'categories',
 	'typeId',
 	'resolution',
 	'position',
@@ -96,10 +99,12 @@ describe('getIssueListRows', () => {
 		const issues = await listIssues(ctx, 'ACME', filters, sort);
 		return {
 			project: p,
-			// 一覧の画面は表示しない列を読まない
-			issues: issues.map((i) =>
-				Object.fromEntries(Object.entries(i).filter(([k]) => !NOT_IN_LIST_VIEW.includes(k)))
-			),
+			// 一覧の画面は表示しない列を読まない。担当者・カテゴリーは名前だけ
+			issues: issues.map((i) => ({
+				...Object.fromEntries(Object.entries(i).filter(([k]) => !NOT_IN_LIST_VIEW.includes(k))),
+				assigneeNames: i.assignees.map((u) => u.name),
+				categoryNames: i.categories.map((c) => c.name)
+			})),
 			total: issues.length,
 			assignees: await listAssignableUsers(db, p.id),
 			categories: await listCategories(ctx, 'ACME'),

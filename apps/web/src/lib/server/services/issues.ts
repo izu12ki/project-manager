@@ -110,13 +110,17 @@ const assigneesJson = sql<string>`(select json_group_array(json_object('id', ${u
 const categoriesJson = sql<string>`(select json_group_array(json_object('id', ${category.id}, 'name', ${category.name}) order by ${category.createdAt}, ${category.id})
 	from ${category} where ${category.id} in (select value from json_each(${issue.categoryIds})))`;
 
-// batch に入れても列名が重ならないよう、join した表の列と式には別名を付ける（D1 の batch は同じ名前の列をまとめてしまう）
 /**
- * 一覧の画面（課題一覧・自分の課題）で表示する列。表示しない列も読むと、D1 の結果の解釈・
- * JSON の列の変換・画面へ渡すデータの書き出しが行数の分だけ増えるので、表示に要る列だけにする
+ * 一覧の画面用の、担当者・カテゴリーの名前だけの配列（並び順は assigneesJson・categoriesJson と同じ）。
+ * 画面は ID を使わないので、ID の分だけ画面へ渡すデータを小さくする
  */
-const listViewColumns = {
-	id: issue.id,
+const assigneeNamesJson = sql<string>`(select json_group_array(${user.name} order by j.key)
+	from json_each(${issue.assigneeIds}) as j join ${user} on ${user.id} = j.value)`;
+const categoryNamesJson = sql<string>`(select json_group_array(${category.name} order by ${category.createdAt}, ${category.id})
+	from ${category} where ${category.id} in (select value from json_each(${issue.categoryIds})))`;
+
+// batch に入れても列名が重ならないよう、join した表の列と式には別名を付ける（D1 の batch は同じ名前の列をまとめてしまう）
+const shownColumns = {
 	number: issue.number,
 	title: issue.title,
 	typeName: sql<string | null>`${issueType.name}`.as('type_name'),
@@ -128,13 +132,23 @@ const listViewColumns = {
 	parentNumber: sql<number | null>`${parent.number}`.as('parent_number'),
 	milestoneName: sql<string | null>`${milestone.name}`.as('milestone_name'),
 	createdAt: issue.createdAt,
-	updatedAt: issue.updatedAt,
-	assigneesJson: assigneesJson.as('assignees_json'),
-	categoriesJson: categoriesJson.as('categories_json')
+	updatedAt: issue.updatedAt
+};
+/**
+ * 一覧の画面（課題一覧・自分の課題）で表示する列。表示しない列も読むと、D1 の結果の解釈・
+ * JSON の列の変換・画面へ渡すデータの書き出しが行数の分だけ増えるので、表示に要る列だけにする。
+ * 課題の ID も読まない。カテゴリーは課題一覧だけが表示するので、issueListViewQuery で足す
+ */
+const listViewColumns = {
+	...shownColumns,
+	assigneesJson: assigneeNamesJson.as('assignees_json')
 };
 /** ボード・タイムライン・API の一覧の列。並び順や ID で課題を動かし、絞り込むので、表示しない列も要る */
 const listColumns = {
-	...listViewColumns,
+	id: issue.id,
+	...shownColumns,
+	assigneesJson: assigneesJson.as('assignees_json'),
+	categoriesJson: categoriesJson.as('categories_json'),
 	typeId: issue.typeId,
 	resolution: issue.resolution,
 	position: issue.position,
@@ -198,9 +212,12 @@ export function issueListQuery(db: DB, where: SQL | undefined, order: SQL[]) {
 		.orderBy(...order);
 }
 
-/** 課題一覧の画面の select。issueListQuery より列が少ない（listViewColumns）。結果は toIssueListItems で直す */
+/**
+ * 課題一覧の画面の select。issueListQuery より列が少ない（listViewColumns とカテゴリーの名前）。
+ * 結果は toIssueListViewItems と、categoriesJson の JSON.parse で直す
+ */
 export function issueListViewQuery(db: DB, where: SQL | undefined, order: SQL[]) {
-	return selectIssueListView(db, {})
+	return selectIssueListView(db, { categoriesJson: categoryNamesJson.as('categories_json') })
 		.where(where)
 		.orderBy(...order);
 }
@@ -235,7 +252,7 @@ export function selectIssueListView<T extends Columns>(db: DB, extra: T) {
 		.$dynamic();
 }
 
-/** issueListQuery（selectIssueList）・issueListViewQuery の行の JSON の列を assignees・categories に直す */
+/** issueListQuery（selectIssueList）の行の JSON の列を assignees・categories に直す */
 export function toIssueListItems<R extends { assigneesJson: string; categoriesJson: string }>(
 	rows: R[]
 ) {
@@ -243,6 +260,17 @@ export function toIssueListItems<R extends { assigneesJson: string; categoriesJs
 		...r,
 		assignees: JSON.parse(assigneesJson) as AssigneeRef[],
 		categories: JSON.parse(categoriesJson) as CategoryRef[]
+	}));
+}
+
+/**
+ * selectIssueListView の行の担当者の JSON の列を assigneeNames に直す。
+ * issueListViewQuery のカテゴリーの JSON の列（categoriesJson）は、課題一覧の側で直す
+ */
+export function toIssueListViewItems<R extends { assigneesJson: string }>(rows: R[]) {
+	return rows.map(({ assigneesJson, ...r }) => ({
+		...r,
+		assigneeNames: JSON.parse(assigneesJson) as string[]
 	}));
 }
 

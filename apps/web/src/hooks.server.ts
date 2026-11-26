@@ -20,9 +20,14 @@ const PUBLIC_PATHS = [
 	/^\/api\/auth\//
 ];
 
-const app: Handle = async ({ event, resolve }) => {
-	if (building) return resolve(event);
-
+/**
+ * 設定・DB・メール・認証は isolate ごとに 1 回だけ作り、リクエストをまたいで使う。
+ * better-auth はインスタンスを作るたびに表の定義やアダプターを組み立て直し、リクエストごとに作ると
+ * 1 回 0.7〜2ms かかっていた。どれもリクエストごとの状態を持たない（Cookie はプラグインが
+ * getRequestEvent で、waitUntil は今のリクエストのものを使う）。ビルド中は環境変数がないので、
+ * 最初のリクエストで作る
+ */
+function createServices() {
 	const appEnv = readEnv(env);
 	const db = createDb(env.DB);
 	const mailer = createMailer({ ...appEnv, EMAIL: env.EMAIL });
@@ -31,7 +36,19 @@ const app: Handle = async ({ event, resolve }) => {
 		waitUntil,
 		plugins: [sveltekitCookies(getRequestEvent)]
 	});
-	const authCtx = await auth.$context;
+	return auth.$context.then((authCtx) => ({ appEnv, db, mailer, auth, authCtx }));
+}
+let services: ReturnType<typeof createServices> | undefined;
+
+const app: Handle = async ({ event, resolve }) => {
+	if (building) return resolve(event);
+
+	services ??= createServices().catch((e) => {
+		// 失敗したら次のリクエストで作り直す
+		services = undefined;
+		throw e;
+	});
+	const { appEnv, db, mailer, auth, authCtx } = await services;
 
 	event.locals.auth = auth;
 	event.locals.base = {

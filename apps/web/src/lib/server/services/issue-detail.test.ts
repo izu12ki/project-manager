@@ -226,6 +226,10 @@ describe('レイアウトの後の remote query', () => {
 		const { columns } = await listBoard(ctx, 'ACME');
 		// 課題・列ごとの数・マイルストーン
 		expect(sent).toEqual([3]);
-		expect(Object.values(columns).flat().map((i) => i.title)).toEqual(['課題']);
+		expect(
+			Object.values(columns)
+				.flat()
+				.map((i) => i.title)
+		).toEqual(['課題']);
 	});
 });

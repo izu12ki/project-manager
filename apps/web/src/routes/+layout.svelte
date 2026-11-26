@@ -19,6 +19,14 @@
 	let mobileOpen = $state(false);
 	afterNavigate(() => (mobileOpen = false));
 
+	// 開いたままの画面で、セッション切れ（別のタブでのログアウト・無効化・期限切れ）に画面の関数の読み込みで
+	// 気づくと、サーバーは 401 を返す（hooks.server.ts）。ページごと読み込み直し、サーバーにログイン画面へ転送させる。
+	// その間、残っているログイン中の人のデータでサイドバーを出さない
+	const signedOut = $derived(page.status === 401);
+	$effect(() => {
+		if (signedOut) location.href = page.url.href;
+	});
+
 	// load のデータ取得後（DOM 更新直前）に呼ばれる。ただし描画中に取得する（remote functions の query を
 	// await する）ページでは、その取得が終わるまで遷移が完了しない。アニメーションの間ブラウザは画面を止めるので、
 	// 待つ間に読み込み中のバーも出ず、操作も効かなくなる。すぐ終わらない遷移ではアニメーションをやめて画面を戻す
@@ -83,7 +91,7 @@
 <ImageLightbox />
 <NavProgress />
 
-{#if data.user}
+{#if data.user && !signedOut}
 	<div class="shell" data-sidebar={sidebarOpen ? 'open' : 'closed'}>
 		{#if mobileOpen && isMobile.current}
 			<div class="scrim" aria-hidden="true" onclick={() => (mobileOpen = false)}></div>

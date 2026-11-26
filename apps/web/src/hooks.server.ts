@@ -114,6 +114,10 @@ const app: Handle = async ({ event, resolve }) => {
 const securityHeaders: Handle = async ({ event, resolve }) => {
 	const response = await resolve(event);
 	response.headers.set('x-content-type-options', 'nosniff');
+	// Worker が返すもの（画面・画面のデータ・API）はブラウザに保存させない。保存されていると、ログアウトの後に
+	// 「戻る」で、ログイン中の画面がサーバーに問い合わせずに表示される（HTTP のキャッシュや bfcache から）。
+	// ビルドした JS・CSS は静的アセットとして Worker を通らずに返るので、キャッシュされたまま
+	if (!response.headers.has('cache-control')) response.headers.set('cache-control', 'no-store');
 	return response;
 };
 

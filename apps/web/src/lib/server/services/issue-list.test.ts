@@ -32,6 +32,18 @@ import {
 } from './issues';
 import { listAssignableUsers, requireProject } from './projects';
 
+/** listIssues の列のうち、一覧の画面（getIssueListRows）では読まないもの */
+const NOT_IN_LIST_VIEW = [
+	'typeId',
+	'resolution',
+	'position',
+	'assigneeIds',
+	'parentId',
+	'categoryIds',
+	'milestoneId',
+	'reporterId'
+];
+
 describe('getIssueListRows', () => {
 	let db: DB;
 	let base: ReturnType<typeof createTestBase>;
@@ -84,7 +96,10 @@ describe('getIssueListRows', () => {
 		const issues = await listIssues(ctx, 'ACME', filters, sort);
 		return {
 			project: p,
-			issues,
+			// 一覧の画面は表示しない列を読まない
+			issues: issues.map((i) =>
+				Object.fromEntries(Object.entries(i).filter(([k]) => !NOT_IN_LIST_VIEW.includes(k)))
+			),
 			total: issues.length,
 			assignees: await listAssignableUsers(db, p.id),
 			categories: await listCategories(ctx, 'ACME'),

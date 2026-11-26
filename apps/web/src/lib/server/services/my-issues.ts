@@ -3,7 +3,7 @@ import { and, asc, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import type { ColorName } from '#lib/labels.ts';
 import type { AppContext } from '../context';
 import { issue, issueStatus, project, projectMember } from '../db/schema';
-import { idsCond, selectIssueList, statusCond, toIssueListItems } from './issues';
+import { idsCond, selectIssueListView, statusCond, toIssueListItems } from './issues';
 
 /** 1 回に出す件数の上限。超えた分は出さず、truncated で知らせる */
 export const MY_ISSUES_LIMIT = 200;
@@ -28,7 +28,7 @@ export async function listMyIssues(ctx: AppContext, filters: MyIssueFilters) {
 			? undefined
 			: sql`exists (select 1 from ${projectMember}
 				where ${projectMember.projectId} = ${issue.projectId} and ${projectMember.userId} = ${me})`;
-	const rows = await selectIssueList(ctx.db, {
+	const rows = await selectIssueListView(ctx.db, {
 		projectKey: sql<string>`${project.key}`.as('project_key'),
 		projectName: sql<string>`${project.name}`.as('project_name'),
 		statusName: sql<string | null>`${issueStatus.name}`.as('status_name'),

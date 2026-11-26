@@ -9,7 +9,7 @@ import { categoriesQuery, milestonesQuery } from './issue-fields';
 import {
 	deletedIssuesQuery,
 	filterConds,
-	issueListQuery,
+	issueListViewQuery,
 	parentByNumberQuery,
 	parentCandidatesQuery,
 	sortOrder,
@@ -36,7 +36,7 @@ export async function getIssueListRows(
 	const [access, issues, [{ total }], assignees, categories, milestones, deletedIssues] =
 		await ctx.readBatch([
 			projectAccessQuery(ctx, key),
-			issueListQuery(db, where, sortOrder(sort))
+			issueListViewQuery(db, where, sortOrder(sort))
 				.limit(ISSUE_PAGE_SIZE)
 				.offset((page - 1) * ISSUE_PAGE_SIZE),
 			db

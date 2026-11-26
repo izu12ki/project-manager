@@ -67,9 +67,10 @@ import {
 } from './issue-input';
 import {
 	byProjectId,
+	cachedByKey,
 	checkProjectAccess,
 	ofProject,
-	projectAccessQuery,
+	projectAccessRead,
 	type ProjectCond
 } from './project-access';
 import {
@@ -413,15 +414,16 @@ export async function listBoard(
 		) where rn <= case when status = ${DONE_STATUS} then ${BOARD_LIMIT.done} else ${BOARD_LIMIT.other} end
 	)`;
 	const [access, statuses, rows, counts, milestones] = await ctx.readBatch([
-		projectAccessQuery(ctx, key),
-		statusesQuery(db, of),
+		// アクセスとステータスはレイアウトも引く（同じ文は 1 回だけ送る。db/read-batch.ts）
+		projectAccessRead(ctx, key),
+		cachedByKey(statusesQuery)(db, key),
 		issueListQuery(db, and(where, shown), [asc(issue.position), asc(issue.number)]),
 		db
 			.select({ status: issue.status, n: sql<number>`count(*)`.as('board_count') })
 			.from(issue)
 			.where(where)
 			.groupBy(issue.status),
-		milestonesQuery(db, of)
+		cachedByKey(milestonesQuery)(db, key)
 	]);
 	checkProjectAccess(ctx, access);
 	const columns: Record<Status, IssueListItem[]> = Object.fromEntries(
@@ -512,7 +514,7 @@ export async function listTimeline(
 		categories,
 		assignees
 	] = await ctx.readBatch([
-		projectAccessQuery(ctx, key),
+		projectAccessRead(ctx, key),
 		issueListQuery(db, and(scheduledWhere, scheduledShown), [asc(issue.number)]),
 		db
 			.select({ scheduledTotal: sql<number>`count(*)`.as('scheduled_total') })
@@ -523,9 +525,9 @@ export async function listTimeline(
 			.select({ unscheduledTotal: sql<number>`count(*)`.as('unscheduled_total') })
 			.from(issue)
 			.where(unscheduledWhere),
-		milestonesQuery(db, of),
-		categoriesQuery(db, of),
-		assignableUsersQuery(db, of)
+		cachedByKey(milestonesQuery)(db, key),
+		cachedByKey(categoriesQuery)(db, key),
+		cachedByKey(assignableUsersQuery)(db, key)
 	]);
 	const p = checkProjectAccess(ctx, access);
 	const withCanEdit = (rows: typeof scheduledRows) =>
@@ -724,7 +726,7 @@ export async function listIssueChanges(ctx: AppContext, key: string, number: num
 	const { db } = ctx;
 	const of = ofProject(db, key);
 	const [access, rows] = await ctx.readBatch([
-		projectAccessQuery(ctx, key),
+		projectAccessRead(ctx, key),
 		db
 			.select({
 				id: issueChange.id,

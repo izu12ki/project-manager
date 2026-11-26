@@ -45,31 +45,39 @@ function accessQuery(db: DB, key: string | Placeholder, actorId: string | Placeh
 		.where(eq(project.key, key));
 }
 
-/** requireProject と同じ判定に使う行（プロジェクトと、その人が参加していればその人の ID） */
-export function projectAccessQuery(ctx: AppContext, key: string) {
-	return accessQuery(ctx.db, key, ctx.actor.id);
-}
-
 const cachedAccess = cachedRead(['key', 'actorId'], (db, p) => accessQuery(db, p.key, p.actorId));
 
-/** projectAccessQuery の、組み立てを使い回すもの（ctx.readBatch 用。db/cached-read.ts） */
+/**
+ * requireProject と同じ判定に使う行（プロジェクトと、その人が参加していればその人の ID）。結果は checkProjectAccess で確かめる。
+ * ctx.readBatch 用（組み立てを使い回す。db/cached-read.ts）。レイアウトとページの両方で引いても、送るのは 1 回（db/read-batch.ts）
+ */
 export function projectAccessRead(ctx: AppContext, key: string) {
 	return cachedAccess(ctx.db, { key, actorId: ctx.actor.id });
 }
 
+/** cachedByKey が作ったもの。query ごと */
+const byKeyReads = new Map<unknown, unknown>();
+
 /**
  * プロジェクトのキーだけで決まる文（query(db, ofProject(db, key)) の形）の、組み立てを使い回すもの。
- * 呼ぶと (db, key) => 文 を返す。ctx.readBatch 用（db/cached-read.ts）
+ * 呼ぶと (db, key) => 文 を返す。ctx.readBatch 用（db/cached-read.ts）。
+ * 同じ query なら、どこで呼んでも同じものを返す。ctx.readBatch は同じ組み立て・同じ値の文を 1 回だけ送るので
+ * （db/read-batch.ts）、レイアウトとページが同じもの（ステータスなど）を引いても重ならない
  */
-export function cachedByKey<Q>(query: (db: DB, of: ProjectCond) => Q) {
-	const read = cachedRead(['key'], (db, p) => query(db, ofProject(db, p.key)));
-	return (db: DB, key: string) => read(db, { key });
+export function cachedByKey<Q>(query: (db: DB, of: ProjectCond) => Q): (db: DB, key: string) => Q {
+	let read = byKeyReads.get(query) as ((db: DB, key: string) => Q) | undefined;
+	if (!read) {
+		const cached = cachedRead(['key'], (db, p) => query(db, ofProject(db, p.key)));
+		read = (db, key) => cached(db, { key });
+		byKeyReads.set(query, read);
+	}
+	return read;
 }
 
 const statusesByKey = cachedByKey(statusesQuery);
 const issueTypesByKey = cachedByKey(issueTypesQuery);
 
-/** projectAccessQuery の結果を確かめる。無い・参加していない（管理者を除く）なら not_found */
+/** projectAccessRead の結果を確かめる。無い・参加していない（管理者を除く）なら not_found */
 export function checkProjectAccess(
 	ctx: AppContext,
 	rows: { project: ProjectRow; memberId: string | null }[]

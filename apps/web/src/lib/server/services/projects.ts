@@ -47,7 +47,10 @@ const ColorSchema = v.optional(
 	''
 );
 
-/** 見られるプロジェクト（名前順）。全画面のレイアウトで引くので、同時の読み取りとまとめて送る（ctx.readBatch） */
+/**
+ * 見られるプロジェクト（名前順）。全画面のレイアウトで引くので、同時の読み取りとまとめて送る（ctx.readBatch）。
+ * 同じリクエストで何度呼んでも、閲覧なら DB に送るのは 1 回（db/read-batch.ts）
+ */
 // どの画面でもレイアウトが呼ぶので、組み立てを使い回す（db/cached-read.ts）
 const allProjects = cachedRead([], (db) => db.select().from(project).orderBy(asc(project.name)));
 const joinedProjects = cachedRead(['actorId'], (db, p) =>
@@ -70,16 +73,12 @@ export async function listProjects(ctx: AppContext): Promise<ProjectRow[]> {
 
 /**
  * 見られるプロジェクトのキー。本文の課題キー（PROJ-12）をリンクにするときに使う。
- * 課題の詳細と同じ読み取りの batch に入るよう、呼び出し側は詳細の読み取りと同時に呼ぶ
+ * 課題の詳細と同じ読み取りの batch に入るよう、呼び出し側は詳細の読み取りと同時に呼ぶ。
+ * 画面の描画中なら、レイアウトが引いた一覧（listProjects）の結果を使い、DB には送らない（db/read-batch.ts）
  */
-export function visibleProjectKeys(ctx: AppContext): Promise<Set<string>> {
-	const hit = ctx.memo?.get(PROJECT_KEYS_MEMO) as Promise<Set<string>> | undefined;
-	if (hit) return hit;
-	const keys = listProjects(ctx).then((rows) => new Set(rows.map((p) => p.key)));
-	ctx.memo?.set(PROJECT_KEYS_MEMO, keys);
-	return keys;
+export async function visibleProjectKeys(ctx: AppContext): Promise<Set<string>> {
+	return new Set((await listProjects(ctx)).map((p) => p.key));
 }
-const PROJECT_KEYS_MEMO = 'projectKeys';
 
 /**
  * ホーム用。見られるプロジェクトと、進行中のものには未完了（完了以外）の課題数を付けて返す。

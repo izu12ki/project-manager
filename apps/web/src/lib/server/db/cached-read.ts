@@ -22,6 +22,17 @@ interface BatchPrepared {
 /** これまでに作った cachedRead の、文を組み立てる関数 */
 const templates: ((db: DB) => unknown)[] = [];
 
+/** cachedRead が返す文に付ける、同じ文かどうかの印（組み立ての番号と値） */
+const READ_KEY = Symbol('readKey');
+
+/**
+ * cachedRead が返した文なら、組み立てと値で決まる文字列を返す。同じ文字列の文は同じ SQL と値を送る。
+ * ctx.readBatch が同じ文を 1 回だけ送るのに使う（db/read-batch.ts）。それ以外の文は undefined
+ */
+export function readKeyOf(item: unknown): string | undefined {
+	return (item as { [READ_KEY]?: string })[READ_KEY];
+}
+
 /**
  * これまでに作った cachedRead の文をまとめて組み立てる。Worker の起動時（リクエストの外）に呼び、
  * isolate の最初のリクエストで組み立てる分（と Drizzle のコードを初めて動かす分）の CPU 時間を起動時に移す。
@@ -55,9 +66,10 @@ export function cachedRead<K extends string, Q>(
 		}
 		return template;
 	};
-	templates.push(ensure);
+	const id = templates.push(ensure);
 	return (db, values) => {
 		const item = {
+			[READ_KEY]: `${id} ${JSON.stringify(names.map((n) => values[n]))}`,
 			_prepare(): BatchPrepared {
 				const { sql: text, params, prepared } = ensure(db);
 				const filled = fillPlaceholders(params, values);

@@ -12,7 +12,7 @@ import type { AppContext } from '../context';
 import { attachment, issue as issueTable, user } from '../db/schema';
 import { AppError } from '../errors';
 import { getIssue, issueStateQuery } from './issues';
-import { checkProjectAccess, ofProject, projectAccessQuery } from './project-access';
+import { checkProjectAccess, ofProject, projectAccessRead } from './project-access';
 import { assertWritable, requireProject, requireProjectById } from './projects';
 
 /** 仮置きのまま残す期間 */
@@ -126,7 +126,7 @@ export async function listAttachments(ctx: AppContext, key: string, number: numb
 export async function getAttachmentRows(ctx: AppContext, key: string, number: number) {
 	const of = ofProject(ctx.db, key);
 	const [access, issues, attachments] = await ctx.readBatch([
-		projectAccessQuery(ctx, key),
+		projectAccessRead(ctx, key),
 		issueStateQuery(ctx.db, of, number),
 		attachmentsQuery(
 			ctx,

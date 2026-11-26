@@ -100,6 +100,11 @@ export interface ViewParams {
 	filters: TimelineFilters;
 }
 
+/** getTimeline の引数。画面（+page.svelte）と load（+page.ts）で同じものを使う */
+export function timelineArg(key: string, view: ViewParams) {
+	return { key, from: view.from, ...view.filters };
+}
+
 /** URL クエリを読み、不正な値は既定に戻す */
 export function parseView(q: URLSearchParams, today: string): ViewParams {
 	const pick = <T extends string>(v: string | null, all: readonly T[], d: T): T =>

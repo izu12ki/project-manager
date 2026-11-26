@@ -1,5 +1,4 @@
 <script lang="ts" generics="T extends TimelineIssue & { title: string; canEdit: boolean }">
-	import { ChevronLeft, ChevronRight } from '@lucide/svelte';
 	import { page } from '$app/state';
 	import { DONE_STATUS, statusColor, statusName } from '#lib/labels.ts';
 	import {
@@ -358,9 +357,11 @@
 											aria-label={`${projectKey}-${item.number} の期間を表示`}
 											onclick={() => onjump(defaultFrom(item.startDate ?? item.dueDate!))}
 										>
-											{#if span.kind === 'before'}<ChevronLeft size={14} />{:else}<ChevronRight
-													size={14}
-												/>{/if}
+											<svg width="14" height="14" aria-hidden="true">
+												<use
+													href={span.kind === 'before' ? '#ti-chevron-left' : '#ti-chevron-right'}
+												/>
+											</svg>
 										</button>
 									{/if}
 								</div>
@@ -377,8 +378,8 @@
 											class:clip-end={span.clippedEnd}
 											class:open-start={span.missingStart}
 											class:open-end={span.missingDue}
-											style:left={colW(span.startCol)}
-											style:width={colW(span.endCol - span.startCol + 1)}
+											style:--l={span.startCol}
+											style:--w={span.endCol - span.startCol + 1}
 											style:--c={statusColor(page.data.statuses, item.status)}
 											data-testid={`bar-${item.number}`}
 											data-start={dates.startDate ?? ''}
@@ -481,6 +482,35 @@
 	</div>
 {/if}
 
+<!--
+	行ごとのアイコンは、@lucide/svelte と同じ図形を 1 回だけ symbol に置き、<use> で参照する。lucide のコンポーネントや
+	SVG を行ごとに書くと、行が数百あるときにサーバーでの描画と HTML が大きくなるため
+-->
+<svg class="sprite" aria-hidden="true">
+	<symbol
+		id="ti-chevron-left"
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+	>
+		<path d="m15 18-6-6 6-6" />
+	</symbol>
+	<symbol
+		id="ti-chevron-right"
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+	>
+		<path d="m9 18 6-6-6-6" />
+	</symbol>
+</svg>
+
 <style>
 	/* 親の grid の中でカレンダーの幅に引き伸ばされず、ページ幅に収まるようにする */
 	.grid-wrap {
@@ -532,8 +562,9 @@
 	.hbar-scroll::-webkit-scrollbar-thumb:hover {
 		background-color: color-mix(in oklch, var(--muted-foreground) 75%, transparent);
 	}
+	/* * を scoped にすると、すべての要素にスコープのクラスが付く */
 	.resizing,
-	.resizing * {
+	.resizing :global(*) {
 		cursor: col-resize !important;
 		user-select: none;
 	}
@@ -556,31 +587,6 @@
 	.canvas {
 		position: relative;
 		min-width: 100%;
-	}
-	.row {
-		display: grid;
-		grid-template-columns: var(--label-w) 1fr;
-		height: calc(2 * var(--timeline-unit));
-		border-bottom: 1px solid var(--border);
-	}
-	.name {
-		position: sticky;
-		left: 0;
-		z-index: 3;
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		min-width: 0;
-		padding: 0 8px;
-		background: var(--card);
-		border-right: 1px solid var(--border);
-		font-size: calc(0.8125 * var(--timeline-unit));
-	}
-	.track {
-		position: relative;
-	}
-	.head .row {
-		height: calc(1.5 * var(--timeline-unit));
 	}
 	.month {
 		position: absolute;
@@ -656,107 +662,12 @@
 		bottom: 0;
 		border-left: 2px dotted var(--primary);
 	}
-	.group {
-		position: relative;
-	}
-	.group-head .name {
-		font-weight: 600;
-	}
 	.count {
 		margin-left: auto;
 		flex-shrink: 0;
 		font-size: calc(0.75 * var(--timeline-unit));
 		font-weight: 400;
 		color: var(--muted-foreground);
-	}
-	.key {
-		flex-shrink: 0;
-		font-size: calc(0.75 * var(--timeline-unit));
-		color: var(--muted-foreground);
-	}
-	.open {
-		display: flex;
-		flex: 1;
-		align-items: center;
-		gap: 6px;
-		align-self: stretch;
-		min-width: 0;
-		color: inherit;
-	}
-	.open:hover .truncate {
-		text-decoration: underline;
-	}
-	.row.selected .name {
-		background: color-mix(in oklch, var(--primary) 10%, var(--card));
-		box-shadow: inset 3px 0 0 var(--primary);
-	}
-	.truncate {
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.jump {
-		margin-left: auto;
-		flex-shrink: 0;
-	}
-	.release {
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		z-index: 2;
-		border-left: 2px solid var(--c-amber);
-		pointer-events: none;
-	}
-	.release span {
-		position: absolute;
-		top: 2px;
-		left: 4px;
-		font-size: calc(0.6875 * var(--timeline-unit));
-		white-space: nowrap;
-		color: var(--c-amber);
-	}
-	.bar {
-		position: absolute;
-		top: calc(0.375 * var(--timeline-unit));
-		height: calc(1.25 * var(--timeline-unit));
-		z-index: 1;
-		display: flex;
-		align-items: center;
-		padding: 0 6px;
-		overflow: hidden;
-		border: 1px solid var(--c);
-		border-radius: var(--radius-sm);
-		background: color-mix(in oklch, var(--c) 28%, var(--card));
-		color: var(--foreground);
-		font-size: calc(0.6875 * var(--timeline-unit));
-		white-space: nowrap;
-		user-select: none;
-	}
-	.bar.done {
-		opacity: 0.5;
-	}
-	.bar.open-start {
-		border-left-style: dashed;
-	}
-	.bar.open-end {
-		border-right-style: dashed;
-	}
-	.bar.clip-start {
-		clip-path: polygon(6px 0, 100% 0, 100% 100%, 6px 100%, 0 50%);
-	}
-	.bar.clip-end {
-		clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 50%, calc(100% - 6px) 100%, 0 100%);
-	}
-	.bar.bar:focus-visible {
-		clip-path: none;
-	}
-	.bar.clip-start.clip-end {
-		clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 50%, calc(100% - 6px) 100%, 6px 100%, 0 50%);
-	}
-	.bar-text {
-		overflow: hidden;
-		text-overflow: ellipsis;
 	}
 	.unscheduled {
 		display: grid;
@@ -796,40 +707,6 @@
 		font-size: calc(0.75 * var(--timeline-unit));
 		color: var(--muted-foreground);
 	}
-	.bar.editable {
-		cursor: grab;
-		touch-action: none;
-	}
-	.bar.dragging {
-		cursor: grabbing;
-		box-shadow: 0 0 0 2px var(--ring-soft);
-	}
-	.handle {
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		width: 8px;
-		cursor: ew-resize;
-		touch-action: none;
-	}
-	.handle.start {
-		left: 0;
-	}
-	.handle.end {
-		right: 0;
-	}
-	.drag-label {
-		position: absolute;
-		z-index: 4;
-		transform: translateY(-100%);
-		padding: 0 4px;
-		border-radius: 3px;
-		background: var(--foreground);
-		color: var(--card);
-		font-size: calc(0.6875 * var(--timeline-unit));
-		white-space: nowrap;
-		pointer-events: none;
-	}
 	.chip.editable {
 		cursor: grab;
 		touch-action: none;
@@ -846,5 +723,212 @@
 	}
 	.unscheduled h2 .count {
 		margin-left: 0;
+	}
+	/*
+	 * 行の中の要素（数百行になる）は、svelte のスコープのクラスを付けない（.grid-wrap の下の :global）。
+	 * クラスの文字列だけで HTML が 60KB ほど増え、サーバーでの描画が延びるため。このコンポーネントの中に
+	 * 子のコンポーネントはないので、ここのクラスがほかの要素に当たることはない
+	 */
+	.grid-wrap :global {
+		.row {
+			display: grid;
+			grid-template-columns: var(--label-w) 1fr;
+			height: calc(2 * var(--timeline-unit));
+			border-bottom: 1px solid var(--border);
+		}
+
+		.name {
+			position: sticky;
+			left: 0;
+			z-index: 3;
+			display: flex;
+			align-items: center;
+			gap: 6px;
+			min-width: 0;
+			padding: 0 8px;
+			background: var(--card);
+			border-right: 1px solid var(--border);
+			font-size: calc(0.8125 * var(--timeline-unit));
+		}
+
+		.track {
+			position: relative;
+		}
+
+		.head .row {
+			height: calc(1.5 * var(--timeline-unit));
+		}
+
+		.group {
+			position: relative;
+		}
+
+		.group-head .name {
+			font-weight: 600;
+		}
+
+		.key {
+			flex-shrink: 0;
+			font-size: calc(0.75 * var(--timeline-unit));
+			color: var(--muted-foreground);
+		}
+
+		.open {
+			display: flex;
+			flex: 1;
+			align-items: center;
+			gap: 6px;
+			align-self: stretch;
+			min-width: 0;
+			color: inherit;
+		}
+
+		.open:hover .truncate {
+			text-decoration: underline;
+		}
+
+		.row.selected .name {
+			background: color-mix(in oklch, var(--primary) 10%, var(--card));
+			box-shadow: inset 3px 0 0 var(--primary);
+		}
+
+		.truncate {
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.jump {
+			margin-left: auto;
+			flex-shrink: 0;
+		}
+
+		.release {
+			position: absolute;
+			top: 0;
+			bottom: 0;
+			z-index: 2;
+			border-left: 2px solid var(--c-amber);
+			pointer-events: none;
+		}
+
+		.release span {
+			position: absolute;
+			top: 2px;
+			left: 4px;
+			font-size: calc(0.6875 * var(--timeline-unit));
+			white-space: nowrap;
+			color: var(--c-amber);
+		}
+
+		.bar {
+			position: absolute;
+			left: calc(var(--l) * var(--day-w));
+			width: calc(var(--w) * var(--day-w));
+			top: calc(0.375 * var(--timeline-unit));
+			height: calc(1.25 * var(--timeline-unit));
+			z-index: 1;
+			display: flex;
+			align-items: center;
+			padding: 0 6px;
+			overflow: hidden;
+			border: 1px solid var(--c);
+			border-radius: var(--radius-sm);
+			background: color-mix(in oklch, var(--c) 28%, var(--card));
+			color: var(--foreground);
+			font-size: calc(0.6875 * var(--timeline-unit));
+			white-space: nowrap;
+			user-select: none;
+		}
+
+		.bar.done {
+			opacity: 0.5;
+		}
+
+		.bar.open-start {
+			border-left-style: dashed;
+		}
+
+		.bar.open-end {
+			border-right-style: dashed;
+		}
+
+		.bar.clip-start {
+			clip-path: polygon(6px 0, 100% 0, 100% 100%, 6px 100%, 0 50%);
+		}
+
+		.bar.clip-end {
+			clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 50%, calc(100% - 6px) 100%, 0 100%);
+		}
+
+		.bar.bar:focus-visible {
+			clip-path: none;
+		}
+
+		.bar.clip-start.clip-end {
+			clip-path: polygon(
+				6px 0,
+				calc(100% - 6px) 0,
+				100% 50%,
+				calc(100% - 6px) 100%,
+				6px 100%,
+				0 50%
+			);
+		}
+
+		.bar-text {
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
+
+		.bar.editable {
+			cursor: grab;
+			touch-action: none;
+		}
+
+		.bar.dragging {
+			cursor: grabbing;
+			box-shadow: 0 0 0 2px var(--ring-soft);
+		}
+
+		.handle {
+			position: absolute;
+			top: 0;
+			bottom: 0;
+			width: 8px;
+			cursor: ew-resize;
+			touch-action: none;
+		}
+
+		.handle.start {
+			left: 0;
+		}
+
+		.handle.end {
+			right: 0;
+		}
+
+		.drag-label {
+			position: absolute;
+			z-index: 4;
+			transform: translateY(-100%);
+			padding: 0 4px;
+			border-radius: 3px;
+			background: var(--foreground);
+			color: var(--card);
+			font-size: calc(0.6875 * var(--timeline-unit));
+			white-space: nowrap;
+			pointer-events: none;
+		}
+	}
+	.chip .truncate {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.sprite {
+		display: none;
 	}
 </style>

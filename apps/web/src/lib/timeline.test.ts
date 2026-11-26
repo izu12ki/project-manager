@@ -240,7 +240,6 @@ describe('groupItems', () => {
 		startDate,
 		dueDate: null,
 		assignees: [],
-		categoryIds: [],
 		milestoneId: null,
 		milestoneName: null,
 		...opts

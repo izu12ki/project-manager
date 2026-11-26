@@ -203,7 +203,6 @@ export interface TimelineIssue extends Dated {
 	number: number;
 	status: Status;
 	assignees: { id: string; name: string }[];
-	categoryIds: string[];
 	milestoneId: string | null;
 	milestoneName: string | null;
 }

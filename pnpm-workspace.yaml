@@ -7,3 +7,9 @@ allowBuilds:
 # 公開から 1 日（1440 分）経っていない版は入れない。pnpm 12 の既定と同じ値だが、方針として明示する。
 # Renovate の minimumReleaseAge もこれに揃えている（短いと Renovate の PR が CI の install で落ちる）
 minimumReleaseAge: 1440
+# 待たずに入れた版（版を指定したものだけ）。2026-11-26 に Worker の CPU 時間の作業をこの版で進めるため。
+# 公開から 1 日経てば要らないので、次に依存を見直すときに消してよい
+minimumReleaseAgeExclude:
+  - svelte@5.59.2
+  - '@sveltejs/kit@3.4.1'
+  - '@sveltejs/adapter-cloudflare@9.0.1'

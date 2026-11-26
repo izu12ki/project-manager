@@ -85,12 +85,22 @@
 	const detailQuery = $derived(getIssueDetail(ref));
 	// コメント・編集履歴・添付はサーバーの描画では取らず、ブラウザから別のリクエストで取る。
 	// コメントの Markdown の変換と描画は件数に比例して重く、1 回のリクエストにまとめると
-	// Workers Free の CPU 時間（10ms）を超えやすいため。課題側を待たずに取り始めるよう、ここで作る。
+	// Workers Free の CPU 時間（10ms）を超えやすいため。
 	// 待たずに current で読むので、読み込み中はサーバーの描画とハイドレーションで同じ表示（読み込み中）になる
 	const commentsQuery = $derived(browser ? getComments(ref) : undefined);
 	const changesQuery = $derived(browser ? getChanges(ref) : undefined);
 	const attachmentsQuery = $derived(browser ? getAttachments(ref) : undefined);
-	const detail = $derived(await detailQuery);
+	/**
+	 * query の取得を始めてから first を返す（query は current などを読んだときに取りにいく）。
+	 * 課題側を待った後で読むと、課題側が届くまで取得が始まらず、往復の長い環境では待ちが倍になる
+	 */
+	function startingAlso<T>(first: T, ...others: ({ loading: boolean } | undefined)[]): T {
+		untrack(() => others.forEach((q) => q?.loading));
+		return first;
+	}
+	const detail = $derived(
+		await startingAlso(detailQuery, commentsQuery, changesQuery, attachmentsQuery)
+	);
 	const comments = $derived(commentsQuery?.current);
 	const changes = $derived(changesQuery?.current);
 	const attachments = $derived(attachmentsQuery?.current);

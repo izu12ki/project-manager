@@ -5,7 +5,8 @@ import type { DB } from '../db';
 import { issue as issueTable } from '../db/schema';
 import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
 import { createIssue, deleteIssue } from './issues';
-import { MY_ISSUES_LIMIT, listMyIssues } from './my-issues';
+import { ISSUE_PAGE_SIZE } from '#lib/pagination.ts';
+import { listMyIssues } from './my-issues';
 import { setProjectArchived } from './projects';
 
 describe('listMyIssues', () => {
@@ -44,13 +45,13 @@ describe('listMyIssues', () => {
 		await createIssue(as(other), 'BETA', { title: 'B4', assigneeIds: [me.id] });
 		await deleteIssue(as(other), 'BETA', 4);
 
-		const { issues, truncated } = await listMyIssues(as(me), {});
+		const { issues, total } = await listMyIssues(as(me), {});
 		expect(issues.map((i) => `${i.projectKey}-${i.number}`)).toEqual([
 			'BETA-2',
 			'ACME-1',
 			'BETA-1'
 		]);
-		expect(truncated).toBe(false);
+		expect(total).toBe(3);
 		expect(issues[0]).toMatchObject({
 			projectName: 'Beta',
 			title: 'B2',
@@ -94,12 +95,31 @@ describe('listMyIssues', () => {
 		expect(await keys(admin)).toEqual(['GAMMA-1']);
 	});
 
-	it(`${MY_ISSUES_LIMIT} 件を超える分は切り捨て、切り捨てたことを返す`, async () => {
-		for (let n = 0; n <= MY_ISSUES_LIMIT; n++) {
-			await createIssue(as(other), 'ACME', { title: `A${n}`, assigneeIds: [me.id] });
+	it('ISSUE_PAGE_SIZE 件ずつのページと、条件に合う課題の総数を返す。ページをつなぐと全件が 1 回ずつ並ぶ', async () => {
+		const count = ISSUE_PAGE_SIZE + 5;
+		// 期限なし・更新日時が同じ課題が並んでも、ページの境目で重複・欠落しない
+		for (let n = 0; n < count; n++) {
+			await createIssue(as(other), n % 2 ? 'ACME' : 'BETA', {
+				title: `T${n}`,
+				assigneeIds: [me.id]
+			});
 		}
-		const { issues, truncated } = await listMyIssues(as(me), {});
-		expect(issues).toHaveLength(MY_ISSUES_LIMIT);
-		expect(truncated).toBe(true);
+		await db.update(issueTable).set({ updatedAt: new Date('2026-11-01T00:00:00Z') });
+		await createIssue(as(other), 'ACME', {
+			title: 'mine-done',
+			assigneeIds: [me.id],
+			status: 'done'
+		});
+
+		const first = await listMyIssues(as(me), {}, 1);
+		const second = await listMyIssues(as(me), {}, 2);
+		expect(first.issues).toHaveLength(ISSUE_PAGE_SIZE);
+		expect(second.issues).toHaveLength(5);
+		expect(first.total).toBe(count);
+		expect(second.total).toBe(count);
+		const ids = [...first.issues, ...second.issues].map((i) => i.id);
+		expect(new Set(ids).size).toBe(count);
+		expect((await listMyIssues(as(me), {}, 3)).issues).toEqual([]);
+		expect((await listMyIssues(as(me), { status: 'done' })).total).toBe(1);
 	});
 });

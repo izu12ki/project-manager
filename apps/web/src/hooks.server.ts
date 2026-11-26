@@ -14,6 +14,7 @@ import '#lib/server/services/issue-detail.ts';
 import '#lib/server/services/issue-list.ts';
 import { readEnv } from '#lib/server/env.ts';
 import { createMailer } from '#lib/server/mailer/index.ts';
+import { createSessionCookieReader } from '#lib/server/session-cookie.ts';
 
 const PUBLIC_PATHS = [
 	/^\/login$/,
@@ -41,7 +42,14 @@ function createServices() {
 		waitUntil,
 		plugins: [sveltekitCookies(getRequestEvent)]
 	});
-	return auth.$context.then((authCtx) => ({ appEnv, db, mailer, auth, authCtx }));
+	return auth.$context.then((authCtx) => ({
+		appEnv,
+		db,
+		mailer,
+		auth,
+		authCtx,
+		readSessionCookie: createSessionCookieReader(authCtx)
+	}));
 }
 let services: ReturnType<typeof createServices> | undefined;
 
@@ -61,7 +69,7 @@ if (!building) void startServices();
 const app: Handle = async ({ event, resolve }) => {
 	if (building) return resolve(event);
 
-	const { appEnv, db, mailer, auth, authCtx } = await startServices();
+	const { appEnv, db, mailer, auth, authCtx, readSessionCookie } = await startServices();
 
 	event.locals.auth = auth;
 	event.locals.base = {
@@ -89,17 +97,23 @@ const app: Handle = async ({ event, resolve }) => {
 	// 無効化・降格した人が反映までの数分間に管理操作などを続けられないようにする
 	// （このときキャッシュも新しい内容で書き直されるので、続く閲覧にもすぐ反映される）
 	const fresh = event.request.method !== 'GET' && event.request.method !== 'HEAD';
-	const s = await auth.api.getSession({
-		headers: event.request.headers,
-		query: fresh ? { disableCookieCache: true } : undefined
-	});
-	if (s?.user.disabledAt) {
-		await authCtx.internalAdapter.deleteUserSessions(s.user.id);
+	// 閲覧は、Cookie のキャッシュが有効なら getSession を呼ばずに読む（session-cookie.ts）。
+	// 決められなければ（キャッシュ切れなど）getSession に任せる
+	let user = fresh ? undefined : await readSessionCookie(event.request.headers);
+	if (user === undefined) {
+		const s = await auth.api.getSession({
+			headers: event.request.headers,
+			query: fresh ? { disableCookieCache: true } : undefined
+		});
+		if (s?.user.disabledAt) {
+			await authCtx.internalAdapter.deleteUserSessions(s.user.id);
+		}
+		user =
+			s && !s.user.disabledAt
+				? { id: s.user.id, name: s.user.name, email: s.user.email, role: s.user.role as Role }
+				: null;
 	}
-	event.locals.user =
-		s && !s.user.disabledAt
-			? { id: s.user.id, name: s.user.name, email: s.user.email, role: s.user.role as Role }
-			: null;
+	event.locals.user = user;
 
 	const path = event.url.pathname;
 	if (!event.locals.user && !PUBLIC_PATHS.some((r) => r.test(path))) {

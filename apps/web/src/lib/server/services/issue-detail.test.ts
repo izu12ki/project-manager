@@ -1,7 +1,8 @@
 import { eq } from 'drizzle-orm';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Actor } from '../authz';
 import type { DB } from '../db';
+import { createReadBatcher } from '../db/read-batch';
 import { user as userTable } from '../db/schema';
 import {
 	createTestBase,
@@ -20,8 +21,9 @@ import {
 	listMilestones,
 	listStatuses
 } from './issue-fields';
-import { createIssue, deleteIssue, getIssue, listParentCandidates } from './issues';
-import { listAssignableUsers } from './projects';
+import { createIssue, deleteIssue, getIssue, listBoard, listParentCandidates } from './issues';
+import { getProjectLayoutRows } from './project-access';
+import { listAssignableUsers, listProjects, visibleProjectKeys } from './projects';
 
 describe('getIssueDetailRows', () => {
 	let db: DB;
@@ -180,5 +182,50 @@ describe('getIssueDetailRows の往復', () => {
 		expect(roundTrips(db) - before).toBe(1);
 		expect(rows.issue.assignees).toEqual([{ id: member.id, name: 'Member' }]);
 		expect(rows.children.map((c) => c.assignees)).toEqual([[{ id: guest.id, name: 'Guest' }]]);
+	});
+});
+
+// 閲覧のリクエストでは、レイアウトの load（見られるプロジェクト・アクセス・ステータス・課題種別）の後に、
+// 描画中の remote query（課題の詳細・カンバン）が次の batch で引く。レイアウトが引いた文は送り直さない
+describe('レイアウトの後の remote query', () => {
+	async function setup() {
+		const db = await createTestDb();
+		const base = createTestBase(db, {
+			readBatch: createReadBatcher(db, { shareAcrossBatches: true })
+		});
+		const member = await seedUser(db, 'member', 'Member');
+		await seedProject(db, { key: 'ACME', members: [member] });
+		const ctx = ctxOf(base, member);
+		await createIssue(ctx, 'ACME', { title: '課題' });
+		// レイアウトの load（ルートとプロジェクト）
+		await Promise.all([listProjects(ctx), getProjectLayoutRows(ctx, 'ACME')]);
+		const sent: number[] = [];
+		const batch = db.batch.bind(db);
+		vi.spyOn(db, 'batch').mockImplementation((items) => {
+			sent.push(items.length);
+			return batch(items);
+		});
+		return { ctx, sent };
+	}
+
+	it('課題の詳細は、課題ごとのものだけを送る', async () => {
+		const { ctx, sent } = await setup();
+		const [rows, keys] = await Promise.all([
+			getIssueDetailRows(ctx, 'ACME', 1),
+			visibleProjectKeys(ctx)
+		]);
+		// 課題・子課題・担当者の候補・カテゴリー・マイルストーン・担当者の名前
+		expect(sent).toEqual([6]);
+		expect(rows.issue.title).toBe('課題');
+		expect(rows.statuses.length).toBeGreaterThan(0);
+		expect([...keys]).toEqual(['ACME']);
+	});
+
+	it('カンバンは、アクセスとステータスを送らない', async () => {
+		const { ctx, sent } = await setup();
+		const { columns } = await listBoard(ctx, 'ACME');
+		// 課題・列ごとの数・マイルストーン
+		expect(sent).toEqual([3]);
+		expect(Object.values(columns).flat().map((i) => i.title)).toEqual(['課題']);
 	});
 });

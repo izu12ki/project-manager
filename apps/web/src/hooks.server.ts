@@ -70,11 +70,14 @@ const app: Handle = async ({ event, resolve }) => {
 	if (building) return resolve(event);
 
 	const { appEnv, db, mailer, auth, authCtx, readSessionCookie } = await startServices();
+	// 閲覧（GET・HEAD）か。閲覧の load と remote query は書き込まない
+	const viewing = event.request.method === 'GET' || event.request.method === 'HEAD';
 
 	event.locals.auth = auth;
 	event.locals.base = {
 		db,
-		readBatch: createReadBatcher(db),
+		// 閲覧では、レイアウトの load で引いた文（見られるプロジェクトの一覧など）の結果を、描画中の remote query でも使う
+		readBatch: createReadBatcher(db, { shareAcrossBatches: viewing }),
 		mailer,
 		mailConfigured: appEnv.MAIL_PROVIDER !== 'console',
 		bucket: env.BUCKET,
@@ -96,16 +99,15 @@ const app: Handle = async ({ event, resolve }) => {
 	// 書き込み（GET・HEAD 以外）は Cookie のキャッシュを使わず、DB でセッションを確かめる。
 	// 無効化・降格した人が反映までの数分間に管理操作などを続けられないようにする
 	// （このときキャッシュも新しい内容で書き直されるので、続く閲覧にもすぐ反映される）
-	const fresh = event.request.method !== 'GET' && event.request.method !== 'HEAD';
 	// 閲覧は、Cookie のキャッシュが有効なら getSession を呼ばずに読む（session-cookie.ts）。
 	// 決められなければ（キャッシュ切れなど）getSession に任せる
-	let user = fresh ? undefined : await readSessionCookie(event.request.headers);
+	let user = viewing ? await readSessionCookie(event.request.headers) : undefined;
 	// getSession が返すヘッダーは、セッションがないときに Cookie を消す Set-Cookie（下の 401 で使う）
 	let authHeaders = new Headers();
 	if (user === undefined) {
 		const { headers, response: s } = await auth.api.getSession({
 			headers: event.request.headers,
-			query: fresh ? { disableCookieCache: true } : undefined,
+			query: viewing ? undefined : { disableCookieCache: true },
 			returnHeaders: true
 		});
 		authHeaders = headers;

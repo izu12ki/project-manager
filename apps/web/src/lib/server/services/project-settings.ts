@@ -10,7 +10,7 @@ import {
 	toPendingInvitations
 } from './invitations';
 import { categoriesQuery, issueTypesQuery, milestonesQuery } from './issue-fields';
-import { checkProjectAccess, ofProject, projectAccessQuery } from './project-access';
+import { cachedByKey, checkProjectAccess, ofProject, projectAccessRead } from './project-access';
 import { membersQuery } from './projects';
 import { usersQuery } from './users';
 
@@ -44,14 +44,15 @@ export async function getProjectSettingsRows(ctx: AppContext, key: string) {
 		categories,
 		milestones
 	] = await ctx.readBatch([
-		projectAccessQuery(ctx, key),
+		projectAccessRead(ctx, key),
 		membersQuery(db, of),
 		usersQuery(db),
 		pendingInvitationsQuery(db, of),
 		invitationProjectsQuery(db, pendingIds),
-		issueTypesQuery(db, of),
-		categoriesQuery(db, of),
-		milestonesQuery(db, of)
+		// レイアウトも引く（同じ文は 1 回だけ送る。db/read-batch.ts）
+		cachedByKey(issueTypesQuery)(db, key),
+		cachedByKey(categoriesQuery)(db, key),
+		cachedByKey(milestonesQuery)(db, key)
 	]);
 	return {
 		project: checkProjectAccess(ctx, access),

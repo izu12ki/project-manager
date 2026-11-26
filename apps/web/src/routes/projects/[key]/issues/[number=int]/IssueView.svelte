@@ -1,3 +1,18 @@
+<script module lang="ts">
+	type RenderMarkdown = typeof import('#lib/markdown/render.ts').renderMarkdown;
+	let rendererLoad: Promise<RenderMarkdown> | undefined;
+	/**
+	 * コメントの Markdown を HTML にする関数を読み込む。大きい（gzip で約 48KB）ので、ページの JS とは分け、
+	 * 課題を開いたときにコメントの取得と並行して読み込む。2 回目以降は同じものを返す
+	 */
+	function loadRenderer(): Promise<RenderMarkdown> {
+		rendererLoad ??= import('#lib/markdown/render.ts').then((m) => m.renderMarkdown);
+		// 失敗したら次に開いたときに読み込み直す
+		rendererLoad.catch(() => (rendererLoad = undefined));
+		return rendererLoad;
+	}
+</script>
+
 <script lang="ts">
 	import {
 		Calendar,
@@ -104,8 +119,38 @@
 	const comments = $derived(commentsQuery?.current);
 	const changes = $derived(changesQuery?.current);
 	const attachments = $derived(attachmentsQuery?.current);
-	const activityLoaded = $derived(comments !== undefined && changes !== undefined);
-	const activityFailed = $derived(!!(commentsQuery?.error || changesQuery?.error));
+	// コメントの Markdown はサーバーの CPU 時間を使わないよう、ブラウザで HTML にする
+	let renderMarkdown = $state<RenderMarkdown>();
+	let rendererFailed = $state(false);
+	if (browser) {
+		loadRenderer().then(
+			(render) => (renderMarkdown = render),
+			() => (rendererFailed = true)
+		);
+	}
+	const activityLoaded = $derived(
+		comments !== undefined && changes !== undefined && renderMarkdown !== undefined
+	);
+	const activityFailed = $derived(
+		!!(commentsQuery?.error || changesQuery?.error) || rendererFailed
+	);
+	/**
+	 * コメントの本文の HTML。リアクションや投稿のたびにコメントを取り直すので、同じ本文は変換し直さない。
+	 * 課題キーをリンクにするプロジェクト（見られるもの）が変わったら作り直す
+	 */
+	const commentHtml = $derived.by(() => {
+		const render = renderMarkdown;
+		const projectKeys = new Set(detail.projectKeys);
+		// 描画中に足していくだけの控えなので、変更を通知しない Map でよい
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const cache = new Map<string, string>();
+		return (body: string) => {
+			if (!render) return '';
+			let html = cache.get(body);
+			if (html === undefined) cache.set(body, (html = render(body, { projectKeys })));
+			return html;
+		};
+	});
 	// コメントと編集履歴を時刻順に並べる
 	const activity = $derived(
 		[
@@ -826,8 +871,8 @@
 											</div>
 										</form>
 									{:else}
-										<!-- eslint-disable-next-line svelte/no-at-html-tags -- markdown-it(html:false) で生成した HTML -->
-										<div class="markdown">{@html c.html}</div>
+										<!-- eslint-disable-next-line svelte/no-at-html-tags -- renderMarkdown（生の HTML は文字のまま出す）で生成した HTML -->
+										<div class="markdown">{@html commentHtml(c.body)}</div>
 									{/if}
 									<CommentReactions
 										id={`comment-${c.id}`}

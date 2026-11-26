@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import MarkdownIt from 'markdown-it';
-import { renderMarkdown } from './markdown';
+import { renderMarkdown } from './render';
 import { backlogToMarkdown } from '#lib/backlog-notation.ts';
 
 const legacy = new MarkdownIt({ html: false, linkify: true, breaks: true });

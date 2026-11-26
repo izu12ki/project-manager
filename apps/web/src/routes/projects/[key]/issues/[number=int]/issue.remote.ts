@@ -2,7 +2,7 @@ import * as v from 'valibot';
 import { command, form, query } from '$app/server';
 import { attachmentUrl, isSafeImage } from '#lib/attachment-rules.ts';
 import { can } from '#lib/server/authz.ts';
-import { renderMarkdown } from '#lib/server/markdown.ts';
+import { renderMarkdown } from '#lib/markdown/render.ts';
 import { getUnreadCount } from '#lib/notifications.remote.ts';
 import { remoteContext, runCommand, runForm, runQuery } from '#lib/server/remote-helpers.ts';
 import { deleteAttachment, getAttachmentRows } from '#lib/server/services/attachments.ts';
@@ -43,6 +43,8 @@ export const getIssueDetail = query(IssueRef, ({ key, number }) => {
 		const writable = !project.archivedAt && !issue.deletedAt;
 		return {
 			issue: { ...issue, descriptionHtml: renderMarkdown(issue.description, { projectKeys }) },
+			// コメントの Markdown はブラウザで HTML にする（getComments）。課題キーをリンクにするのに使う
+			projectKeys: [...projectKeys],
 			assignees,
 			statuses,
 			issueTypes,
@@ -69,16 +71,16 @@ export const getParentCandidates = query(IssueRef, ({ key, number }) => {
 	return runQuery(() => listParentCandidates(ctx, key, number));
 });
 
+/**
+ * コメントは Markdown のまま返し、ブラウザで HTML にする（IssueView）。サーバーで変換すると
+ * 件数に比例して CPU 時間がかかり、コメントの多い課題で Workers Free の 10ms を超えるため
+ */
 export const getComments = query(IssueRef, ({ key, number }) => {
 	const ctx = remoteContext();
 	return runQuery(async () => {
-		const [{ project, issue, comments }, projectKeys] = await Promise.all([
-			getCommentRows(ctx, key, number),
-			visibleProjectKeys(ctx)
-		]);
+		const { project, issue, comments } = await getCommentRows(ctx, key, number);
 		return comments.map((c) => ({
 			...c,
-			html: renderMarkdown(c.body, { projectKeys }),
 			canModify:
 				!project.archivedAt &&
 				!issue.deletedAt &&

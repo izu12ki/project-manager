@@ -9,7 +9,7 @@ import {
 	$isLineBreakNode,
 	type ElementNode
 } from 'lexical';
-import { renderMarkdown } from '#lib/server/markdown.ts';
+import { renderMarkdown } from '#lib/markdown/render.ts';
 import { createMarkdownEditor } from './create-editor';
 import { $createUploadPlaceholderNode } from './nodes';
 

@@ -9,6 +9,7 @@
 		groupItems,
 		lastDate,
 		parseView,
+		timelineArg,
 		viewRange,
 		type Dated,
 		type GroupBy,
@@ -24,7 +25,7 @@
 	const today = todayJst();
 	const view = $derived(parseView(new URLSearchParams(page.url.search), today));
 	// 絞り込みと表示の開始日はサーバーで使う（課題の多いプロジェクトで、終わった課題をすべて送らないため）
-	const ref = $derived({ key: params.key, from: view.from, ...view.filters });
+	const ref = $derived(timelineArg(params.key, view));
 	const timeline = $derived(await getTimeline(ref));
 
 	/** 右側のシートで開いている課題の番号 */

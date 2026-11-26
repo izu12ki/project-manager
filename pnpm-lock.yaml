@@ -68,7 +68,7 @@ importers:
         version: 0.53.0(typescript@6.0.3)
       '@lucide/svelte':
         specifier: ^1.69.0
-        version: 1.79.0(svelte@5.59.1(@typescript-eslint/types@8.74.0))
+        version: 1.80.0(svelte@5.59.1(@typescript-eslint/types@8.74.0))
       better-auth:
         specifier: 1.7.28
         version: 1.7.28(@sveltejs/kit@3.4.0(@sveltejs/vite-plugin-svelte@7.3.2(svelte@5.59.1(@typescript-eslint/types@8.74.0))(vite@8.3.8(@types/node@26.6.10)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))(svelte@5.59.1(@typescript-eslint/types@8.74.0))(typescript@6.0.3)(vite@8.3.8(@types/node@26.6.10)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))(drizzle-kit@1.0.0-rc.6(drizzle-orm@1.0.0-rc.6(@libsql/client@0.18.0)(valibot@1.5.0(typescript@6.0.3))(zod@4.6.7)))(drizzle-orm@1.0.0-rc.6(@libsql/client@0.18.0)(valibot@1.5.0(typescript@6.0.3))(zod@4.6.7))(svelte@5.59.1(@typescript-eslint/types@8.74.0))(vitest@5.1.1(@types/node@26.6.10)(happy-dom@21.0.4)(vite@8.3.8(@types/node@26.6.10)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))
@@ -1344,8 +1344,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@lucide/svelte@1.79.0':
-    resolution: {integrity: sha512-GT1yl6pbDLFYq/FBsVJX27HE3T+T/J35+OqZL+jimaj1oJfm9s63wCzVwPRbgWuhkS0vPMg76eEF4dMymZgbgA==}
+  '@lucide/svelte@1.80.0':
+    resolution: {integrity: sha512-4R7op2XACJnSNfIPPf0lXoTBJOVi6w+ZNxbo3Qb9R9naXie/3eoDh1XQ/4oD41z3IMEaG8QEsEQMHtFWcGVDcA==}
     peerDependencies:
       svelte: ^5
 
@@ -5150,7 +5150,7 @@ snapshots:
   '@libsql/win32-x64-msvc@0.5.29':
     optional: true
 
-  '@lucide/svelte@1.79.0(svelte@5.59.1(@typescript-eslint/types@8.74.0))':
+  '@lucide/svelte@1.80.0(svelte@5.59.1(@typescript-eslint/types@8.74.0))':
     dependencies:
       svelte: 5.59.1(@typescript-eslint/types@8.74.0)
 

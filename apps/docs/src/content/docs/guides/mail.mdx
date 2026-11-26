@@ -7,13 +7,15 @@ import { Steps } from '@astrojs/starlight/components';
 
 招待メール、パスワードリセットのメール、通知のメール（[通知のメール](#通知のメール)）は、次のどれかで送ります。
 
-| | 使える条件 | 料金（2026-10 時点） |
+| | 使える条件 | 料金（2026-11 時点） |
 |---|---|---|
-| **Cloudflare Email Sending（Paid プランなら推奨）** | Workers Paid プランで、送信元ドメインの DNS を Cloudflare で管理している | Workers Paid プランに月 3,000 通まで含まれる。超えた分は 1,000 通あたり 0.35 ドル |
+| **Cloudflare Email Sending（Paid プランなら推奨）** | 送信元ドメインの DNS を Cloudflare で管理している。Workers の無料プランでは、Cloudflare アカウントで確認したアドレスにだけ送れる | 確認したアドレス宛ては無料（通数に数えない）。ほかの宛先に送るには Workers Paid プランが要り、月 3,000 通まで含まれる。超えた分は 1,000 通あたり 0.35 ドル |
 | SMTP2GO | DNS の管理先は問わない | 無料枠: 月 1,000 通・1 日 200 通 |
 | Resend | DNS の管理先は問わない | 無料枠: 月 3,000 通・1 日 100 通（宛先 1 件ごとに 1 通と数える） |
 
-Workers Paid プランを使っていて、送信元ドメインの DNS を Cloudflare で管理しているなら **Cloudflare Email Sending を使ってください**。別のサービスの契約も API キーも要りません。Workers の無料プランの場合と、DNS を Cloudflare 以外で管理している場合は、SMTP2GO か Resend を使います。
+Workers Paid プランを使っていて、送信元ドメインの DNS を Cloudflare で管理しているなら **Cloudflare Email Sending を使ってください**。別のサービスの契約も API キーも要りません。
+
+Workers の無料プランでも、利用者が数人で、全員のメールアドレスを Cloudflare アカウントに登録できるなら Cloudflare Email Sending を使えます（[無料プランで使う場合](#無料プランで使う場合)）。利用者が増えるたびに登録が要るので、そうでなければ SMTP2GO か Resend を使ってください。DNS を Cloudflare 以外で管理している場合も、SMTP2GO か Resend を使います。
 
 最新の条件は各サービスの料金ページで確認してください。
 
@@ -39,6 +41,23 @@ Workers Paid プランを使っていて、送信元ドメインの DNS を Clou
 </Steps>
 
 `MAIL_API_KEY` は要りません。送信には Worker のバインディング（`apps/web/wrangler.jsonc` の `send_email`）を使います。
+
+### 無料プランで使う場合
+
+Workers の無料プランでは、Cloudflare アカウントの「Destination addresses」に登録して確認したアドレスにだけ送れます。登録は 1 アカウント 200 件までです。上の手順に加えて、メールを受け取る人のアドレスを 1 人ずつ登録します。
+
+<Steps>
+
+1. ダッシュボードの「Compute → Email Service → Email Routing → Destination addresses」でアドレスを登録する（`pnpm exec wrangler email routing addresses create someone@example.com` でもよい）
+2. Cloudflare から届く確認メールで、本人に「Verify email address」を押してもらう
+
+</Steps>
+
+招待する人は、招待する前に登録して確認してもらってください。確認していないアドレスには送れず（`E_RECIPIENT_PLAN_RESTRICTED`）、次のようになります。
+
+- 招待: 招待はでき、画面に「招待メールを送れませんでした」と理由が出ます。表示された招待リンクを直接渡してください。Backlog からユーザーを取り込んだときも、結果に送れなかった人と理由が出ます。
+- パスワードリセット: メールは届きません。誰が登録しているかを知られないよう、画面には何も出ません。
+- 通知のメール: 届きません。送信は画面の応答の後に行うので、画面には出ず、Workers のログにだけ残ります。
 
 :::caution[DMARC レコードが無いドメインの場合]
 手順 2 で `p=reject` のレコードが追加されます。そのドメインで Google Workspace などほかのサービスからもメールを送っている場合は、そちらも SPF・DKIM を設定済みか確認してください。
@@ -80,7 +99,8 @@ Workers Paid プランを使っていて、送信元ドメインの DNS を Clou
 
 ## メールが届かないとき
 
-- 送信に失敗してもアプリの操作自体は成功します。失敗は Workers のログ（ダッシュボードの Observability、または `pnpm exec wrangler tail`）に `invitation mail failed`（パスワードリセットは `reset password mail failed`、通知は `[mail] notification`）として出ます。
+- 送信に失敗してもアプリの操作自体は成功します。招待のメールを送れなかったときは、招待の画面に出ます。失敗は Workers のログ（ダッシュボードの Observability、または `pnpm exec wrangler tail`）にも `invitation mail failed`（パスワードリセットは `reset password mail failed`、通知は `[mail] notification`）として出ます。
+- Cloudflare Email Sending を Workers の無料プランで使っている場合、Cloudflare アカウントで確認していないアドレスには届きません（[無料プランで使う場合](#無料プランで使う場合)）。
 - Cloudflare Email Sending では、ダッシュボードの「Email Sending」のログでも送信結果を確認できます。
 - `example.com` などの予約ドメイン（RFC 2606・6761）宛てのメールは送りません。ログに `[mail] skipped` と出ます。デモやテスト用の架空のユーザーに送って、バウンスで送信元の評価を下げないためです。
 - 招待は管理画面の「未使用の招待」から「リンクをコピー」でいつでも渡せます。

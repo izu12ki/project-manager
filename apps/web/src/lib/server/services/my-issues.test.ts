@@ -58,7 +58,7 @@ describe('listMyIssues', () => {
 			status: 'todo',
 			statusName: '未着手'
 		});
-		expect(issues[2].assignees.map((u) => u.name)).toEqual(['other', 'me']);
+		expect(issues[2].assigneeNames).toEqual(['other', 'me']);
 	});
 
 	it('ステータスは完了だけ・すべてにも切り替えられる', async () => {
@@ -117,8 +117,8 @@ describe('listMyIssues', () => {
 		expect(second.issues).toHaveLength(5);
 		expect(first.total).toBe(count);
 		expect(second.total).toBe(count);
-		const ids = [...first.issues, ...second.issues].map((i) => i.id);
-		expect(new Set(ids).size).toBe(count);
+		const shown = [...first.issues, ...second.issues].map((i) => `${i.projectKey}-${i.number}`);
+		expect(new Set(shown).size).toBe(count);
 		expect((await listMyIssues(as(me), {}, 3)).issues).toEqual([]);
 		expect((await listMyIssues(as(me), { status: 'done' })).total).toBe(1);
 	});

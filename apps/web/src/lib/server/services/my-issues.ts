@@ -4,7 +4,7 @@ import type { ColorName } from '#lib/labels.ts';
 import { ISSUE_PAGE_SIZE } from '#lib/pagination.ts';
 import type { AppContext } from '../context';
 import { issue, issueStatus, project, projectMember } from '../db/schema';
-import { idsCond, selectIssueListView, statusCond, toIssueListItems } from './issues';
+import { idsCond, selectIssueListView, statusCond, toIssueListViewItems } from './issues';
 
 /**
  * role は担当している課題（assignee、既定）か登録した課題（reporter）。
@@ -62,5 +62,5 @@ export async function listMyIssues(ctx: AppContext, filters: MyIssueFilters, pag
 			.innerJoin(project, eq(project.id, issue.projectId))
 			.where(where)
 	]);
-	return { issues: toIssueListItems(rows), total };
+	return { issues: toIssueListViewItems(rows), total };
 }

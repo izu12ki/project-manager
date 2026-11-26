@@ -15,7 +15,7 @@ import {
 	parentByNumberQuery,
 	parentCandidatesQuery,
 	sortOrder,
-	toIssueListItems,
+	toIssueListViewItems,
 	type IssueFilters
 } from './issues';
 import { cachedByKey, checkProjectAccess, ofProject, projectAccessRead } from './project-access';
@@ -91,7 +91,10 @@ export async function getIssueListRows(
 		]);
 	return {
 		project: checkProjectAccess(ctx, access),
-		issues: toIssueListItems(issues),
+		issues: toIssueListViewItems(issues).map(({ categoriesJson, ...i }) => ({
+			...i,
+			categoryNames: JSON.parse(categoriesJson) as string[]
+		})),
 		total,
 		assignees,
 		categories,

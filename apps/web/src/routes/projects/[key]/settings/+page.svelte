@@ -13,6 +13,7 @@
 		ChevronUp,
 		CircleCheck,
 		Flag,
+		LoaderCircle,
 		Mail,
 		Pencil,
 		RotateCcw,
@@ -30,6 +31,19 @@
 	import BacklogIssueImport from './BacklogIssueImport.svelte';
 
 	let { data, form }: PageProps = $props();
+
+	// 招待はメールの送信を待ってから応答するので、送信中はボタンで作成中と知らせ、前の招待リンクは隠す
+	let inviting = $state(false);
+	const trackInvite: SubmitFunction = () => {
+		inviting = true;
+		return async ({ update }) => {
+			try {
+				await update();
+			} finally {
+				inviting = false;
+			}
+		};
+	};
 	const writable = $derived(!data.project.archivedAt);
 	// アイコン・色・キーの変更をその場でプレビューする
 	let icon = $derived(data.project.icon ?? '');
@@ -255,7 +269,7 @@
 		<form
 			method="POST"
 			action="?/inviteGuest"
-			use:enhance
+			use:enhance={trackInvite}
 			class="grid items-end gap-3"
 			style="grid-template-columns: minmax(0, 1fr) auto auto"
 		>
@@ -270,9 +284,17 @@
 					<option value="guest" selected>{ROLE_LABEL.guest}</option>
 				</select>
 			</div>
-			<button type="submit" class="btn btn-outline">招待する</button>
+			<button type="submit" class="btn btn-outline" disabled={inviting} aria-busy={inviting}>
+				{#if inviting}
+					<LoaderCircle size={16} class="motion-safe:animate-spin" />招待リンクを作成中…
+				{:else}
+					招待する
+				{/if}
+			</button>
 		</form>
-		{#if form?.inviteUrl}<InviteLinkBox url={form.inviteUrl} mailError={form.mailError} />{/if}
+		{#if form?.inviteUrl && !inviting}
+			<InviteLinkBox url={form.inviteUrl} mailError={form.mailError} />
+		{/if}
 		{#if data.invitations.length > 0}
 			<div class="grid">
 				<div class="pb-1 text-[0.8125rem] font-medium text-muted-foreground">招待中</div>

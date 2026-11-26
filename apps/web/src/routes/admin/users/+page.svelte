@@ -1,6 +1,7 @@
 <script lang="ts">
+	import type { SubmitFunction } from '$app/forms';
 	import { enhance } from '#lib/forms.ts';
-	import { Mail } from '@lucide/svelte';
+	import { LoaderCircle, Mail } from '@lucide/svelte';
 	import ConfirmAction from '#lib/components/ConfirmAction.svelte';
 	import FormAlert from '#lib/components/FormAlert.svelte';
 	import InviteLinkBox from '#lib/components/InviteLinkBox.svelte';
@@ -14,6 +15,19 @@
 	let { data, form }: PageProps = $props();
 
 	const roles = ROLES;
+
+	// 招待はメールの送信を待ってから応答するので、送信中はボタンで作成中と知らせ、前の招待リンクは隠す
+	let inviting = $state(false);
+	const trackInvite: SubmitFunction = () => {
+		inviting = true;
+		return async ({ update }) => {
+			try {
+				await update();
+			} finally {
+				inviting = false;
+			}
+		};
+	};
 
 	// 変更確認中の行（select で選んだ値を保持する）
 	let pendingChange = $state<{ id: string; name: string; role: (typeof roles)[number] } | null>(
@@ -51,7 +65,7 @@
 			<h2 class="card-title">ユーザーを招待</h2>
 			<p class="card-desc">招待メールのリンクから登録できます</p>
 		</div>
-		<form method="POST" action="?/invite" use:enhance class="grid gap-5">
+		<form method="POST" action="?/invite" use:enhance={trackInvite} class="grid gap-5">
 			<div class="invite-grid">
 				<div class="field">
 					<label class="label" for="invite-email">メールアドレス</label>
@@ -78,9 +92,19 @@
 					</p>
 				</div>
 			</div>
-			<div><button type="submit" class="btn btn-primary">招待する</button></div>
+			<div>
+				<button type="submit" class="btn btn-primary" disabled={inviting} aria-busy={inviting}>
+					{#if inviting}
+						<LoaderCircle size={16} class="motion-safe:animate-spin" />招待リンクを作成中…
+					{:else}
+						招待する
+					{/if}
+				</button>
+			</div>
 		</form>
-		{#if form?.inviteUrl}<InviteLinkBox url={form.inviteUrl} mailError={form.mailError} />{/if}
+		{#if form?.inviteUrl && !inviting}
+			<InviteLinkBox url={form.inviteUrl} mailError={form.mailError} />
+		{/if}
 	</div>
 
 	<BacklogUserImport />

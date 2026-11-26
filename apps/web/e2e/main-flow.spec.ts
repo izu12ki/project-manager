@@ -688,7 +688,11 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.getByLabel('開始日').fill(jstDay(1));
 	await expect(page).toHaveURL(new RegExp(`from=${jstDay(1)}`));
 	await expect(page.locator('.days [data-date]').first()).toHaveAttribute('data-date', jstDay(1));
+	// ログアウトの後に「戻る」を押しても、ログイン中の画面をブラウザのキャッシュから出さず、ログイン画面にする
+	await page.goto('/projects/ACME');
 	await logout(page);
+	await page.goBack();
+	await expect(page).toHaveURL(/\/login\?redirectTo=%2Fprojects%2FACME$/);
 
 	// 7. ゲストがカンバンで進行中へ移動
 	await loginBeforeHydration(page, 'guest@example.com');

@@ -1,6 +1,6 @@
 // 課題一覧・起票の画面に要る行を 1 回の batch（D1 への 1 往復）で引く。方式は project-access.ts の先頭を参照
 import { sql, type SQL } from 'drizzle-orm';
-import type { IssueSort } from '#lib/issue-sort.ts';
+import { DEFAULT_ISSUE_SORT, type IssueSort } from '#lib/issue-sort.ts';
 import { ISSUE_PAGE_SIZE } from '#lib/pagination.ts';
 import { authorize } from '../authz';
 import type { AppContext } from '../context';
@@ -59,6 +59,8 @@ function unfilteredPage(sort: IssueSort) {
 	if (!read) unfilteredPages.set(id, (read = unfilteredPageRead(sort)));
 	return read;
 }
+// 既定の並び順（一覧を開いたとき）の分は、起動時に組み立てられるよう先に作っておく（buildCachedReads）
+unfilteredPage(DEFAULT_ISSUE_SORT);
 
 /**
  * 課題一覧の 1 ページ分（ISSUE_PAGE_SIZE 件）と、条件に合う課題の総数。

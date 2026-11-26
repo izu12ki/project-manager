@@ -19,6 +19,18 @@ interface BatchPrepared {
 	mode: unknown;
 }
 
+/** これまでに作った cachedRead の、文を組み立てる関数 */
+const templates: ((db: DB) => unknown)[] = [];
+
+/**
+ * これまでに作った cachedRead の文をまとめて組み立てる。Worker の起動時（リクエストの外）に呼び、
+ * isolate の最初のリクエストで組み立てる分（と Drizzle のコードを初めて動かす分）の CPU 時間を起動時に移す。
+ * D1 には何も送らない（文の準備だけ）
+ */
+export function buildCachedReads(db: DB): void {
+	for (const ensure of templates) ensure(db);
+}
+
 /**
  * build（読み取りの select）を一度だけ組み立て、呼ぶたびに values を埋めた文を返す。
  * build は names の名前のプレースホルダーを受け取り、リクエストごとに変わる値の代わりに式へ入れる。
@@ -34,16 +46,20 @@ export function cachedRead<K extends string, Q>(
 		Placeholder<K>
 	>;
 	let template: { sql: string; params: unknown[]; prepared: BatchPrepared } | undefined;
+	const ensure = (db: DB) => {
+		if (!template) {
+			const query = build(db, placeholders) as unknown as { _prepare(): BatchPrepared };
+			const prepared = query._prepare();
+			const { sql: text, params } = prepared.getQuery();
+			template = { sql: text, params, prepared };
+		}
+		return template;
+	};
+	templates.push(ensure);
 	return (db, values) => {
 		const item = {
 			_prepare(): BatchPrepared {
-				if (!template) {
-					const query = build(db, placeholders) as unknown as { _prepare(): BatchPrepared };
-					const prepared = query._prepare();
-					const { sql: text, params } = prepared.getQuery();
-					template = { sql: text, params, prepared };
-				}
-				const { sql: text, params, prepared } = template;
+				const { sql: text, params, prepared } = ensure(db);
 				const filled = fillPlaceholders(params, values);
 				return {
 					getQuery: () => ({ sql: text, params: filled }),

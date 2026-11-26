@@ -6,8 +6,12 @@ import { svelteKitHandler, sveltekitCookies } from 'better-auth/svelte-kit';
 import { env, waitUntil } from 'cloudflare:workers';
 import { createAuth } from '#lib/server/auth.ts';
 import { isAllowedAuthRequest, type Role } from '#lib/server/authz.ts';
+import { buildCachedReads } from '#lib/server/db/cached-read.ts';
 import { createDb } from '#lib/server/db/index.ts';
 import { createReadBatcher } from '#lib/server/db/read-batch.ts';
+// 起動時に組み立てる読み取りの文（buildCachedReads）を登録させるため、画面の読み取りのモジュールを読み込んでおく
+import '#lib/server/services/issue-detail.ts';
+import '#lib/server/services/issue-list.ts';
 import { readEnv } from '#lib/server/env.ts';
 import { createMailer } from '#lib/server/mailer/index.ts';
 
@@ -24,12 +28,13 @@ const PUBLIC_PATHS = [
  * 設定・DB・メール・認証は isolate ごとに 1 回だけ作り、リクエストをまたいで使う。
  * better-auth はインスタンスを作るたびに表の定義やアダプターを組み立て直し、リクエストごとに作ると
  * 1 回 0.7〜2ms かかっていた。どれもリクエストごとの状態を持たない（Cookie はプラグインが
- * getRequestEvent で、waitUntil は今のリクエストのものを使う）。ビルド中は環境変数がないので、
- * 最初のリクエストで作る
+ * getRequestEvent で、waitUntil は今のリクエストのものを使う）。
+ * 画面の読み取りの文（db/cached-read.ts）もここで組み立てておく
  */
 function createServices() {
 	const appEnv = readEnv(env);
 	const db = createDb(env.DB);
+	buildCachedReads(db);
 	const mailer = createMailer({ ...appEnv, EMAIL: env.EMAIL });
 	const auth = createAuth(appEnv, db, {
 		mailer,
@@ -40,15 +45,23 @@ function createServices() {
 }
 let services: ReturnType<typeof createServices> | undefined;
 
+function startServices() {
+	if (!services) {
+		services = createServices();
+		// 失敗したら次のリクエストで作り直す（起動時の失敗を未処理の reject にもしない）
+		services.catch(() => (services = undefined));
+	}
+	return services;
+}
+
+// Worker の起動時（モジュールの評価）に作り始める。起動時の CPU 時間はリクエストの上限（Free の 10ms）とは
+// 別に数えるので、isolate の最初のリクエストで作る分（手元で数 ms）を軽くできる。ビルド中は環境変数がないので作らない
+if (!building) void startServices();
+
 const app: Handle = async ({ event, resolve }) => {
 	if (building) return resolve(event);
 
-	services ??= createServices().catch((e) => {
-		// 失敗したら次のリクエストで作り直す
-		services = undefined;
-		throw e;
-	});
-	const { appEnv, db, mailer, auth, authCtx } = await services;
+	const { appEnv, db, mailer, auth, authCtx } = await startServices();
 
 	event.locals.auth = auth;
 	event.locals.base = {

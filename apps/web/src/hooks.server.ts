@@ -1,6 +1,6 @@
 import { building } from '$app/env';
 import { getRequestEvent } from '$app/server';
-import { error, redirect } from '@sveltejs/kit';
+import { error, json, redirect } from '@sveltejs/kit';
 import { sequence, type Handle, type HandleServerError } from '@sveltejs/kit/hooks';
 import { svelteKitHandler, sveltekitCookies } from 'better-auth/svelte-kit';
 import { env, waitUntil } from 'cloudflare:workers';
@@ -100,11 +100,15 @@ const app: Handle = async ({ event, resolve }) => {
 	// 閲覧は、Cookie のキャッシュが有効なら getSession を呼ばずに読む（session-cookie.ts）。
 	// 決められなければ（キャッシュ切れなど）getSession に任せる
 	let user = fresh ? undefined : await readSessionCookie(event.request.headers);
+	// getSession が返すヘッダーは、セッションがないときに Cookie を消す Set-Cookie（下の 401 で使う）
+	let authHeaders = new Headers();
 	if (user === undefined) {
-		const s = await auth.api.getSession({
+		const { headers, response: s } = await auth.api.getSession({
 			headers: event.request.headers,
-			query: fresh ? { disableCookieCache: true } : undefined
+			query: fresh ? { disableCookieCache: true } : undefined,
+			returnHeaders: true
 		});
+		authHeaders = headers;
 		if (s?.user.disabledAt) {
 			await authCtx.internalAdapter.deleteUserSessions(s.user.id);
 		}
@@ -117,6 +121,7 @@ const app: Handle = async ({ event, resolve }) => {
 
 	const path = event.url.pathname;
 	if (!event.locals.user && !PUBLIC_PATHS.some((r) => r.test(path))) {
+		if (event.isDataRequest || event.isRemoteRequest) return signedOut(authHeaders);
 		redirect(303, `/login?redirectTo=${encodeURIComponent(path + event.url.search)}`);
 	}
 	if (!isAllowedAuthRequest(event.request.method, path)) error(404, 'Not found');
@@ -124,10 +129,28 @@ const app: Handle = async ({ event, resolve }) => {
 	return svelteKitHandler({ auth, event, resolve, building });
 };
 
+/**
+ * 開いたままの画面からの読み込み（画面のデータ・画面の関数）で、セッションが切れていた（別のタブでのログアウト・
+ * 無効化・期限切れ）ときの応答。ログイン画面へは転送しない。ページ内の遷移でログイン画面に移ると、
+ * ログイン中のサイドバーなどのデータが残り、画面の関数は転送を解釈せずに空の結果を返す。
+ * 401 を返し、ブラウザでページごと読み込み直させる（+layout.svelte・hooks.client.ts）。
+ * error() で投げると SvelteKit は Cookie を付けないので、better-auth が出した Cookie を消すヘッダーを自分で付ける
+ * （無効化された人の書き込みでは Cookie のキャッシュがまだ有効で、消さないと読み込み直してもログインしたままになる）
+ */
+function signedOut(authHeaders: Headers) {
+	const response = json({ message: 'ログインし直してください' }, { status: 401 });
+	for (const cookie of authHeaders.getSetCookie()) response.headers.append('set-cookie', cookie);
+	return response;
+}
+
 // CSP（フレームへの埋め込みの禁止を含む）は vite.config.ts の csp で SvelteKit がページに付ける
 const securityHeaders: Handle = async ({ event, resolve }) => {
 	const response = await resolve(event);
 	response.headers.set('x-content-type-options', 'nosniff');
+	// Worker が返すもの（画面・画面のデータ・API）はブラウザに保存させない。保存されていると、ログアウトの後に
+	// 「戻る」で、ログイン中の画面がサーバーに問い合わせずに表示される（HTTP のキャッシュや bfcache から）。
+	// ビルドした JS・CSS は静的アセットとして Worker を通らずに返るので、キャッシュされたまま
+	if (!response.headers.has('cache-control')) response.headers.set('cache-control', 'no-store');
 	return response;
 };
 

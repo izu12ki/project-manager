@@ -29,6 +29,7 @@ import {
 import { DEFAULT_ISSUE_SORT, type IssueSort } from '#lib/issue-sort.ts';
 import { cachedRead } from '../db/cached-read';
 import { authorize, can } from '../authz';
+import type { BatchItem } from 'drizzle-orm/batch';
 import type { AppContext } from '../context';
 import type { DB } from '../db';
 import {
@@ -44,9 +45,10 @@ import {
 import { AppError } from '../errors';
 import { notify } from '../notifications';
 import { emptyToNull, parse } from '../validation';
-import { linkAttachments } from './attachment-links';
+import { linkAttachmentsQuery } from './attachment-links';
 import {
 	categoriesQuery,
+	listStatusesOf,
 	milestonesQuery,
 	statusesQuery,
 	type CategoryRow,
@@ -58,10 +60,12 @@ import {
 	categoryIdsValue,
 	createEventsOf,
 	describeChanges,
-	loadFieldSets,
+	loadCreateRows,
 	loadFormerAssigneeNames,
+	loadUpdateRows,
 	prepareCreate,
 	preparePatch,
+	statusFieldSets,
 	type IssuePatch,
 	type IssueRow,
 	updateEventsOf,
@@ -777,25 +781,18 @@ export async function listDeletedIssues(ctx: AppContext, key: string) {
 	return deletedIssuesQuery(ctx.db, byProjectId(p.id));
 }
 
-async function nextPosition(db: DB, projectId: string, status: Status): Promise<string> {
-	const [row] = await db
-		.select({ max: sql<string | null>`max(${issue.position})` })
-		.from(issue)
-		.where(and(eq(issue.projectId, projectId), eq(issue.status, status)));
-	return generateKeyBetween(row?.max ?? null, null);
-}
-
 export async function createIssue(
 	ctx: AppContext,
 	key: string,
 	input: unknown
 ): Promise<{ number: number }> {
-	const p = await requireProject(ctx, key);
+	const { project: p, fields, tail } = await loadCreateRows(ctx, key, input);
 	assertWritable(p);
-	const fields = await loadFieldSets(ctx.db, p.id);
 	const values = prepareCreate(ctx.actor, fields, input);
-	const position = await nextPosition(ctx.db, p.id, values.status);
-	await ctx.db.batch([
+	const { id } = values;
+	const link = linkAttachmentsQuery(ctx, { projectId: p.id, issueId: id }, values.description);
+	// 振られた番号はバッチ末尾の select で引く（往復を増やさない）
+	const results = await ctx.db.batch([
 		ctx.db
 			.update(project)
 			.set({ nextIssueNumber: sql`${project.nextIssueNumber} + 1` })
@@ -805,41 +802,61 @@ export async function createIssue(
 			categoryIds: categoryIdsValue(p.id, values.categoryIds ?? []),
 			projectId: p.id,
 			number: sql`(select ${project.nextIssueNumber} - 1 from ${project} where ${project.id} = ${p.id})`,
-			position
-		})
+			// tail は入力のステータスの列の末尾（values.status は検証済みの同じ値）
+			position: generateKeyBetween(tail, null)
+		}),
+		...(link ? [link] : []),
+		ctx.db.select({ number: issue.number }).from(issue).where(eq(issue.id, id))
 	]);
-	const { id } = values;
-	await linkAttachments(ctx, { projectId: p.id, issueId: id }, values.description);
 	forgetProject(ctx, key); // nextIssueNumber が変わった
-	const [row] = await ctx.db.select({ number: issue.number }).from(issue).where(eq(issue.id, id));
-	await notify(ctx, {
-		project: p,
-		issue: { id, number: row.number, title: values.title },
-		events: createEventsOf(values)
-	});
+	const [row] = results[results.length - 1] as { number: number }[];
+	await notify(
+		ctx,
+		{
+			project: p,
+			issue: { id, number: row.number, title: values.title },
+			events: createEventsOf(values)
+		},
+		{
+			participants: {
+				reporterId: ctx.actor.id,
+				assigneeIds: values.assigneeIds ?? [],
+				commenterIds: []
+			},
+			names: fields.assignable,
+			priority: values.priority ?? 'none',
+			statuses: fields.statuses
+		}
+	);
 	return { number: row.number };
 }
 
-/** 課題を更新し、同時に編集履歴を残す */
+/** 課題を更新し、同時に編集履歴を残す。also は同じ batch（1 往復・1 トランザクション）で送る書き込み */
 async function applyPatch(
 	ctx: AppContext,
 	cur: IssueRow,
 	patch: IssuePatch,
-	changes: IssueChangeItem[]
+	changes: IssueChangeItem[],
+	also: BatchItem<'sqlite'>[] = []
 ): Promise<void> {
 	const update = ctx.db
 		.update(issue)
 		.set(withCategoryGuard(cur.projectId, patch))
 		.where(eq(issue.id, cur.id));
-	if (changes.length === 0) {
+	if (changes.length === 0 && also.length === 0) {
 		await update;
 		return;
 	}
 	await ctx.db.batch([
 		update,
-		ctx.db
-			.insert(issueChange)
-			.values({ id: uuidv7(), issueId: cur.id, actorId: ctx.actor.id, changes })
+		...(changes.length > 0
+			? [
+					ctx.db
+						.insert(issueChange)
+						.values({ id: uuidv7(), issueId: cur.id, actorId: ctx.actor.id, changes })
+				]
+			: []),
+		...also
 	]);
 }
 
@@ -875,38 +892,64 @@ export async function listIssueChanges(ctx: AppContext, key: string, number: num
 	return rows;
 }
 
-/** 未送信（undefined）の項目は変更しない。値が変わった項目だけ権限を確認する。 */
+/**
+ * 未送信（undefined）の項目は変更しない。値が変わった項目だけ権限を確認する。
+ * 返すのは変えた項目（何も変わらなければ空）。画面が取り直すものを絞るのに使う
+ */
 export async function updateIssue(
 	ctx: AppContext,
 	key: string,
 	number: number,
 	input: unknown
-): Promise<void> {
-	const p = await requireProject(ctx, key);
-	const [{ issue: cur }, fields] = await Promise.all([
-		getIssue(ctx, key, number),
-		loadFieldSets(ctx.db, p.id)
-	]);
+): Promise<(keyof IssuePatch)[]> {
+	const {
+		project: p,
+		cur,
+		fields,
+		tail,
+		commenterIds
+	} = await loadUpdateRows(ctx, key, number, input);
 	assertWritable(p);
 	assertNotDeleted(cur);
 	const patch = preparePatch(ctx.actor, fields, cur, input);
-	if (Object.keys(patch).length === 0) return;
-	if (patch.status !== undefined) {
-		patch.position = await nextPosition(ctx.db, p.id, patch.status);
-	}
+	const changed = Object.keys(patch) as (keyof IssuePatch)[];
+	if (changed.length === 0) return changed;
+	// tail は入力のステータスの列の末尾（patch.status は検証済みの同じ値）
+	if (patch.status !== undefined) patch.position = generateKeyBetween(tail, null);
 	const otherUsers = await loadFormerAssigneeNames(ctx.db, fields, [{ cur, patch }]);
-	await applyPatch(ctx, cur, patch, describeChanges(fields, cur, patch, otherUsers));
-	if (patch.description !== undefined) {
-		await linkAttachments(ctx, { projectId: p.id, issueId: cur.id }, patch.description);
-	}
+	const link =
+		patch.description === undefined
+			? null
+			: linkAttachmentsQuery(ctx, { projectId: p.id, issueId: cur.id }, patch.description);
+	await applyPatch(
+		ctx,
+		cur,
+		patch,
+		describeChanges(fields, cur, patch, otherUsers),
+		link ? [link] : []
+	);
 	const events = updateEventsOf(cur, patch);
 	if (events.length > 0) {
-		await notify(ctx, {
-			project: p,
-			issue: { id: cur.id, number: cur.number, title: patch.title ?? cur.title },
-			events
-		});
+		await notify(
+			ctx,
+			{
+				project: p,
+				issue: { id: cur.id, number: cur.number, title: patch.title ?? cur.title },
+				events
+			},
+			{
+				participants: {
+					reporterId: cur.reporterId,
+					assigneeIds: patch.assigneeIds ?? cur.assigneeIds,
+					commenterIds
+				},
+				names: fields.assignable,
+				priority: patch.priority ?? cur.priority,
+				statuses: fields.statuses
+			}
+		);
 	}
+	return changed;
 }
 
 const MoveInput = v.object({
@@ -944,7 +987,8 @@ export async function moveIssue(ctx: AppContext, key: string, input: unknown): P
 	assertNotDeleted(cur);
 	authorize(ctx.actor, 'issue:changeStatus', { reporterId: cur.reporterId });
 	const statusChanged = data.status !== cur.status;
-	const fields = statusChanged ? await loadFieldSets(ctx.db, p.id) : null;
+	// 検証と変更履歴にはステータスだけ要る（loadFieldSets はプロジェクトのすべての課題を読むので使わない）
+	const fields = statusChanged ? statusFieldSets(await listStatusesOf(ctx.db, p.id)) : null;
 	if (fields) assertStatusIn(fields, data.status);
 
 	const neighbor = async (id: string | null | undefined): Promise<string | null> => {

@@ -128,10 +128,13 @@ export const saveIssue = form(
 	}),
 	({ key, number, ...input }) =>
 		runForm(async () => {
-			await updateIssue(remoteContext(), key, number, input);
+			const changed = await updateIssue(remoteContext(), key, number, input);
+			// 変わったものだけ同じ応答で返す（取り直す分だけ CPU 時間がかかる）。詳細は何も変わらなくても返す。
+			// 1 つも取り直さないと、ブラウザは画面のすべての query を取り直す
 			void getIssueDetail({ key, number }).refresh();
-			void getChanges({ key, number }).refresh();
-			void getAttachments({ key, number }).refresh();
+			if (changed.length > 0) void getChanges({ key, number }).refresh();
+			// 添付は本文で参照したときだけ課題に紐付く
+			if (changed.includes('description')) void getAttachments({ key, number }).refresh();
 			return { saved: true };
 		})
 );

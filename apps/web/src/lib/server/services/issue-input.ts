@@ -1,6 +1,8 @@
 // 課題の起票・更新の入力検証と、書き込む値の組み立て。1 件の起票・更新と一括 API の両方から使う。
-// DB に触れない同期関数にしておき、問い合わせは loadFieldSets でまとめて先に済ませる。
-import { asc, eq, sql, type SQL } from 'drizzle-orm';
+// DB に触れない同期関数にしておき、問い合わせは loadFieldSets（一括）・loadCreateRows / loadUpdateRows（1 件）で
+// まとめて先に済ませる。
+import { and, asc, eq, isNull, sql, type Placeholder, type SQL } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/sqlite-core';
 import { inList } from '../db/limits';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
@@ -14,13 +16,29 @@ import {
 	type StatusDef
 } from '#lib/labels.ts';
 import { authorize, type Actor } from '../authz';
+import type { AppContext } from '../context';
 import type { DB } from '../db';
-import { category, issue, issueType, milestone, user } from '../db/schema';
+import { cachedRead } from '../db/cached-read';
+import { category, comment, issue, issueType, milestone, user } from '../db/schema';
 import { AppError } from '../errors';
 import type { IssueEvent } from '../notifications';
 import { DateOrEmptySchema as DateOrEmpty, emptyToNull, parse } from '../validation';
-import { listStatusesOf } from './issue-fields';
-import { listAssignableUsers } from './projects';
+import { issueRowRead } from './issue-detail';
+import {
+	categoriesQuery,
+	issueTypesQuery,
+	listStatusesOf,
+	milestonesQuery,
+	statusesQuery
+} from './issue-fields';
+import {
+	cachedByKey,
+	checkProjectAccess,
+	ofProject,
+	projectAccessRead,
+	type ProjectCond
+} from './project-access';
+import { assignableUsersQuery, listAssignableUsers } from './projects';
 
 export type IssuePatch = Partial<typeof issue.$inferInsert>;
 export type IssueRow = typeof issue.$inferSelect;
@@ -98,6 +116,208 @@ export async function loadFieldSets(db: DB, projectId: string): Promise<FieldSet
 		issuesByNumber: new Map(refs.map((r) => [r.number, r])),
 		issuesById: new Map(refs.map((r) => [r.id, r])),
 		parentIds: new Set(refs.filter((r) => !r.deleted && r.parentId).map((r) => r.parentId!))
+	};
+}
+
+// 1 件の起票・更新で読むもの。loadFieldSets はプロジェクトのすべての課題を読む（一括 API の親子関係の検証に要る）が、
+// 1 件では親に指定した課題と、更新する課題の親・子課題の有無だけで足りる。課題の多いプロジェクトで全件を読むと
+// それだけで Workers Free の 10ms の多くを使うため（3,000 件で手元 1〜2ms）。
+// 分類項目・担当可能な人・アクセス権と合わせて、プロジェクトキーの副問い合わせで絞り 1 回の batch（1 往復）で読む
+const statusesOf = cachedByKey(statusesQuery);
+const issueTypesOf = cachedByKey(issueTypesQuery);
+const categoriesOf = cachedByKey(categoriesQuery);
+const milestonesOf = cachedByKey(milestonesQuery);
+const assignableOf = cachedByKey(assignableUsersQuery);
+
+const child = alias(issue, 'child');
+const target = alias(issue, 'target');
+
+/** 番号の課題（の ID）。プロジェクトで絞る副問い合わせ */
+const issueIdOf = (db: DB, of: ProjectCond, number: Placeholder) =>
+	db
+		.select({ id: target.id })
+		.from(target)
+		.where(and(of(target.projectId), eq(target.number, number)));
+
+/** 番号で指定した課題（親課題の候補） */
+const issueRefRead = cachedRead(['key', 'number'], (db, p) =>
+	db
+		.select({
+			id: issue.id,
+			number: issue.number,
+			title: issue.title,
+			parentId: issue.parentId,
+			deletedAt: issue.deletedAt
+		})
+		.from(issue)
+		.where(and(ofProject(db, p.key)(issue.projectId), eq(issue.number, p.number)))
+);
+
+/** 番号の課題に、削除していない子課題があれば 1 行 */
+const childRead = cachedRead(['key', 'number'], (db, p) =>
+	db
+		.select({ id: child.id })
+		.from(child)
+		.where(
+			and(
+				inList(child.parentId, issueIdOf(db, ofProject(db, p.key), p.number)),
+				isNull(child.deletedAt)
+			)
+		)
+		.limit(1)
+);
+
+/** 番号の課題にコメントした人（通知の受信者を決めるのに使う） */
+const commentersRead = cachedRead(['key', 'number'], (db, p) =>
+	db
+		.selectDistinct({ id: comment.authorId })
+		.from(comment)
+		.where(inList(comment.issueId, issueIdOf(db, ofProject(db, p.key), p.number)))
+);
+
+/** ステータスの列の末尾の位置（新しく入れる課題はその後ろに置く）。削除した課題も含める */
+const tailRead = cachedRead(['key', 'status'], (db, p) =>
+	db
+		.select({ max: sql<string | null>`max(${issue.position})`.as('max_position') })
+		.from(issue)
+		.where(and(ofProject(db, p.key)(issue.projectId), eq(issue.status, p.status)))
+);
+
+/** 入力の親課題の番号（検証前。検証は prepareCreate・preparePatch で行う）。指定がない・読めなければ undefined */
+function rawParentNumber(input: unknown): number | undefined {
+	const raw = (input as { parentNumber?: unknown } | null)?.parentNumber;
+	const r = v.safeParse(ParentSchema, raw);
+	return r.success && typeof r.output === 'number' ? r.output : undefined;
+}
+
+/** 入力のステータス（検証前） */
+function rawStatus(input: unknown): string | undefined {
+	const s = (input as { status?: unknown } | null)?.status;
+	return typeof s === 'string' && s !== '' ? s : undefined;
+}
+
+/** 読み取りの文を名前付きで 1 回の ctx.readBatch に入れる。null の文は送らず、結果は undefined */
+async function readNamed<T extends Record<string, unknown>>(
+	ctx: AppContext,
+	items: T
+): Promise<{ [K in keyof T]: null extends T[K] ? Awaited<T[K]> | undefined : Awaited<T[K]> }> {
+	const keys = Object.keys(items).filter((k) => items[k] !== null);
+	const results = await (ctx.readBatch as (items: unknown[]) => Promise<unknown[]>)(
+		keys.map((k) => items[k])
+	);
+	return Object.fromEntries(keys.map((k, i) => [k, results[i]])) as never;
+}
+
+function fieldReads(ctx: AppContext, key: string) {
+	const { db } = ctx;
+	return {
+		access: projectAccessRead(ctx, key),
+		statuses: statusesOf(db, key),
+		types: issueTypesOf(db, key),
+		categories: categoriesOf(db, key),
+		milestones: milestonesOf(db, key),
+		assignable: assignableOf(db, key)
+	};
+}
+
+function toFieldSets(
+	rows: {
+		statuses: StatusDef[];
+		types: { id: string; name: string }[];
+		categories: { id: string; name: string }[];
+		milestones: { id: string; name: string; completedAt: Date | null }[];
+		assignable: { id: string; name: string }[];
+	},
+	refs: IssueRef[],
+	parentIds: Set<string>
+): FieldSets {
+	const toMap = (rows: { id: string; name: string }[]) => new Map(rows.map((r) => [r.id, r.name]));
+	return {
+		statuses: rows.statuses,
+		typeIds: toMap(rows.types),
+		categoryIds: toMap(rows.categories),
+		milestoneIds: toMap(rows.milestones),
+		completedMilestoneIds: new Set(rows.milestones.filter((m) => m.completedAt).map((m) => m.id)),
+		assignable: toMap(rows.assignable),
+		issuesByNumber: new Map(refs.map((r) => [r.number, r])),
+		issuesById: new Map(refs.map((r) => [r.id, r])),
+		parentIds
+	};
+}
+
+/** ステータスだけの FieldSets（カンバンの移動の検証と変更履歴に使う） */
+export function statusFieldSets(statuses: StatusDef[]): FieldSets {
+	return toFieldSets(
+		{ statuses, types: [], categories: [], milestones: [], assignable: [] },
+		[],
+		new Set()
+	);
+}
+
+const toRef = ({ deletedAt, ...r }: Omit<IssueRef, 'deleted'> & { deletedAt: Date | null }) => ({
+	...r,
+	deleted: !!deletedAt
+});
+
+/**
+ * 1 件の起票に要る行を 1 往復で読む。fields の課題は親に指定した課題だけ（prepareCreate の検証に足りる）。
+ * tail は入力のステータス（なければ最初のステータス）の列の末尾の位置。
+ * プロジェクトが見つからない・参加していなければ not_found
+ */
+export async function loadCreateRows(ctx: AppContext, key: string, input: unknown) {
+	const parentNumber = rawParentNumber(input);
+	const rows = await readNamed(ctx, {
+		...fieldReads(ctx, key),
+		parent: parentNumber === undefined ? null : issueRefRead(ctx.db, { key, number: parentNumber }),
+		tail: tailRead(ctx.db, { key, status: rawStatus(input) ?? INITIAL_STATUS })
+	});
+	const project = checkProjectAccess(ctx, rows.access);
+	return {
+		project,
+		fields: toFieldSets(rows, (rows.parent ?? []).map(toRef), new Set()),
+		tail: rows.tail[0]?.max ?? null
+	};
+}
+
+/**
+ * 1 件の更新に要る行を 1 往復で読む。fields の課題は、親に指定した課題・今の親課題と、子課題があればこの課題の ID
+ * （preparePatch・describeChanges に足りる）。tail は入力にステータスがあれば、その列の末尾の位置。
+ * commenterIds はこの課題にコメントした人（通知に使う）。
+ * プロジェクト・課題が見つからなければ not_found
+ */
+export async function loadUpdateRows(ctx: AppContext, key: string, number: number, input: unknown) {
+	const { db } = ctx;
+	const parentNumber = rawParentNumber(input);
+	const status = rawStatus(input);
+	const rows = await readNamed(ctx, {
+		...fieldReads(ctx, key),
+		issue: issueRowRead(db, key, number),
+		parent: parentNumber === undefined ? null : issueRefRead(db, { key, number: parentNumber }),
+		child: childRead(db, { key, number }),
+		commenters: commentersRead(db, { key, number }),
+		tail: status === undefined ? null : tailRead(db, { key, status })
+	});
+	const project = checkProjectAccess(ctx, rows.access);
+	const [row] = rows.issue;
+	if (!row) throw new AppError('not_found', '課題が見つかりません');
+	const cur = row.issue;
+	const refs = (rows.parent ?? []).map(toRef);
+	// 今の親課題（変更履歴に「#12 タイトル」で残す）。親課題は子課題を持つので削除されていない（削除で親子を外す）
+	if (cur.parentId && row.parentNumber !== null) {
+		refs.push({
+			id: cur.parentId,
+			number: row.parentNumber,
+			title: row.parentTitle!,
+			parentId: null,
+			deleted: false
+		});
+	}
+	return {
+		project,
+		cur,
+		fields: toFieldSets(rows, refs, new Set(rows.child.length > 0 ? [cur.id] : [])),
+		tail: rows.tail?.[0]?.max ?? null,
+		commenterIds: rows.commenters.map((c) => c.id)
 	};
 }
 

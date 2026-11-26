@@ -3,7 +3,9 @@
 //   node scripts/cpu-profile.ts / /projects/ACME /projects/ACME/issues/1
 //   node scripts/cpu-profile.ts --email admin@example.com --password '...' --self LOGIN '/admin/users'
 //
-// route は `/path`、`GET /path`、`LOGIN`（ログインそのもの）。出力は route ごとの「CPU ms/回・D1 往復・ステータス」。
+// route は `/path`、`GET /path`、`LOGIN`（ログインそのもの）、`SAVE <key>/<番号>`（課題の保存。タイトルを毎回変え、
+// 1 回ごとに番号を 1 つ進める）、`CREATE <key>`（起票。毎回 1 件増える）。--form 'assigneeIds=<id>&...' で SAVE・CREATE に項目を足せる。
+// 出力は route ごとの「CPU ms/回・D1 往復・ステータス」。
 // --self / --incl で関数ごとの上位、--save <prefix> で .cpuprofile（Chrome DevTools の Performance で開ける）を書く。
 //
 // - CPU 時間は workerd の V8 インスペクタで取ったサンプルのうち、idle 以外の時間の合計を回数で割ったもの。
@@ -28,7 +30,8 @@ const { values: opts, positionals: routes } = parseArgs({
 		runs: { type: 'string', default: '40' },
 		self: { type: 'boolean', default: false },
 		incl: { type: 'boolean', default: false },
-		save: { type: 'string' }
+		save: { type: 'string' },
+		form: { type: 'string', default: '' }
 	}
 });
 const base = opts.base;
@@ -216,11 +219,60 @@ async function connectProfiler() {
 const cdp = await connectProfiler();
 await cdp.send('Profiler.setSamplingInterval', { interval: 100 });
 
+/** --form の項目。名前が Ids で終わるもの（assigneeIds など）は配列 */
+function extraFields(): Record<string, string | string[]> {
+	const out: Record<string, string | string[]> = {};
+	for (const [k, v] of new URLSearchParams(opts.form)) {
+		if (k.endsWith('Ids')) out[k] = [...((out[k] as string[] | undefined) ?? []), v];
+		else out[k] = v;
+	}
+	return out;
+}
+
+/**
+ * devalue.stringify と同じ形（値を平らな配列に並べ、参照を添字で書く）。SvelteKit の remote form の本文に使う。
+ * 文字列・数値・配列・素のオブジェクトだけ扱う
+ */
+function devalueStringify(root: unknown): string {
+	const values: unknown[] = [];
+	const add = (v: unknown): number => {
+		const i = values.length;
+		values.push(null);
+		if (Array.isArray(v)) values[i] = v.map(add);
+		else if (v !== null && typeof v === 'object')
+			values[i] = Object.fromEntries(Object.entries(v).map(([k, x]) => [k, add(x)]));
+		else values[i] = v;
+		return i;
+	};
+	add(root);
+	return JSON.stringify(values);
+}
+
+/** SvelteKit の remote form（application/x-sveltekit-formdata）の本文。ファイルなし */
+function binaryForm(data: Record<string, unknown>): Uint8Array<ArrayBuffer> {
+	const header = new TextEncoder().encode(devalueStringify([data, { remote_refreshes: [] }]));
+	const body = new Uint8Array(1 + 4 + 2 + header.byteLength);
+	const view = new DataView(body.buffer);
+	view.setUint8(0, 0); // 形式の版
+	view.setUint32(1, header.byteLength, true);
+	view.setUint16(5, 0, true); // ファイルの位置の表の長さ
+	body.set(header, 7);
+	return body;
+}
+
+/** 課題の画面に埋め込まれた remote query の結果のキー（<id>/getIssueDetail/…）から、issue.remote.ts の id を読む */
+async function issueRemoteId(path: string): Promise<string> {
+	const html = await (await fetch(base + path, { headers: { cookie, ...IDENTITY } })).text();
+	const m = html.match(/([a-z0-9]+)\/getIssueDetail\//);
+	if (!m) throw new Error(`${path}: getIssueDetail の id が見つかりません`);
+	return m[1];
+}
+
 const results: { route: string; ms: number; trips: number; status: number }[] = [];
 for (const route of routes) {
 	const [method, path] = route.includes(' ') ? route.split(' ') : ['GET', route];
 	let status = 0;
-	const request = async () => {
+	let request = async () => {
 		if (route === 'LOGIN') {
 			await login();
 			return (status = 303);
@@ -233,6 +285,57 @@ for (const route of routes) {
 		await res.arrayBuffer();
 		return (status = res.status);
 	};
+	if (method === 'SAVE') {
+		const [key, first] = path.split('/');
+		const id = await issueRemoteId(`/projects/${key}/issues/${first}`);
+		let n = 0;
+		request = async () => {
+			// 同じ課題を保存し続けると編集履歴が伸び、応答（取り直した履歴）が実際より重くなるので、1 回ごとに次の課題へ移る
+			const number = Number(first) + n;
+			const pagePath = `/projects/${key}/issues/${number}`;
+			const data = { key, number, title: `計測用の保存 ${Date.now()}-${n++}`, ...extraFields() };
+			const res = await fetch(`${base}/_app/remote/${id}/saveIssue`, {
+				method: 'POST',
+				headers: {
+					cookie,
+					origin: base,
+					'content-type': 'application/x-sveltekit-formdata',
+					'x-sveltekit-pathname': pagePath,
+					'x-sveltekit-search': '',
+					...IDENTITY
+				},
+				body: binaryForm(data)
+			});
+			const text = await res.text();
+			if (!res.ok || text.includes('"issues"')) throw new Error(`${route}: ${res.status} ${text}`);
+			return (status = res.status);
+		};
+	} else if (method === 'CREATE') {
+		let n = 0;
+		request = async () => {
+			const form = new URLSearchParams({
+				title: `計測用の起票 ${n++}`,
+				description: '',
+				status: 'todo',
+				priority: 'medium',
+				typeId: '',
+				startDate: '',
+				dueDate: '',
+				parentNumber: '',
+				milestoneId: ''
+			});
+			for (const [k, v] of new URLSearchParams(opts.form)) form.append(k, v);
+			const res = await fetch(`${base}/projects/${path}/issues/new`, {
+				method: 'POST',
+				redirect: 'manual',
+				headers: { cookie, origin: base, 'x-sveltekit-action': 'true', ...IDENTITY },
+				body: form
+			});
+			const text = await res.text();
+			if (!text.includes('"type":"redirect"')) throw new Error(`${route}: ${res.status} ${text}`);
+			return (status = res.status);
+		};
+	}
 	for (let i = 0; i < warmup; i++) await request();
 	await cdp.send('Profiler.start');
 	for (let i = 0; i < runs; i++) await request();

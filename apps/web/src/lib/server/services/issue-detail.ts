@@ -88,7 +88,8 @@ const byKeyAndNumber = <Q>(query: (db: DB, of: ProjectCond, number: Placeholder)
 	const read = cachedRead(['key', 'number'], (db, p) => query(db, ofProject(db, p.key), p.number));
 	return (db: DB, key: string, number: number) => read(db, { key, number });
 };
-const issueRow = byKeyAndNumber(issueRowQuery);
+/** 課題 1 件と、親課題・報告者・削除した人の名前。ctx.readBatch 用。課題の更新（issue-input.ts）でも使う */
+export const issueRowRead = byKeyAndNumber(issueRowQuery);
 const childrenOf = byKeyAndNumber(childrenQuery);
 const peopleOf = byKeyAndNumber(peopleQuery);
 const assignableOf = cachedByKey(assignableUsersQuery);
@@ -117,7 +118,7 @@ export async function getIssueDetailRows(ctx: AppContext, key: string, number: n
 		people
 	] = await ctx.readBatch([
 		projectAccessRead(ctx, key),
-		issueRow(db, key, number),
+		issueRowRead(db, key, number),
 		childrenOf(db, key, number),
 		assignableOf(db, key),
 		statusesOf(db, key),

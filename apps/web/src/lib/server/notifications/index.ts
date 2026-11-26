@@ -2,7 +2,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { inList, insertChunks } from '../db/limits';
 import { uuidv7 } from 'uuidv7';
 import { extractMentionIds } from '#lib/mentions.ts';
-import type { Priority } from '#lib/labels.ts';
+import type { Priority, StatusDef } from '#lib/labels.ts';
 import type { AppContext } from '../context';
 import type { DB } from '../db';
 import { comment, issue, notification, user, userIntegration } from '../db/schema';
@@ -69,8 +69,20 @@ function toChanges(e: IssueEvent): Change[] {
 	}
 }
 
+/**
+ * 受信者の計算と DM に要る事実。起票・更新では書き込みの前に読んだ行から作って notify に渡す（loadFacts の往復を省く）
+ */
+export interface NotifyFacts {
+	participants: { reporterId: string; assigneeIds: string[]; commenterIds: string[] };
+	/** 通知を受け取れる人（無効化を除く admin + 参加者）の id → 名前 */
+	names: Map<string, string>;
+	priority: Priority;
+	/** プロジェクトのステータス（Slack の DM の表示に使う）。なければ要るときに読む */
+	statuses?: StatusDef[];
+}
+
 /** 受信者計算と DM に必要な事実を 1 回の往復（並列）で読む */
-async function loadFacts(db: DB, input: NotifyInput) {
+async function loadFacts(db: DB, input: NotifyInput): Promise<NotifyFacts> {
 	const [[cur], commenters, receivers] = await Promise.all([
 		db
 			.select({
@@ -98,26 +110,46 @@ async function loadFacts(db: DB, input: NotifyInput) {
 	};
 }
 
-/** Slack をオンにしている受信者の連携先。トークン未設定・該当者なしなら null */
-async function slackLinks(ctx: AppContext, userIds: string[]) {
+/**
+ * Slack をオンにしている受信者の連携先（トークン未設定・該当者なしなら null）と、メールで受け取る人
+ * （メールの通知をオフにした人・無効化された人を除く）のアドレス。両方要るときも 1 往復で読む
+ */
+async function externalTargets(ctx: AppContext, slackUserIds: string[], mailUserIds: string[]) {
 	const cfg = channelConfig(ctx, 'slack');
-	if (!cfg || userIds.length === 0) return null;
-	const links = await ctx.db
-		.select({ userId: userIntegration.userId, externalId: userIntegration.externalId })
-		.from(userIntegration)
-		.where(and(eq(userIntegration.provider, 'slack'), inList(userIntegration.userId, userIds)));
-	return links.length > 0 ? { cfg, links } : null;
-}
-
-/** メールで受け取る人（メールの通知をオフにした人・無効化された人を除く）のアドレス */
-async function emailRecipients(db: DB, userIds: string[]) {
-	if (userIds.length === 0) return [];
-	return db
-		.select({ id: user.id, email: user.email })
-		.from(user)
-		.where(
-			and(inList(user.id, userIds), eq(user.emailNotifications, true), isNull(user.disabledAt))
-		);
+	const [links, mailUsers] = await Promise.all([
+		cfg && slackUserIds.length > 0
+			? ctx
+					.readBatch([
+						ctx.db
+							.select({ userId: userIntegration.userId, externalId: userIntegration.externalId })
+							.from(userIntegration)
+							.where(
+								and(
+									eq(userIntegration.provider, 'slack'),
+									inList(userIntegration.userId, slackUserIds)
+								)
+							)
+					])
+					.then(([rows]) => rows)
+			: [],
+		mailUserIds.length > 0
+			? ctx
+					.readBatch([
+						ctx.db
+							.select({ id: user.id, email: user.email })
+							.from(user)
+							.where(
+								and(
+									inList(user.id, mailUserIds),
+									eq(user.emailNotifications, true),
+									isNull(user.disabledAt)
+								)
+							)
+					])
+					.then(([rows]) => rows)
+			: []
+	]);
+	return { target: cfg && links.length > 0 ? { cfg, links } : null, mailUsers };
 }
 
 /** 通知メールをレスポンス後に 1 通ずつ間隔を空けて送る。失敗はログだけ（宛先は userId で残す） */
@@ -160,30 +192,25 @@ function sendLater(
 async function sendExternal(
 	ctx: AppContext,
 	input: NotifyInput,
-	priority: Priority,
+	facts: NotifyFacts,
 	planned: PlannedNotification[]
 ): Promise<void> {
-	const [target, mailUsers] = await Promise.all([
-		slackLinks(
-			ctx,
-			planned.map((n) => n.userId)
-		),
-		emailRecipients(
-			ctx.db,
-			planned.filter((n) => EMAIL_NOTIFICATION_TYPES.has(n.type)).map((n) => n.userId)
-		)
-	]);
+	const { target, mailUsers } = await externalTargets(
+		ctx,
+		planned.map((n) => n.userId),
+		planned.filter((n) => EMAIL_NOTIFICATION_TYPES.has(n.type)).map((n) => n.userId)
+	);
 	if (!target && mailUsers.length === 0) return;
 	// ステータス名は Slack の DM にだけ使う（ステータスの変更はメールで送らない）
 	const statuses =
 		target && planned.some((n) => n.type === 'status_changed')
-			? await listStatusesOf(ctx.db, input.project.id)
+			? (facts.statuses ?? (await listStatusesOf(ctx.db, input.project.id)))
 			: [];
 	const byUser = new Map(planned.map((n) => [n.userId, n]));
 	const src: DmSource = {
 		baseUrl: ctx.baseUrl,
 		projectKey: input.project.key,
-		issue: { number: input.issue.number, title: input.issue.title, priority },
+		issue: { number: input.issue.number, title: input.issue.title, priority: facts.priority },
 		actorName: ctx.actor.name,
 		events: input.events,
 		statuses
@@ -202,10 +229,17 @@ async function sendExternal(
 	);
 }
 
-/** 更新が確定した後に呼ぶ。失敗しても元の操作には影響させない */
-export async function notify(ctx: AppContext, input: NotifyInput): Promise<void> {
+/**
+ * 更新が確定した後に呼ぶ。失敗しても元の操作には影響させない。
+ * facts を渡せば受信者の計算に要る行を読み直さない（更新後の担当者・優先度で作ること）
+ */
+export async function notify(
+	ctx: AppContext,
+	input: NotifyInput,
+	known?: NotifyFacts
+): Promise<void> {
 	try {
-		const facts = await loadFacts(ctx.db, input);
+		const facts = known ?? (await loadFacts(ctx.db, input));
 		const planned = planNotifications({
 			actorId: ctx.actor.id,
 			participants: facts.participants,
@@ -224,7 +258,7 @@ export async function notify(ctx: AppContext, input: NotifyInput): Promise<void>
 			).map((part) => ctx.db.insert(notification).values(part));
 			await ctx.db.batch([first, ...rest]);
 		}
-		await sendExternal(ctx, input, facts.priority, planned);
+		await sendExternal(ctx, input, facts, planned);
 	} catch (e) {
 		console.error('[notify] failed', e);
 	}
@@ -319,16 +353,11 @@ async function sendBulkExternal(
 	project: BulkNotifyInput['project'],
 	rows: BulkRow[]
 ): Promise<void> {
-	const [target, mailUsers] = await Promise.all([
-		slackLinks(
-			ctx,
-			rows.map((r) => r.userId)
-		),
-		emailRecipients(
-			ctx.db,
-			rows.filter((r) => EMAIL_NOTIFICATION_TYPES.has(r.type)).map((r) => r.userId)
-		)
-	]);
+	const { target, mailUsers } = await externalTargets(
+		ctx,
+		rows.map((r) => r.userId),
+		rows.filter((r) => EMAIL_NOTIFICATION_TYPES.has(r.type)).map((r) => r.userId)
+	);
 	const byUser = new Map(rows.map((r) => [r.userId, r]));
 	const src = { baseUrl: ctx.baseUrl, project, actorName: ctx.actor.name };
 	if (target) {

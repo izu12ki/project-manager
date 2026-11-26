@@ -196,7 +196,8 @@ describe('レイアウトの後の remote query', () => {
 		const member = await seedUser(db, 'member', 'Member');
 		await seedProject(db, { key: 'ACME', members: [member] });
 		const ctx = ctxOf(base, member);
-		await createIssue(ctx, 'ACME', { title: '課題' });
+		// 書き込みは閲覧と別のリクエスト（結果を共有しない batch）で行う
+		await createIssue(ctxOf(createTestBase(db), member), 'ACME', { title: '課題' });
 		// レイアウトの load（ルートとプロジェクト）
 		await Promise.all([listProjects(ctx), getProjectLayoutRows(ctx, 'ACME')]);
 		const sent: number[] = [];

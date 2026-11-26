@@ -40,6 +40,7 @@ import {
 	listMilestones
 } from './issue-fields';
 import { categoryIdsValue } from './issue-input';
+import { listNotifications } from './notifications';
 import { listAssignableUsers, requireProject, setProjectArchived } from './projects';
 
 describe('issues', () => {
@@ -1055,6 +1056,58 @@ describe('issues', () => {
 			await expect(listBoard(as(outsider), 'ACME')).rejects.toMatchObject({
 				code: 'not_found'
 			});
+		});
+	});
+
+	// D1 は 1 往復ごとに CPU 時間がかかる。分類項目・担当可能な人・親課題・アクセス権などはまとめて 1 往復で読み、
+	// プロジェクトのすべての課題は読まない
+	describe('起票・保存の往復', () => {
+		it('createIssue reads in one round trip and writes in one', async () => {
+			await createIssue(as(member), 'ACME', { title: '親' });
+			const before = roundTrips(db);
+			expect(await createIssue(as(member), 'ACME', { title: '子', parentNumber: 1 })).toEqual({
+				number: 2
+			});
+			expect(roundTrips(db) - before).toBe(2);
+			expect((await getIssue(as(member), 'ACME', 2)).issue.parent).toEqual({
+				number: 1,
+				title: '親'
+			});
+		});
+
+		it('createIssue that assigns someone notifies them without reading the project again', async () => {
+			const before = roundTrips(db);
+			await createIssue(as(member), 'ACME', { title: 'A', assigneeIds: [guest.id] });
+			// 読み取り・書き込み・通知の書き込み・メールの宛先
+			expect(roundTrips(db) - before).toBe(4);
+			expect((await listNotifications(as(guest))).map((n) => n.type)).toEqual(['assigned']);
+			await Promise.all(base.pending);
+			expect(base.sent.map((m) => m.to)).toEqual([guest.email]);
+		});
+
+		it('updateIssue reads in one round trip, writes in one and returns the changed fields', async () => {
+			await createIssue(as(member), 'ACME', { title: 'A' });
+			const before = roundTrips(db);
+			expect(await updateIssue(as(member), 'ACME', 1, { title: 'B', priority: 'high' })).toEqual([
+				'title',
+				'priority'
+			]);
+			expect(roundTrips(db) - before).toBe(2);
+			expect(await updateIssue(as(member), 'ACME', 1, { title: 'B' })).toEqual([]);
+		});
+
+		it('updateIssue notifies the reporter and commenters with what it read before writing', async () => {
+			await createIssue(as(guest), 'ACME', { title: 'A' });
+			await addComment(as(guest2), 'ACME', 1, { body: 'コメント' });
+			const before = roundTrips(db);
+			await updateIssue(as(member), 'ACME', 1, { status: 'in_progress' });
+			// 読み取り・書き込み・通知の書き込み（ステータスの変更はメールで送らない）
+			expect(roundTrips(db) - before).toBe(3);
+			for (const a of [guest, guest2]) {
+				expect((await listNotifications(as(a))).map((n) => n.type)).toContain('status_changed');
+			}
+			const { columns } = await listBoard(as(member), 'ACME');
+			expect(columns.in_progress.map((i) => i.number)).toEqual([1]);
 		});
 	});
 

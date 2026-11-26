@@ -1,4 +1,5 @@
 import { and, asc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { cachedRead } from '../db/cached-read';
 import { inList } from '../db/limits';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
@@ -47,19 +48,23 @@ const ColorSchema = v.optional(
 );
 
 /** 見られるプロジェクト（名前順）。全画面のレイアウトで引くので、同時の読み取りとまとめて送る（ctx.readBatch） */
+// どの画面でもレイアウトが呼ぶので、組み立てを使い回す（db/cached-read.ts）
+const allProjects = cachedRead([], (db) => db.select().from(project).orderBy(asc(project.name)));
+const joinedProjects = cachedRead(['actorId'], (db, p) =>
+	db
+		.select({ project })
+		.from(project)
+		.innerJoin(projectMember, eq(projectMember.projectId, project.id))
+		.where(eq(projectMember.userId, p.actorId))
+		.orderBy(asc(project.name))
+);
+
 export async function listProjects(ctx: AppContext): Promise<ProjectRow[]> {
 	if (ctx.actor.role === 'admin') {
-		const [rows] = await ctx.readBatch([ctx.db.select().from(project).orderBy(asc(project.name))]);
+		const [rows] = await ctx.readBatch([allProjects(ctx.db, {})]);
 		return rows;
 	}
-	const [rows] = await ctx.readBatch([
-		ctx.db
-			.select({ project })
-			.from(project)
-			.innerJoin(projectMember, eq(projectMember.projectId, project.id))
-			.where(eq(projectMember.userId, ctx.actor.id))
-			.orderBy(asc(project.name))
-	]);
+	const [rows] = await ctx.readBatch([joinedProjects(ctx.db, { actorId: ctx.actor.id })]);
 	return rows.map((r) => r.project);
 }
 

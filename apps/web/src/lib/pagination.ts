@@ -1,5 +1,5 @@
 /** 課題一覧の 1 ページの件数。課題の多いプロジェクトでも、1 回の表示にかかる CPU 時間が増え続けないようにする */
-export const ISSUE_PAGE_SIZE = 50;
+export const ISSUE_PAGE_SIZE = 25;
 
 /** URL の ?page= を読む。1 以上の整数でなければ 1 */
 export function parsePage(params: URLSearchParams): number {

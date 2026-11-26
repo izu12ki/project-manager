@@ -32,6 +32,18 @@ import {
 } from './issues';
 import { listAssignableUsers, requireProject } from './projects';
 
+/** listIssues の列のうち、一覧の画面（getIssueListRows）では読まないもの */
+const NOT_IN_LIST_VIEW = [
+	'typeId',
+	'resolution',
+	'position',
+	'assigneeIds',
+	'parentId',
+	'categoryIds',
+	'milestoneId',
+	'reporterId'
+];
+
 describe('getIssueListRows', () => {
 	let db: DB;
 	let base: ReturnType<typeof createTestBase>;
@@ -84,7 +96,10 @@ describe('getIssueListRows', () => {
 		const issues = await listIssues(ctx, 'ACME', filters, sort);
 		return {
 			project: p,
-			issues,
+			// 一覧の画面は表示しない列を読まない
+			issues: issues.map((i) =>
+				Object.fromEntries(Object.entries(i).filter(([k]) => !NOT_IN_LIST_VIEW.includes(k)))
+			),
 			total: issues.length,
 			assignees: await listAssignableUsers(db, p.id),
 			categories: await listCategories(ctx, 'ACME'),
@@ -200,23 +215,25 @@ describe('getIssueListRows', () => {
 		const sort: IssueSort = { key: 'number', order: 'asc' };
 		const numbers = (rows: { issues: { number: number }[] }) => rows.issues.map((i) => i.number);
 
-		const first = await getIssueListRows(as(member), 'ACME', {}, sort);
-		expect(first.total).toBe(123);
-		expect(numbers(first)).toEqual([1, 2, 3, ...Array.from({ length: 47 }, (_, i) => i + 5)]);
-		expect(numbers(await getIssueListRows(as(member), 'ACME', {}, sort, 2))).toEqual(
-			Array.from({ length: ISSUE_PAGE_SIZE }, (_, i) => i + 52)
-		);
-		const third = await getIssueListRows(as(member), 'ACME', {}, sort, 3);
-		expect(numbers(third)).toEqual(Array.from({ length: 23 }, (_, i) => i + 102));
+		const all = [1, 2, 3, ...Array.from({ length: 120 }, (_, i) => i + 5)];
+		const pages = Math.ceil(all.length / ISSUE_PAGE_SIZE);
+		for (let page = 1; page <= pages; page++) {
+			const rows = await getIssueListRows(as(member), 'ACME', {}, sort, page);
+			expect(rows.total).toBe(123);
+			expect(numbers(rows), `page ${page}`).toEqual(
+				all.slice((page - 1) * ISSUE_PAGE_SIZE, page * ISSUE_PAGE_SIZE)
+			);
+		}
 		// 最後のページを越えると空。総数は変わらない（ページの補正は呼び出し側で行う）
-		const beyond = await getIssueListRows(as(member), 'ACME', {}, sort, 4);
+		const beyond = await getIssueListRows(as(member), 'ACME', {}, sort, pages + 1);
 		expect(beyond.issues).toEqual([]);
 		expect(beyond.total).toBe(123);
 
 		// 総数は絞り込みの後の件数（#5 からの偶数番目 60 件が todo、#1・#3 は todo、#2 は in_progress）
-		const todo = await getIssueListRows(as(member), 'ACME', { status: 'todo' }, sort, 2);
+		const todoPages = Math.ceil(62 / ISSUE_PAGE_SIZE);
+		const todo = await getIssueListRows(as(member), 'ACME', { status: 'todo' }, sort, todoPages);
 		expect(todo.total).toBe(62);
-		expect(todo.issues).toHaveLength(12);
+		expect(todo.issues).toHaveLength(62 - (todoPages - 1) * ISSUE_PAGE_SIZE);
 	});
 
 	it('reads everything in one round trip', async () => {

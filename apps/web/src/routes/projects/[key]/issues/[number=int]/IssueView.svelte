@@ -1,3 +1,18 @@
+<script module lang="ts">
+	type RenderMarkdown = typeof import('#lib/markdown/render.ts').renderMarkdown;
+	let rendererLoad: Promise<RenderMarkdown> | undefined;
+	/**
+	 * コメントの Markdown を HTML にする関数を読み込む。大きい（gzip で約 48KB）ので、ページの JS とは分け、
+	 * 課題を開いたときにコメントの取得と並行して読み込む。2 回目以降は同じものを返す
+	 */
+	function loadRenderer(): Promise<RenderMarkdown> {
+		rendererLoad ??= import('#lib/markdown/render.ts').then((m) => m.renderMarkdown);
+		// 失敗したら次に開いたときに読み込み直す
+		rendererLoad.catch(() => (rendererLoad = undefined));
+		return rendererLoad;
+	}
+</script>
+
 <script lang="ts">
 	import {
 		Calendar,
@@ -55,6 +70,7 @@
 		saveIssue,
 		updateComment
 	} from './issue.remote';
+	import { browser } from '$app/env';
 	import { page } from '$app/state';
 
 	interface Props {
@@ -82,19 +98,64 @@
 	});
 	// query は分けておき、コメントの更新では課題側を取り直さない
 	const detailQuery = $derived(getIssueDetail(ref));
-	const commentsQuery = $derived(getComments(ref));
-	const changesQuery = $derived(getChanges(ref));
-	const attachmentsQuery = $derived(getAttachments(ref));
-	// 4 つを同時に取得する。$derived(await …) を並べると、前の await が終わるまで次の query が作られず 1 つずつになる。
-	// Promise.all も各 query の then を同期的に読むので、どれかを取り直したときもここが更新される
-	const [detail, comments, changes, attachments] = $derived(
-		await Promise.all([detailQuery, commentsQuery, changesQuery, attachmentsQuery])
+	// コメント・編集履歴・添付はサーバーの描画では取らず、ブラウザから別のリクエストで取る。
+	// コメントの Markdown の変換と描画は件数に比例して重く、1 回のリクエストにまとめると
+	// Workers Free の CPU 時間（10ms）を超えやすいため。
+	// 待たずに current で読むので、読み込み中はサーバーの描画とハイドレーションで同じ表示（読み込み中）になる
+	const commentsQuery = $derived(browser ? getComments(ref) : undefined);
+	const changesQuery = $derived(browser ? getChanges(ref) : undefined);
+	const attachmentsQuery = $derived(browser ? getAttachments(ref) : undefined);
+	/**
+	 * query の取得を始めてから first を返す（query は current などを読んだときに取りにいく）。
+	 * 課題側を待った後で読むと、課題側が届くまで取得が始まらず、往復の長い環境では待ちが倍になる
+	 */
+	function startingAlso<T>(first: T, ...others: ({ loading: boolean } | undefined)[]): T {
+		untrack(() => others.forEach((q) => q?.loading));
+		return first;
+	}
+	const detail = $derived(
+		await startingAlso(detailQuery, commentsQuery, changesQuery, attachmentsQuery)
 	);
+	const comments = $derived(commentsQuery?.current);
+	const changes = $derived(changesQuery?.current);
+	const attachments = $derived(attachmentsQuery?.current);
+	// コメントの Markdown はサーバーの CPU 時間を使わないよう、ブラウザで HTML にする
+	let renderMarkdown = $state<RenderMarkdown>();
+	let rendererFailed = $state(false);
+	if (browser) {
+		loadRenderer().then(
+			(render) => (renderMarkdown = render),
+			() => (rendererFailed = true)
+		);
+	}
+	const activityLoaded = $derived(
+		comments !== undefined && changes !== undefined && renderMarkdown !== undefined
+	);
+	const activityFailed = $derived(
+		!!(commentsQuery?.error || changesQuery?.error) || rendererFailed
+	);
+	/**
+	 * コメントの本文の HTML。リアクションや投稿のたびにコメントを取り直すので、同じ本文は変換し直さない。
+	 * 課題キーをリンクにするプロジェクト（見られるもの）が変わったら作り直す
+	 */
+	const commentHtml = $derived.by(() => {
+		const render = renderMarkdown;
+		const projectKeys = new Set(detail.projectKeys);
+		// 描画中に足していくだけの控えなので、変更を通知しない Map でよい
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const cache = new Map<string, string>();
+		return (body: string) => {
+			if (!render) return '';
+			let html = cache.get(body);
+			if (html === undefined) cache.set(body, (html = render(body, { projectKeys })));
+			return html;
+		};
+	});
 	// コメントと編集履歴を時刻順に並べる
 	const activity = $derived(
 		[
-			...comments.map((c) => ({ kind: 'comment' as const, id: c.id, at: c.createdAt, c })),
-			...changes.map((h) => ({ kind: 'change' as const, id: h.id, at: h.createdAt, h }))
+			...(comments ?? []).map((c) => ({ kind: 'comment' as const, id: c.id, at: c.createdAt, c })),
+			...(changes ?? []).map((h) => ({ kind: 'change' as const, id: h.id, at: h.createdAt, h }))
 		].sort((a, b) => a.at.getTime() - b.at.getTime() || a.id.localeCompare(b.id))
 	);
 	// 「コメントのみ表示」にすると編集履歴を隠す。選んだ表示はブラウザごとに覚える
@@ -106,8 +167,13 @@
 		} catch {
 			// localStorage が使えない環境ではすべて表示のまま
 		}
-		// サーバーの描画では URL の # を知らず、リンク先のコメントが折りたたまれていて
-		// ブラウザがスクロールできていない。開いた後で改めてスクロールする
+	});
+	// リンク先のコメント（URL の #）は、コメントをブラウザで取った後に描かれるので、
+	// ブラウザのスクロールでは届かない。最初に読み込めたときに改めてスクロールする
+	let scrolledToHash = false;
+	$effect(() => {
+		if (!activityLoaded || scrolledToHash) return;
+		scrolledToHash = true;
 		const target = location.hash.slice(1);
 		if (/^(comment|change)-/.test(target)) {
 			void tick().then(() => document.getElementById(target)?.scrollIntoView());
@@ -215,7 +281,8 @@
 		const user = { id: me.id, name: me.name };
 		try {
 			await reactToComment({ ...ref, commentId, emoji }).updates(
-				commentsQuery.withOverride((list) =>
+				// リアクションはコメントを表示した後（ブラウザ）でしか押せないので query はある
+				commentsQuery!.withOverride((list) =>
 					list.map((c) =>
 						c.id === commentId ? { ...c, reactions: toggleReactionIn(c.reactions, emoji, user) } : c
 					)
@@ -600,7 +667,7 @@
 			</section>
 		{/if}
 
-		{#if attachments.length > 0}
+		{#if attachments && attachments.length > 0}
 			<section class="card attachments" aria-label="添付ファイル">
 				<h2 class="card-title flex items-center gap-1.5">
 					<Paperclip class="size-4" /> 添付ファイル数: {attachments.length}
@@ -637,13 +704,14 @@
 			</section>
 		{/if}
 
-		{#if activity.length > 0 || pendingComments.length > 0 || perms.comment}
+		{#if !activityLoaded || activity.length > 0 || pendingComments.length > 0 || perms.comment}
 			<section class="activity" aria-labelledby={`activity-title-${variant}`}>
 				<div class="activity-head">
 					<h2 class="card-title" id={`activity-title-${variant}`}>
-						コメント <span class="activity-count">({comments.length})</span>
+						コメント
+						{#if comments}<span class="activity-count">({comments.length})</span>{/if}
 					</h2>
-					{#if changes.length > 0}
+					{#if changes && changes.length > 0}
 						<div class="view-toggle" role="group" aria-label="コメント欄の表示">
 							<span class="view-toggle-label" aria-hidden="true">表示:</span>
 							<button
@@ -664,6 +732,13 @@
 					{/if}
 				</div>
 				<div class="card activity-card">
+					{#if !activityLoaded}
+						<p class="activity-empty" role="status">
+							{activityFailed
+								? 'コメントを読み込めませんでした。再読み込みしてください'
+								: '読み込み中…'}
+						</p>
+					{/if}
 					{#if hiddenCount > 0}
 						<button type="button" class="show-older" onclick={() => (expandedFor = issueKey)}>
 							以前の {hiddenCount} 件を表示
@@ -796,8 +871,8 @@
 											</div>
 										</form>
 									{:else}
-										<!-- eslint-disable-next-line svelte/no-at-html-tags -- markdown-it(html:false) で生成した HTML -->
-										<div class="markdown">{@html c.html}</div>
+										<!-- eslint-disable-next-line svelte/no-at-html-tags -- renderMarkdown（生の HTML は文字のまま出す）で生成した HTML -->
+										<div class="markdown">{@html commentHtml(c.body)}</div>
 									{/if}
 									<CommentReactions
 										id={`comment-${c.id}`}
@@ -824,7 +899,7 @@
 							</div>
 						</article>
 					{/each}
-					{#if shownActivity.length === 0 && pendingComments.length === 0 && !perms.comment}
+					{#if activityLoaded && shownActivity.length === 0 && pendingComments.length === 0 && !perms.comment}
 						<!-- 「コメントのみ表示」で編集履歴だけの課題を見たとき -->
 						<p class="activity-empty">コメントはありません</p>
 					{/if}

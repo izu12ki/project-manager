@@ -111,33 +111,43 @@ const categoriesJson = sql<string>`(select json_group_array(json_object('id', ${
 	from ${category} where ${category.id} in (select value from json_each(${issue.categoryIds})))`;
 
 // batch に入れても列名が重ならないよう、join した表の列と式には別名を付ける（D1 の batch は同じ名前の列をまとめてしまう）
-const listColumns = {
+/**
+ * 一覧の画面（課題一覧・自分の課題）で表示する列。表示しない列も読むと、D1 の結果の解釈・
+ * JSON の列の変換・画面へ渡すデータの書き出しが行数の分だけ増えるので、表示に要る列だけにする
+ */
+const listViewColumns = {
 	id: issue.id,
 	number: issue.number,
 	title: issue.title,
-	typeId: issue.typeId,
 	typeName: sql<string | null>`${issueType.name}`.as('type_name'),
 	typeColor: sql<ColorName | null>`${issueType.color}`.as('type_color'),
 	status: issue.status,
-	resolution: issue.resolution,
 	priority: issue.priority,
 	startDate: issue.startDate,
 	dueDate: issue.dueDate,
-	position: issue.position,
-	assigneeIds: issue.assigneeIds,
-	parentId: issue.parentId,
 	parentNumber: sql<number | null>`${parent.number}`.as('parent_number'),
-	categoryIds: issue.categoryIds,
-	milestoneId: issue.milestoneId,
 	milestoneName: sql<string | null>`${milestone.name}`.as('milestone_name'),
-	reporterId: issue.reporterId,
 	createdAt: issue.createdAt,
 	updatedAt: issue.updatedAt,
 	assigneesJson: assigneesJson.as('assignees_json'),
 	categoriesJson: categoriesJson.as('categories_json')
 };
+/** ボード・タイムライン・API の一覧の列。並び順や ID で課題を動かし、絞り込むので、表示しない列も要る */
+const listColumns = {
+	...listViewColumns,
+	typeId: issue.typeId,
+	resolution: issue.resolution,
+	position: issue.position,
+	assigneeIds: issue.assigneeIds,
+	parentId: issue.parentId,
+	categoryIds: issue.categoryIds,
+	milestoneId: issue.milestoneId,
+	reporterId: issue.reporterId
+};
 
-export type IssueListItem = ReturnType<typeof toIssueListItems>[number];
+type IssueListRow = Awaited<ReturnType<typeof issueListQuery>>[number];
+/** ボード・タイムライン・API の一覧（issueListQuery）の 1 件 */
+export type IssueListItem = ReturnType<typeof toIssueListItems<IssueListRow>>[number];
 export type AssigneeRef = { id: string; name: string };
 export type CategoryRef = { id: string; name: string };
 
@@ -188,14 +198,20 @@ export function issueListQuery(db: DB, where: SQL | undefined, order: SQL[]) {
 		.orderBy(...order);
 }
 
+/** 課題一覧の画面の select。issueListQuery より列が少ない（listViewColumns）。結果は toIssueListItems で直す */
+export function issueListViewQuery(db: DB, where: SQL | undefined, order: SQL[]) {
+	return selectIssueListView(db, {})
+		.where(where)
+		.orderBy(...order);
+}
+
+type Columns = Record<string, SQL.Aliased | SQLiteColumn>;
+
 /**
  * issueListQuery の列に extra の列を足した select（join まで）。プロジェクトをまたぐ一覧で、
  * プロジェクトやステータスの列を足すのに使う。extra の式にも別名を付けること
  */
-export function selectIssueList<T extends Record<string, SQL.Aliased | SQLiteColumn>>(
-	db: DB,
-	extra: T
-) {
+export function selectIssueList<T extends Columns>(db: DB, extra: T) {
 	return db
 		.select({ ...listColumns, ...extra })
 		.from(issue)
@@ -205,10 +221,24 @@ export function selectIssueList<T extends Record<string, SQL.Aliased | SQLiteCol
 		.$dynamic();
 }
 
-type IssueListRow = Awaited<ReturnType<typeof issueListQuery>>[number];
+/**
+ * selectIssueList の、一覧の画面で表示する列（listViewColumns）だけのもの。join は selectIssueList と同じ
+ * （select に列の型引数をそのまま渡すと Drizzle の型が join を解決できないので、関数を分けずに書く）
+ */
+export function selectIssueListView<T extends Columns>(db: DB, extra: T) {
+	return db
+		.select({ ...listViewColumns, ...extra })
+		.from(issue)
+		.leftJoin(parent, eq(issue.parentId, parent.id))
+		.leftJoin(issueType, eq(issue.typeId, issueType.id))
+		.leftJoin(milestone, eq(issue.milestoneId, milestone.id))
+		.$dynamic();
+}
 
-/** issueListQuery（selectIssueList）の行の JSON の列を assignees・categories に直す */
-export function toIssueListItems<R extends IssueListRow>(rows: R[]) {
+/** issueListQuery（selectIssueList）・issueListViewQuery の行の JSON の列を assignees・categories に直す */
+export function toIssueListItems<R extends { assigneesJson: string; categoriesJson: string }>(
+	rows: R[]
+) {
 	return rows.map(({ assigneesJson, categoriesJson, ...r }) => ({
 		...r,
 		assignees: JSON.parse(assigneesJson) as AssigneeRef[],

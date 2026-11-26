@@ -15,14 +15,12 @@
 	} from '#lib/labels.ts';
 	import IssueSheet from '../IssueSheet.svelte';
 	import { getChanges, getIssueDetail } from '../issues/[number=int]/issue.remote';
+	import { boardArg } from './board-arg';
 	import { getBoard, moveCard } from './board.remote';
 	import type { PageProps } from './$types';
 
 	let { data, params }: PageProps = $props();
-	const ref = $derived({
-		key: params.key,
-		milestone: page.url.searchParams.get('milestone') ?? ''
-	});
+	const ref = $derived(boardArg(params.key, page.url.searchParams));
 	const board = $derived(await getBoard(ref));
 
 	type Columns = typeof board.columns;

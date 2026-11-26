@@ -112,6 +112,7 @@ export function createTestBase(
 				sent.push(m);
 			}
 		},
+		mailConfigured: true,
 		bucket: createMemoryStore(),
 		waitUntil: (p) => {
 			pending.push(p);

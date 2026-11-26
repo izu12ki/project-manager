@@ -33,6 +33,12 @@
 		if (form?.slackDisabled) toast.success('Slack 通知をオフにしました');
 	});
 	$effect(() => {
+		if (form?.emailEnabled) toast.success('メール通知をオンにしました');
+	});
+	$effect(() => {
+		if (form?.emailDisabled) toast.success('メール通知をオフにしました');
+	});
+	$effect(() => {
 		if (form?.apiKeyRevoked) toast.success('API キーを無効化しました');
 	});
 
@@ -149,6 +155,35 @@
 			</div>
 			<div><PasswordSubmit>保存</PasswordSubmit></div>
 		</form>
+
+		<div class="card">
+			<div class="card-head">
+				<h2 class="card-title">メール通知</h2>
+				<p class="card-desc">
+					担当者に設定されたときと、メンションされたときに、ログイン用のメールアドレス（{data.user
+						?.email}）にメールが届きます。コメントやステータスの変更はメールでは届きません。
+				</p>
+			</div>
+			<form
+				method="POST"
+				action={data.email.on ? '?/disableEmail' : '?/enableEmail'}
+				use:enhance
+				class="flex items-center gap-3"
+			>
+				<button
+					type="submit"
+					class="btn {data.email.on ? 'btn-outline' : 'btn-primary'}"
+					role="switch"
+					aria-checked={data.email.on}
+					aria-label="メール通知"
+				>
+					{data.email.on ? 'オフにする' : 'オンにする'}
+				</button>
+				<span class="text-sm text-muted-foreground">
+					{#if !data.email.configured}メール送信が未設定のため届きません（管理者に連絡してください）{:else if data.email.on}オン{:else}オフ{/if}
+				</span>
+			</form>
+		</div>
 
 		<div class="card">
 			<div class="card-head">

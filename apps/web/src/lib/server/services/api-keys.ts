@@ -3,6 +3,7 @@ import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
 import { authorize, type Actor } from '../authz';
 import type { AppContext, BaseContext } from '../context';
+import type { DB } from '../db';
 import { apiKey, user } from '../db/schema';
 import { AppError } from '../errors';
 import type { Limit } from '../ratelimit';
@@ -74,6 +75,17 @@ export async function revokeApiKey(ctx: AppContext, id: string): Promise<void> {
 		.where(and(eq(apiKey.id, id), eq(apiKey.userId, ctx.actor.id), isNull(apiKey.revokedAt)))
 		.returning({ id: apiKey.id });
 	if (rows.length === 0) throw new AppError('not_found', 'APIキーが見つかりません');
+}
+
+/**
+ * その人の有効なキーをすべて無効化する文。無効化・閲覧者への変更のとき、セッションの削除と同じ batch で流す。
+ * 役割を戻しても、漏れたかもしれないキーが生き返らないようにする（管理者は他人のキーを個別に無効化できないため）
+ */
+export function revokeAllApiKeysQuery(db: DB, userId: string) {
+	return db
+		.update(apiKey)
+		.set({ revokedAt: new Date() })
+		.where(and(eq(apiKey.userId, userId), isNull(apiKey.revokedAt)));
 }
 
 /**

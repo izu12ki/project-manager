@@ -44,13 +44,11 @@ describe('api keys', () => {
 		expect(await listApiKeys(ctx)).toHaveLength(0);
 	});
 
-	it('持ち主が閲覧者に変わると null、メンバーに戻ると再び認証できる', async () => {
+	it('認証のたびに役割を確かめ、持ち主が閲覧者なら null（DB を直接変えた場合も）', async () => {
 		const owner = await seedUser(db, 'member');
 		const { token } = await createApiKey(ctxOf(base, owner), { name: 'CLI' });
 		await db.update(user).set({ role: 'viewer' }).where(eq(user.id, owner.id));
 		expect(await authenticateApiKey(base, token)).toBeNull();
-		await db.update(user).set({ role: 'member' }).where(eq(user.id, owner.id));
-		expect((await authenticateApiKey(base, token))?.actor.id).toBe(owner.id);
 	});
 
 	it('持ち主が無効化されると null', async () => {

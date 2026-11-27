@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { session, user } from '../db/schema';
 import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
+import { authenticateApiKey, createApiKey, listApiKeys } from './api-keys';
 import { listAssignableUsers } from './projects';
 import {
 	changeUserRole,
@@ -128,6 +129,22 @@ describe('users', () => {
 		expect(await isDisabledEmail(db, b.email)).toBe(true);
 	});
 
+	it('無効化するとその人の API キーも無効化し、有効化しても戻らない', async () => {
+		const db = await createTestDb();
+		const base = createTestBase(db);
+		const admin = await seedUser(db, 'admin');
+		const guest = await seedUser(db, 'guest');
+		const { token } = await createApiKey(ctxOf(base, guest), { name: 'CLI' });
+		const { token: adminToken } = await createApiKey(ctxOf(base, admin), { name: 'mine' });
+
+		await disableUser(ctxOf(base, admin), guest.id);
+		await enableUser(ctxOf(base, admin), guest.id);
+
+		expect(await authenticateApiKey(base, token)).toBeNull();
+		expect(await listApiKeys(ctxOf(base, guest))).toHaveLength(0);
+		expect((await authenticateApiKey(base, adminToken))?.actor.id).toBe(admin.id);
+	});
+
 	describe('changeUserRole', () => {
 		it('ロールを変更でき、その人のセッションが消える', async () => {
 			const db = await createTestDb();
@@ -158,6 +175,23 @@ describe('users', () => {
 
 			const users = await listUsers(ctxOf(base, admin));
 			expect(users.find((u) => u.id === member.id)?.role).toBe('viewer');
+		});
+
+		it('閲覧者に変えるとその人の API キーを無効化し、戻しても戻らない。ほかの変更では残す', async () => {
+			const db = await createTestDb();
+			const base = createTestBase(db);
+			const admin = await seedUser(db, 'admin');
+			const member = await seedUser(db, 'member');
+			const guest = await seedUser(db, 'guest');
+			const { token } = await createApiKey(ctxOf(base, member), { name: 'CLI' });
+			const { token: guestToken } = await createApiKey(ctxOf(base, guest), { name: 'CLI' });
+
+			await changeUserRole(ctxOf(base, admin), member.id, 'viewer');
+			await changeUserRole(ctxOf(base, admin), member.id, 'member');
+			await changeUserRole(ctxOf(base, admin), guest.id, 'member');
+
+			expect(await authenticateApiKey(base, token)).toBeNull();
+			expect((await authenticateApiKey(base, guestToken))?.actor.role).toBe('member');
 		});
 
 		it('自分自身のロールは変更できない', async () => {

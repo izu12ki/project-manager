@@ -15,7 +15,8 @@ import {
 	seedUser
 } from '../test-utils';
 import {
-	BOARD_LIMIT,
+	BOARD_COLUMN_MAX,
+	BOARD_PAGE_SIZE,
 	createIssue,
 	deleteIssue,
 	getIssue,
@@ -183,12 +184,15 @@ describe('issues', () => {
 		});
 	});
 
-	it('ステータスを変えると移動先の列の末尾に入る', async () => {
-		await createIssue(as(member), 'ACME', { title: 'A' });
-		await createIssue(as(member), 'ACME', { title: 'B' });
-		await updateIssue(as(member), 'ACME', 2, { status: 'done' });
-		await updateIssue(as(member), 'ACME', 1, { status: 'done' });
-		expect((await listBoard(as(member), 'ACME')).columns.done.map((i) => i.number)).toEqual([2, 1]);
+	it('ステータスを変えると移動先の列の末尾に入る。完了の列は最近完了にしたものが上', async () => {
+		for (const t of ['A', 'B', 'C', 'D']) await createIssue(as(member), 'ACME', { title: t });
+		await updateIssue(as(member), 'ACME', 2, { status: 'in_progress' });
+		await updateIssue(as(member), 'ACME', 1, { status: 'in_progress' });
+		await updateIssue(as(member), 'ACME', 4, { status: 'done' });
+		await updateIssue(as(member), 'ACME', 3, { status: 'done' });
+		const { columns } = await listBoard(as(member), 'ACME');
+		expect(columns.in_progress.map((i) => i.number)).toEqual([2, 1]);
+		expect(columns.done.map((i) => i.number)).toEqual([3, 4]);
 	});
 
 	it('カンバン移動: 前後の課題の間に入る', async () => {
@@ -248,23 +252,48 @@ describe('issues', () => {
 		const range = (from: number, to: number) =>
 			Array.from({ length: to - from + 1 }, (_, i) => from + i);
 
-		it('完了の列は最近更新した課題を上限まで、それ以外の列は上から上限まで出し、総数も返す', async () => {
-			await insertMany(range(1, BOARD_LIMIT.other + 5), 'todo');
-			// 完了の列の position は番号と逆順（新しいものほど上）にして、選ぶ基準が position でないことを確かめる
-			const done = range(1001, 1000 + BOARD_LIMIT.done + 10);
+		it('各列は上から BOARD_PAGE_SIZE 件、完了の列は position の大きい方から出し、総数も返す', async () => {
+			await insertMany(range(1, BOARD_PAGE_SIZE + 5), 'todo');
+			// 完了の列の position は番号と逆順にして、updatedAt（番号の大きいものほど新しい）ではなく position で選ぶことを確かめる
+			const done = range(1001, 1000 + BOARD_PAGE_SIZE + 10);
 			await insertMany(done, 'done', true);
 			await insertMany([2001, 2002], 'in_progress');
 			const { columns, totals } = await listBoard(as(member), 'ACME');
-			expect(columns.todo.map((i) => i.number)).toEqual(range(1, BOARD_LIMIT.other));
-			// 最近更新した 30 件を、列の並び（position）で出す
-			expect(columns.done.map((i) => i.number)).toEqual(done.slice(10).reverse());
+			expect(columns.todo.map((i) => i.number)).toEqual(range(1, BOARD_PAGE_SIZE));
+			// position の大きい順 = 番号の小さい順
+			expect(columns.done.map((i) => i.number)).toEqual(done.slice(0, BOARD_PAGE_SIZE));
 			expect(columns.in_progress.map((i) => i.number)).toEqual([2001, 2002]);
 			expect(totals).toEqual({
-				todo: BOARD_LIMIT.other + 5,
+				todo: BOARD_PAGE_SIZE + 5,
 				in_progress: 2,
 				in_review: 0,
-				done: BOARD_LIMIT.done + 10
+				done: BOARD_PAGE_SIZE + 10
 			});
+		});
+
+		it('列ごとに読み込む数を変えられる（絞り込みと合わせても）。上限は BOARD_COLUMN_MAX', async () => {
+			await insertMany(range(1, BOARD_PAGE_SIZE * 2 + 5), 'todo');
+			const done = range(1001, 1000 + BOARD_PAGE_SIZE + 10);
+			await insertMany(done, 'done');
+			const { columns, totals } = await listBoard(
+				as(member),
+				'ACME',
+				{},
+				{ todo: BOARD_PAGE_SIZE * 2, done: BOARD_PAGE_SIZE * 2 }
+			);
+			expect(columns.todo.map((i) => i.number)).toEqual(range(1, BOARD_PAGE_SIZE * 2));
+			expect(columns.done.map((i) => i.number)).toEqual([...done].reverse());
+			expect(totals.todo).toBe(BOARD_PAGE_SIZE * 2 + 5);
+
+			await createMilestone(as(admin), 'ACME', { name: 'v1' });
+			const [v1] = await listMilestones(as(admin), 'ACME');
+			for (const n of [3, 40, 52]) await updateIssue(as(admin), 'ACME', n, { milestoneId: v1.id });
+			const filtered = await listBoard(as(member), 'ACME', { milestoneId: v1.id }, { todo: 2 });
+			expect(filtered.columns.todo.map((i) => i.number)).toEqual([3, 40]);
+			expect(filtered.totals.todo).toBe(3);
+
+			const capped = await listBoard(as(member), 'ACME', {}, { todo: BOARD_COLUMN_MAX + 100 });
+			expect(capped.columns.todo).toHaveLength(BOARD_PAGE_SIZE * 2 + 5);
 		});
 
 		it('総数は絞り込んだ後の数。削除した課題は数えない', async () => {
@@ -278,24 +307,69 @@ describe('issues', () => {
 			expect((await listBoard(as(member), 'ACME', { milestoneId: v1.id })).totals.todo).toBe(1);
 		});
 
-		it('後ろの課題を指定しない移動は、見えていない課題も含めた列の末尾に入る', async () => {
-			await insertMany(range(1, BOARD_LIMIT.other + 5), 'todo');
+		/** 列の課題を position の順に（見えていないものも含めて） */
+		async function columnOrder(status: string) {
+			const all = await listIssues(as(member), 'ACME', { status });
+			return [...all]
+				.sort((a, b) =>
+					a.position < b.position ? -1 : a.position > b.position ? 1 : a.number - b.number
+				)
+				.map((i) => i.number);
+		}
+
+		it('前の課題だけ指定した移動は、読み込んでいない課題があっても、その課題の直後に入る', async () => {
+			await insertMany(range(1, BOARD_PAGE_SIZE + 5), 'todo');
 			await createIssue(as(member), 'ACME', { title: '新しい課題', status: 'in_progress' });
 			const { columns } = await listBoard(as(member), 'ACME');
 			const moving = columns.in_progress[0];
-			// 見えている最後の課題の後へ落としても、上限で出していない 5 件の後ろに入る
+			// 見えている最後の課題（25）の後へ落とすと、読み込んでいない 26〜30 より前に入る
 			await moveIssue(as(member), 'ACME', {
 				issueId: moving.id,
 				status: 'todo',
 				beforeId: columns.todo.at(-1)!.id,
 				afterId: ''
 			});
-			const all = await listIssues(as(member), 'ACME', { status: 'todo' });
-			const byPosition = [...all].sort((a, b) =>
-				a.position < b.position ? -1 : a.position > b.position ? 1 : a.number - b.number
-			);
-			expect(byPosition.at(-1)?.number).toBe(moving.number);
-			expect(new Set(all.map((i) => i.position)).size).toBe(all.length);
+			const order = await columnOrder('todo');
+			expect(order.slice(BOARD_PAGE_SIZE - 1, BOARD_PAGE_SIZE + 2)).toEqual([
+				BOARD_PAGE_SIZE,
+				moving.number,
+				BOARD_PAGE_SIZE + 1
+			]);
+			expect(new Set(order).size).toBe(BOARD_PAGE_SIZE + 6);
+		});
+
+		it('後ろの課題だけ指定した移動は、その課題の直前に入る（完了の列の一番下へ落とした場合など）', async () => {
+			// 完了の列は position の大きい順に出すので、画面で一番下の課題の「後ろ」（position が大きい方）だけが分かる
+			await insertMany(range(1001, 1000 + BOARD_PAGE_SIZE + 5), 'done');
+			await createIssue(as(member), 'ACME', { title: '新しい課題' });
+			const { columns } = await listBoard(as(member), 'ACME');
+			const bottom = columns.done.at(-1)!;
+			const moving = columns.todo.find((i) => i.title === '新しい課題')!;
+			await moveIssue(as(member), 'ACME', {
+				issueId: moving.id,
+				status: 'done',
+				beforeId: '',
+				afterId: bottom.id
+			});
+			const after = await listBoard(as(member), 'ACME', {}, { done: BOARD_PAGE_SIZE + 1 });
+			const shown = after.columns.done.map((i) => i.number);
+			expect(shown.slice(-2)).toEqual([bottom.number, moving.number]);
+			// 読み込んでいなかった課題は、移した課題より下のまま
+			const order = await columnOrder('done');
+			expect(order.slice(0, 6)).toEqual([...range(1001, 1005), moving.number]);
+		});
+
+		it('前後どちらも指定しない移動（空の列へ）は、列の末尾に入る', async () => {
+			await insertMany(range(1, 3), 'in_review');
+			await createIssue(as(member), 'ACME', { title: '新しい課題' });
+			const moving = (await listBoard(as(member), 'ACME')).columns.todo[0];
+			await moveIssue(as(member), 'ACME', {
+				issueId: moving.id,
+				status: 'in_review',
+				beforeId: '',
+				afterId: ''
+			});
+			expect(await columnOrder('in_review')).toEqual([1, 2, 3, moving.number]);
 		});
 	});
 

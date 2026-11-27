@@ -62,10 +62,10 @@ describe('apiHandler', () => {
 		}
 	});
 
-	it('member のキーは 401', async () => {
+	it('閲覧者に変わった人のキーは 401', async () => {
 		const admin = await seedUser(db, 'admin');
 		const { token } = await createApiKey(ctxOf(base, admin), { name: 'x' });
-		await db.update(user).set({ role: 'member' }).where(eq(user.id, admin.id));
+		await db.update(user).set({ role: 'viewer' }).where(eq(user.id, admin.id));
 		const res = await apiHandler(eventOf({ Authorization: `Bearer ${token}` }), async () => ({}));
 		expect(res.status).toBe(401);
 	});

@@ -51,7 +51,7 @@ node scripts/cpu-profile.ts --email you@example.com --password '...' / /projects
 
 - 各 route を 5 回温めてから 40 回実行し、V8 のプロファイラで取った CPU 時間の平均を出します。`--self`・`--incl` で関数ごとの内訳、`--save <prefix>` で Chrome DevTools で開ける `.cpuprofile` を書きます。`LOGIN` を route に書くとログインそのものを測ります。
 - 応答は圧縮させずに測ります（手元の workerd は gzip の圧縮を CPU 時間に含めますが、本番ではエッジが圧縮するので含まれません）。
-- 手元は本番より速く、本番の CPU 時間は手元の 1.5〜2 倍ほどです（2026-11 の計測）。手元で 5ms 以下を目安にしてください。
+- 手元は本番より速く、本番の CPU 時間は手元の 1.3〜3 倍ほどです（同じ画面を続けて開くと 1.3〜1.8 倍、いろいろな画面を混ぜて開くと 2〜3 倍。2026-11 の計測）。手元で 5ms 以下を目安にしてください。
 - D1 は 1 往復ごとに CPU 時間がかかります（手元で 0.25〜0.4ms）。1 つの画面の読み取りは 1 回の batch にまとめ、単体テストでは `roundTrips(db)`（`test-utils.ts`）で往復の回数を確かめます。読み取りの batch は `ctx.readBatch` で送ると、同じリクエストで同時に出た batch（レイアウトとページの load、remote query）が 1 往復にまとまります。書き込みは `ctx.db.batch` で送ります。
 
 ### 無料プランで確かめる

@@ -43,7 +43,6 @@ beforeEach(async () => {
 	member = await seedUser(db, 'member', 'member');
 	other = await seedUser(db, 'member', 'other');
 	await seedProject(db, { members: [member, other] });
-	// API キーを作れるのは管理者だけ
 	token = (await createApiKey(ctxOf(base, admin), { name: 'CLI' })).token;
 	await createIssue(ctxOf(base, member), 'ACME', { title: 'A' });
 });

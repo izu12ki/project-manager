@@ -114,6 +114,15 @@ describe('api keys', () => {
 		});
 	});
 
+	it('閲覧者は自分のキーも無効化できない（forbidden。閲覧者にした時点で失効している）', async () => {
+		const owner = await seedUser(db, 'member');
+		await createApiKey(ctxOf(base, owner), { name: 'CLI' });
+		const [k] = await listApiKeys(ctxOf(base, owner));
+		await db.update(user).set({ role: 'viewer' }).where(eq(user.id, owner.id));
+		const asViewer = ctxOf(base, { ...owner, role: 'viewer' });
+		await expect(revokeApiKey(asViewer, k.id)).rejects.toMatchObject({ code: 'forbidden' });
+	});
+
 	it('lastUsedAt は前回から 60 秒以上空いたときだけ更新する', async () => {
 		const admin = await seedUser(db, 'admin');
 		const { token } = await createApiKey(ctxOf(base, admin), { name: 'CLI' });

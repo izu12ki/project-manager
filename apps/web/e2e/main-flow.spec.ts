@@ -1134,6 +1134,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await viewerPage.goto('/account');
 	await expect(viewerPage.getByText('このアカウントは閲覧専用のため')).toBeVisible();
 	await expect(viewerPage.getByRole('heading', { name: 'パスワード変更' })).toHaveCount(0);
+	await expect(viewerPage.getByRole('heading', { name: 'API キー' })).toHaveCount(0);
 	// 通知は見られるが既読にはできないので、「すべて既読にする」は出さない
 	await viewerPage.goto('/notifications');
 	await expect(viewerPage.getByRole('heading', { name: '通知' })).toBeVisible();
@@ -1466,7 +1467,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page.locator('.markdown del', { hasText: '古い案' })).toBeVisible();
 	await expect(page.locator('.markdown pre')).toContainText("x = ''y''");
 
-	// 9. 管理者は /account で API キーを作成・無効化できる。メンバーには欄が出ない
+	// 9. /account で API キーを作成・無効化できる（管理者・メンバー・ゲスト。閲覧者には欄が出ない）
 	await page.goto('/account');
 	const apiKeyCard = page.locator('.card', {
 		has: page.getByRole('heading', { name: 'API キー' })
@@ -1504,7 +1505,7 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await login(page, 'member@example.com');
 	await page.goto('/account');
 	await expect(page.getByRole('heading', { name: 'パスワード変更' })).toBeVisible();
-	await expect(page.getByRole('heading', { name: 'API キー' })).toHaveCount(0);
+	await expect(page.getByRole('heading', { name: 'API キー' })).toBeVisible();
 
 	// 14. パスワードを変更すると、新しいパスワードでログインできる
 	await page.getByLabel('現在のパスワード').fill(PW);

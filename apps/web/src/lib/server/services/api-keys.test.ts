@@ -60,17 +60,14 @@ describe('api keys', () => {
 		expect(await authenticateApiKey(base, token)).toBeNull();
 	});
 
-	it.each(['member', 'guest'] as const)(
-		'%s も作れて、キーは持ち主の役割で動く',
-		async (role) => {
-			const owner = await seedUser(db, role);
-			const { token } = await createApiKey(ctxOf(base, owner), { name: 'CLI' });
-			expect((await authenticateApiKey(base, token))?.actor).toMatchObject({
-				id: owner.id,
-				role
-			});
-		}
-	);
+	it.each(['member', 'guest'] as const)('%s も作れて、キーは持ち主の役割で動く', async (role) => {
+		const owner = await seedUser(db, role);
+		const { token } = await createApiKey(ctxOf(base, owner), { name: 'CLI' });
+		expect((await authenticateApiKey(base, token))?.actor).toMatchObject({
+			id: owner.id,
+			role
+		});
+	});
 
 	it('閲覧者は createApiKey できない（forbidden）', async () => {
 		const viewer = await seedUser(db, 'viewer');

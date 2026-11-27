@@ -67,7 +67,7 @@ Issue や Pull Request の送り方は [CONTRIBUTING.md](CONTRIBUTING.md) を参
 
 REST API（`/api/v1`）で、課題の一括起票やスケジュール作成、一括修正、コメントの取得と投稿ができます。Claude Code 用の Skill も同梱しています。エンドポイントと項目は [`skills/project-manager/reference.md`](skills/project-manager/reference.md) を参照してください。
 
-1. API キーを発行します。管理者でログインし、アカウント設定の「API キー」カードで作成します（管理者だけが使えます）。平文は発行直後に一度しか表示されません。
+1. API キーを発行します。アカウント設定の「API キー」カードで作成します（閲覧者以外の誰でも作れます。キーは作成した人の権限の範囲で動きます）。平文は発行直後に一度しか表示されません。
 2. Skill を導入します。
 
    ```bash

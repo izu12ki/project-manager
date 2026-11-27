@@ -29,7 +29,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		email,
 		// 閲覧者（公開デモの共用アカウントなど）は表示名・パスワード・通知を変えられない
 		canModifyAccount: can(ctx.actor, 'account:modify'),
-		// API キーは管理者だけが使う。それ以外には欄ごと出さない
+		// API キーは閲覧者には欄ごと出さない
 		apiKeys: can(ctx.actor, 'api:use') ? await listApiKeys(ctx) : null
 	};
 };

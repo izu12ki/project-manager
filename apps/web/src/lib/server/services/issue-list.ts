@@ -32,7 +32,8 @@ function listPageQuery(db: DB, where: SQL | undefined, sort: IssueSort) {
 	return issueListViewQuery(db, where, sortOrder(sort));
 }
 
-function countQuery(db: DB, where: SQL | undefined) {
+/** 条件に合う課題の数（課題一覧と API の一覧で使う） */
+export function countQuery(db: DB, where: SQL | undefined) {
 	return db
 		.select({ total: sql<number>`count(*)`.as('issue_total') })
 		.from(issue)

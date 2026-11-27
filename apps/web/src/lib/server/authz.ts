@@ -42,7 +42,6 @@ export function can(actor: Actor, action: Action, res: Resource = {}): boolean {
 	switch (action) {
 		case 'user:manage':
 		case 'project:manage':
-		case 'api:use':
 			return false;
 		// ゲストも参加しているプロジェクトの課題は作成・編集できる（削除はメンバー以上）
 		case 'issue:create':
@@ -63,9 +62,11 @@ export function can(actor: Actor, action: Action, res: Resource = {}): boolean {
 		case 'emoji:delete':
 			return res.creatorId === actor.id;
 		// account:modify は表示名・パスワード・Slack 通知などの自分の設定。
-		// notification:read は通知の既読化（閲覧者の共用アカウントでは既読にせず、次に見る人にも未読のまま残す）
+		// notification:read は通知の既読化（閲覧者の共用アカウントでは既読にせず、次に見る人にも未読のまま残す）。
+		// api:use は自分の API キーを作って使うこと。キーは持ち主の権限の範囲で動く
 		case 'account:modify':
 		case 'notification:read':
+		case 'api:use':
 			return true;
 	}
 }

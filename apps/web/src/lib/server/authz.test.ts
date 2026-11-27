@@ -10,7 +10,7 @@ const viewer: Actor = { id: 'v', name: 'V', email: 'v@x', role: 'viewer' };
 const table: [Action, Parameters<typeof can>[2], boolean, boolean, boolean, boolean][] = [
 	['user:manage', {}, true, false, false, false],
 	['project:manage', {}, true, false, false, false],
-	['api:use', {}, true, false, false, false],
+	['api:use', {}, true, true, true, false],
 	['issue:create', {}, true, true, true, false],
 	['comment:create', {}, true, true, true, false],
 	['issue:edit', { reporterId: 'x' }, true, true, true, false],

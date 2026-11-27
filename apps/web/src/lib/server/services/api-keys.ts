@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, count, desc, eq, isNull, ne } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
 import { authorize, type Actor } from '../authz';
@@ -15,6 +15,8 @@ export const API_RATE_LIMIT: Limit = { windowMs: 60_000, max: 120 };
 const TOKEN_PREFIX = 'pm_';
 /** 一覧に出す先頭文字数（`pm_` + 4 文字） */
 const PREFIX_LENGTH = 7;
+/** 1 人が持てる有効な（無効化していない）キーの数。レート制限はキーごとなので、本数で逃れられないようにする */
+export const API_KEY_LIMIT = 10;
 /** lastUsedAt を更新する最小間隔 */
 const LAST_USED_INTERVAL_MS = 60_000;
 
@@ -30,6 +32,16 @@ const CreateInput = v.object({
 export async function createApiKey(ctx: AppContext, input: unknown): Promise<{ token: string }> {
 	authorize(ctx.actor, 'api:use');
 	const data = parse(CreateInput, input);
+	const [{ active }] = await ctx.db
+		.select({ active: count() })
+		.from(apiKey)
+		.where(and(eq(apiKey.userId, ctx.actor.id), isNull(apiKey.revokedAt)));
+	if (active >= API_KEY_LIMIT) {
+		throw new AppError(
+			'validation',
+			`API キーは 1 人 ${API_KEY_LIMIT} 本までです。使っていないキーを無効化してください`
+		);
+	}
 	const token = TOKEN_PREFIX + randomToken();
 	await ctx.db.insert(apiKey).values({
 		id: uuidv7(),
@@ -64,7 +76,10 @@ export async function revokeApiKey(ctx: AppContext, id: string): Promise<void> {
 	if (rows.length === 0) throw new AppError('not_found', 'APIキーが見つかりません');
 }
 
-/** 生のトークン（`Bearer ` 除去済み）から持ち主の actor を引く。無効・無効化・管理者以外は null */
+/**
+ * 生のトークン（`Bearer ` 除去済み）から持ち主の actor を引く。無効・無効化したキー、無効化された人、閲覧者は null。
+ * 役割は毎回引くので、閲覧者に変えた人のキーはすぐ止まる
+ */
 export async function authenticateApiKey(
 	base: BaseContext,
 	token: string
@@ -86,7 +101,7 @@ export async function authenticateApiKey(
 				eq(apiKey.tokenHash, await sha256Hex(token)),
 				isNull(apiKey.revokedAt),
 				isNull(user.disabledAt),
-				eq(user.role, 'admin')
+				ne(user.role, 'viewer')
 			)
 		);
 	if (!row) return null;

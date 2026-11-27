@@ -10,13 +10,13 @@ import type { Limit } from '../ratelimit';
 import { randomToken, sha256Hex } from '../tokens';
 import { parse } from '../validation';
 
-/** キーごとのレート制限（key は `app:api:<apiKeyId>`） */
+/** 人ごとのレート制限（key は `app:api-user:<userId>`）。キーを増やしても回数は増えない */
 export const API_RATE_LIMIT: Limit = { windowMs: 60_000, max: 120 };
 
 const TOKEN_PREFIX = 'pm_';
 /** 一覧に出す先頭文字数（`pm_` + 4 文字） */
 const PREFIX_LENGTH = 7;
-/** 1 人が持てる有効な（無効化していない）キーの数。レート制限はキーごとなので、本数で逃れられないようにする */
+/** 1 人が持てる有効な（無効化していない）キーの数。使い道ごとに分けられる程度にとどめる */
 export const API_KEY_LIMIT = 10;
 /** lastUsedAt を更新する最小間隔 */
 const LAST_USED_INTERVAL_MS = 60_000;
@@ -69,6 +69,7 @@ export async function listApiKeys(ctx: AppContext) {
 }
 
 export async function revokeApiKey(ctx: AppContext, id: string): Promise<void> {
+	authorize(ctx.actor, 'api:use');
 	const rows = await ctx.db
 		.update(apiKey)
 		.set({ revokedAt: new Date() })

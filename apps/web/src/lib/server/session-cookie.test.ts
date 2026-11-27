@@ -5,10 +5,11 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAuth } from './auth';
 import type { Actor } from './authz';
-import { session } from './db/schema';
+import { eq } from 'drizzle-orm';
+import { session, user } from './db/schema';
 import { createFirstAdmin } from './services/setup';
-import { createSessionCookieReader } from './session-cookie';
-import { createTestBase, createTestDb } from './test-utils';
+import { createSessionCookieReader, createWriteSessionChecker } from './session-cookie';
+import { createTestBase, createTestDb, roundTrips } from './test-utils';
 
 const KEY = 'a'.repeat(64);
 const SECRET = 'test-secret-'.repeat(4);
@@ -72,7 +73,38 @@ async function setup(opts: { url?: string; secret?: string } = {}) {
 		return { fast, slow };
 	}
 
-	return { db, auth, authCtx, read, names, signIn, compare };
+	const check = createWriteSessionChecker(authCtx, db);
+
+	/**
+	 * 書き込みの確かめ方（DB を見る）を、hooks が以前使っていた getSession（disableCookieCache）と比べる。
+	 * DB はそのまま使う。hooks は無効化された人を null にする（セッションも消す）
+	 */
+	async function compareWrite(cookie: string | Map<string, string>) {
+		const headers = new Headers();
+		const header = typeof cookie === 'string' ? cookie : toHeader(cookie);
+		if (header) headers.set('cookie', header);
+		const before = roundTrips(db);
+		const fast = await check(headers, base.readBatch);
+		const trips = roundTrips(db) - before;
+		const s = await auth.api
+			.getSession({ headers, query: { disableCookieCache: true } })
+			.catch(() => 'error' as const);
+		const slow: Actor | null | 'error' =
+			s && s !== 'error'
+				? s.user.disabledAt
+					? null
+					: {
+							id: s.user.id,
+							name: s.user.name,
+							email: s.user.email,
+							role: s.user.role as Actor['role']
+						}
+				: s;
+		if (fast !== undefined) expect(fast).toEqual(slow);
+		return { fast, slow, trips };
+	}
+
+	return { db, auth, authCtx, read, check, names, signIn, compare, compareWrite };
 }
 
 function toHeader(cookies: Map<string, string>) {
@@ -314,12 +346,13 @@ describe('createSessionCookieReader', () => {
 	});
 
 	/**
-	 * session-cookie.ts は、better-auth の getSession のうち Cookie キャッシュから返すところと同じ判定をしている。
+	 * session-cookie.ts は、better-auth の getSession のうち Cookie キャッシュから返すところ（createSessionCookieReader）と、
+	 * DB から返すところ（createWriteSessionChecker）と同じ判定をしている。
 	 * better-auth を上げてその実装が変わったら、ここが落ちる（Renovate の自動マージも止まる）。
-	 * そのときは差分を読み、session-cookie.ts の条件（コメントの 1〜5）に足りないものがないか確かめてから、
-	 * 下の値を新しいものに置き換える
+	 * そのときは差分を読み、session-cookie.ts の条件（それぞれのコメントの番号付きの項目）に足りないものがないか
+	 * 確かめてから、下の値を新しいものに置き換える
 	 */
-	it('better-auth の実装（Cookie キャッシュの検証）が変わっていない', () => {
+	it('better-auth の実装（Cookie キャッシュと DB のセッションの検証）が変わっていない', () => {
 		const require = createRequire(import.meta.url);
 		const authMain = require.resolve('better-auth');
 		const authDist = dirname(authMain);
@@ -332,11 +365,22 @@ describe('createSessionCookieReader', () => {
 			return src.slice(from, to);
 		};
 		const hash = (s: string) => createHash('sha256').update(s).digest('hex').slice(0, 16);
+		const sessionRoutes = read(join(authDist, 'api/routes/session.mjs'));
 		const parts = {
 			getSession: between(
-				read(join(authDist, 'api/routes/session.mjs')),
+				sessionRoutes,
 				'const getSession = () =>',
 				'const session = await ctx.context.internalAdapter.findSession(sessionCookieToken);'
+			),
+			getSessionFromDb: between(
+				sessionRoutes,
+				'const session = await ctx.context.internalAdapter.findSession(sessionCookieToken);',
+				'ctx.context.session = session;'
+			),
+			findSession: between(
+				read(join(authDist, 'db/internal-adapter.mjs')),
+				'findSession: async (token) => {',
+				'findSessions: async ('
 			),
 			decodeCookieCache: between(
 				read(join(authDist, 'cookies/index.mjs')),
@@ -362,11 +406,133 @@ describe('createSessionCookieReader', () => {
 		};
 		expect(Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, hash(v)]))).toEqual({
 			getSession: '982daf866935a1cf',
+			getSessionFromDb: '206ca824acf7b718',
+			findSession: '52eea95e5b3f5488',
 			decodeCookieCache: '6a4868f8168262da',
 			cookieCachePayload: 'a181f57e06f58001',
 			getSignedCookie: '580da77cf4151c8e',
 			verifySignature: '8532abc56e9ea1ab',
 			parseCookies: '4ab2da89d9a31ec9'
 		});
+	});
+});
+
+describe('createWriteSessionChecker', () => {
+	it('DB のセッションと人を 1 往復で読み、getSession と同じ人を返す', async () => {
+		const { signIn, compareWrite } = await setup();
+		const { fast, slow, trips } = await compareWrite(await signIn());
+		expect(fast).toMatchObject(ADMIN);
+		expect(slow).toMatchObject(ADMIN);
+		expect(trips).toBe(1);
+	});
+
+	it('本番（https）の __Secure- の付いた名前の Cookie も読める', async () => {
+		const { signIn, compareWrite } = await setup({ url: 'https://pm.example.com' });
+		expect((await compareWrite(await signIn())).fast).toMatchObject(ADMIN);
+	});
+
+	it('session_token の Cookie がなければ null（DB を見ない）', async () => {
+		const { signIn, compareWrite, names } = await setup();
+		const cookies = await signIn();
+		expect(await compareWrite('')).toEqual({ fast: null, slow: null, trips: 0 });
+		cookies.delete(names.token);
+		expect(await compareWrite(cookies)).toEqual({ fast: null, slow: null, trips: 0 });
+	});
+
+	it('ロールの変更は Cookie キャッシュを待たずに効く', async () => {
+		const { db, signIn, read, compareWrite } = await setup();
+		const cookies = await signIn();
+		await db.update(user).set({ role: 'member' }).where(eq(user.email, ADMIN.email));
+		// 閲覧は Cookie キャッシュのまま（最大 5 分）
+		expect(await read(new Headers({ cookie: toHeader(cookies) }))).toMatchObject(ADMIN);
+		const { fast } = await compareWrite(cookies);
+		expect(fast).toMatchObject({ ...ADMIN, role: 'member' });
+	});
+
+	describe('セッションが使えなければ getSession に任せる（Cookie を消すなどの後始末も）', () => {
+		it('セッションが消された（別の端末でのログアウト・無効化・パスワードの再設定）', async () => {
+			const { db, signIn, compareWrite } = await setup();
+			const cookies = await signIn();
+			await db.delete(session);
+			const r = await compareWrite(cookies);
+			expect(r).toMatchObject({ fast: undefined, slow: null });
+		});
+
+		it('セッションの期限切れ', async () => {
+			const { db, signIn, compareWrite } = await setup();
+			const cookies = await signIn();
+			await db.update(session).set({ expiresAt: new Date(Date.now() - 1000) });
+			expect(await compareWrite(cookies)).toMatchObject({ fast: undefined, slow: null });
+		});
+
+		it('無効化された人（セッションが残っていても）', async () => {
+			const { db, signIn, compareWrite } = await setup();
+			const cookies = await signIn();
+			await db.update(user).set({ disabledAt: new Date() });
+			expect(await compareWrite(cookies)).toMatchObject({ fast: undefined, slow: null });
+		});
+
+		it('session_token の署名か値を変えた', async () => {
+			const { signIn, compareWrite, names } = await setup();
+			const cookies = await signIn();
+			const v = decodeURIComponent(cookies.get(names.token)!);
+			const sig = v.slice(v.lastIndexOf('.') + 1);
+			const resigned = v.slice(0, -sig.length) + (sig[0] === 'A' ? 'B' : 'A') + sig.slice(1);
+			expect(
+				(await compareWrite(new Map(cookies).set(names.token, encodeURIComponent(resigned)))).fast
+			).toBeUndefined();
+			expect(
+				(await compareWrite(new Map(cookies).set(names.token, 'x' + cookies.get(names.token)!)))
+					.fast
+			).toBeUndefined();
+		});
+
+		it('別の secret で署名されたトークン', async () => {
+			const { compareWrite } = await setup();
+			const other = await setup({ secret: 'other-secret-'.repeat(4) });
+			expect((await compareWrite(await other.signIn())).fast).toBeUndefined();
+		});
+
+		it('同じ名前の Cookie が 2 つある', async () => {
+			const { signIn, compareWrite, names } = await setup();
+			const cookies = await signIn();
+			const header = `${toHeader(cookies)}; ${names.token}=${cookies.get(names.token)!}`;
+			expect((await compareWrite(header)).fast).toBeUndefined();
+		});
+	});
+
+	it('Cookie をでたらめに 1 文字変えても、getSession と違う人を返さない', async () => {
+		const { signIn, compareWrite } = await setup();
+		const header = toHeader(await signIn());
+		const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.%=;';
+		let seed = 20261127;
+		const rand = () => {
+			seed = (seed + 0x6d2b79f5) | 0;
+			let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+			t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+			return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+		};
+		let accepted = 0;
+		for (let i = 0; i < 200; i++) {
+			const at = Math.floor(rand() * header.length);
+			const ch = chars[Math.floor(rand() * chars.length)];
+			const { fast } = await compareWrite(header.slice(0, at) + ch + header.slice(at + 1));
+			if (fast) accepted++;
+		}
+		expect(accepted).toBeLessThan(200);
+	});
+
+	it('セッションを DB 以外（secondaryStorage）に置く設定では使わない', async () => {
+		const { authCtx, db, signIn } = await setup();
+		const cookies = await signIn();
+		const checker = createWriteSessionChecker(
+			{
+				...authCtx,
+				options: { ...authCtx.options, secondaryStorage: { get() {}, set() {}, delete() {} } }
+			} as typeof authCtx,
+			db
+		);
+		const headers = new Headers({ cookie: toHeader(cookies) });
+		expect(await checker(headers, createTestBase(db).readBatch)).toBeUndefined();
 	});
 });

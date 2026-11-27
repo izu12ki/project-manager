@@ -14,7 +14,10 @@ import '#lib/server/services/issue-detail.ts';
 import '#lib/server/services/issue-list.ts';
 import { readEnv } from '#lib/server/env.ts';
 import { createMailer } from '#lib/server/mailer/index.ts';
-import { createSessionCookieReader } from '#lib/server/session-cookie.ts';
+import {
+	createSessionCookieReader,
+	createWriteSessionChecker
+} from '#lib/server/session-cookie.ts';
 
 const PUBLIC_PATHS = [
 	/^\/login$/,
@@ -48,7 +51,8 @@ function createServices() {
 		mailer,
 		auth,
 		authCtx,
-		readSessionCookie: createSessionCookieReader(authCtx)
+		readSessionCookie: createSessionCookieReader(authCtx),
+		checkWriteSession: createWriteSessionChecker(authCtx, db)
 	}));
 }
 let services: ReturnType<typeof createServices> | undefined;
@@ -69,7 +73,8 @@ if (!building) void startServices();
 const app: Handle = async ({ event, resolve }) => {
 	if (building) return resolve(event);
 
-	const { appEnv, db, mailer, auth, authCtx, readSessionCookie } = await startServices();
+	const { appEnv, db, mailer, auth, authCtx, readSessionCookie, checkWriteSession } =
+		await startServices();
 	// 閲覧（GET・HEAD）か。閲覧の load と remote query は書き込まない
 	const viewing = event.request.method === 'GET' || event.request.method === 'HEAD';
 
@@ -97,11 +102,12 @@ const app: Handle = async ({ event, resolve }) => {
 	}
 
 	// 書き込み（GET・HEAD 以外）は Cookie のキャッシュを使わず、DB でセッションを確かめる。
-	// 無効化・降格した人が反映までの数分間に管理操作などを続けられないようにする
-	// （このときキャッシュも新しい内容で書き直されるので、続く閲覧にもすぐ反映される）
-	// 閲覧は、Cookie のキャッシュが有効なら getSession を呼ばずに読む（session-cookie.ts）。
-	// 決められなければ（キャッシュ切れなど）getSession に任せる
-	let user = viewing ? await readSessionCookie(event.request.headers) : undefined;
+	// 無効化・降格した人が反映までの数分間に管理操作などを続けられないようにする。
+	// 閲覧は、Cookie のキャッシュが有効なら getSession を呼ばずに読む。どちらも session-cookie.ts で、
+	// 決められなければ（キャッシュ切れ・セッションが消えた・期限切れなど）getSession に任せる
+	let user = viewing
+		? await readSessionCookie(event.request.headers)
+		: await checkWriteSession(event.request.headers, event.locals.base.readBatch);
 	// getSession が返すヘッダーは、セッションがないときに Cookie を消す Set-Cookie（下の 401 で使う）
 	let authHeaders = new Headers();
 	if (user === undefined) {

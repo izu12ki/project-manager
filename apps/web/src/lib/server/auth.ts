@@ -46,7 +46,7 @@ export function createAuth(
 		session: {
 			// 署名付き Cookie でセッションを検証し、リクエスト毎の DB 参照を省く。
 			// 無効化・ロール変更・ログアウト時の反映は、閲覧では最大 maxAge 遅れる
-			// （書き込みは hooks.server.ts で DB を見て確かめる）。
+			// （書き込みは hooks.server.ts で DB を見て確かめる。session-cookie.ts）。
 			cookieCache: { enabled: true, maxAge: 5 * 60 }
 		},
 		user: {

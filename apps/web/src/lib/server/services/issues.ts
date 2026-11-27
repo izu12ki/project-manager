@@ -616,9 +616,8 @@ function timelineQueries(db: DB, where: SQL | undefined, from: string | Placehol
 		ne(issue.status, DONE_STATUS)
 	);
 	return {
-		scheduled: timelineRowsQuery(db, and(scheduledWhere, scheduledShown)).orderBy(
-			asc(issue.number)
-		),
+		// 外側は副問い合わせの ID だけで絞る（scheduledWhere も重ねると、SQLite がプロジェクトの全課題を読んで ID を照らす形を選ぶ）
+		scheduled: timelineRowsQuery(db, scheduledShown).orderBy(asc(issue.number)),
 		scheduledTotal: db
 			.select({ scheduledTotal: sql<number>`count(*)`.as('scheduled_total') })
 			.from(issue)

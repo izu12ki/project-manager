@@ -2,12 +2,11 @@
 // D1 は 1 往復ごとに CPU 時間がかかる（手元で 0.25〜0.4ms）ので、プロジェクトの ID を先に引いてから
 // 次の問い合わせを送るのではなく、プロジェクトキーの副問い合わせで絞って同じ batch に入れる。
 // アクセス権（参加者か管理者か）も同じ batch の 1 文で引いて確かめる
-import { and, eq, type Placeholder, type SQL } from 'drizzle-orm';
+import { and, eq, sql, type Placeholder, type SQL } from 'drizzle-orm';
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core';
 import type { AppContext } from '../context';
 import type { DB } from '../db';
 import { cachedRead } from '../db/cached-read';
-import { inList } from '../db/limits';
 import { project, projectMember } from '../db/schema';
 import { AppError } from '../errors';
 import type { StatusDef } from '#lib/labels.ts';
@@ -28,10 +27,15 @@ export function projectIdOf(db: DB, key: string | Placeholder) {
 	return db.select({ id: project.id }).from(project).where(eq(project.key, key));
 }
 
-/** プロジェクトのキーで絞る（ID を引く副問い合わせ）。ID を待たずに同じ batch に入れられる */
+/**
+ * プロジェクトのキーで絞る（ID を引く副問い合わせ）。ID を待たずに同じ batch に入れられる。
+ * `in (副問い合わせ)` ではなく `=` で比べる（キーは一意なので結果は同じ）。`in` だと SQLite が
+ * (project_id, …) のインデックスの順に読めず、上限（LIMIT）があってもプロジェクトの全課題を読んで並べ替える。
+ * D1 は読んだ行数を数えるので（無料プランは 1 日 500 万行）、課題の多いプロジェクトで効く
+ */
 export function ofProject(db: DB, key: string | Placeholder): ProjectCond {
 	const id = projectIdOf(db, key);
-	return (col) => inList(col, id);
+	return (col) => sql`${col} = ${id}`;
 }
 
 function accessQuery(db: DB, key: string | Placeholder, actorId: string | Placeholder) {

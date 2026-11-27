@@ -1,5 +1,10 @@
+import { eq } from 'drizzle-orm';
 import type { Auth } from './auth';
 import type { Actor, Role } from './authz';
+import type { DB } from './db';
+import { cachedRead } from './db/cached-read';
+import type { ReadBatch } from './db/read-batch';
+import { session, user } from './db/schema';
 
 type AuthContext = Awaited<Auth['$context']>;
 
@@ -28,7 +33,7 @@ const ROLES = new Set<string>(['admin', 'member', 'guest', 'viewer'] satisfies R
  * 受け付けるのは getSession が受け付ける場合の一部に限り、形が少しでも違えば undefined にする。
  * 迷ったら getSession に回すので、ここに誤りがあっても速くならないだけで済む向きに倒している。
  *
- * better-auth を上げて上の実装が変わると、session-cookie.test.ts の「better-auth の実装が変わっていない」が落ちる。
+ * better-auth を上げて上の実装が変わると、session-cookie.test.ts の「better-auth の実装（…）が変わっていない」が落ちる。
  * そのときは変更を読み、条件が増えていればここに足してから、テストの値を更新する
  */
 export function createSessionCookieReader(authCtx: AuthContext): SessionCookieReader {
@@ -63,6 +68,80 @@ export function createSessionCookieReader(authCtx: AuthContext): SessionCookieRe
 			const token = await verifySignedCookie(cookies.get(tokenName), await key);
 			if (token === undefined) return undefined;
 			return await readSessionData(cookies.get(dataName), token, await key);
+		} catch {
+			return undefined;
+		}
+	};
+}
+
+/** 書き込みのリクエストのセッション。undefined はここでは決めず、better-auth の getSession に任せる */
+export type WriteSessionChecker = (
+	headers: Headers,
+	readBatch: ReadBatch
+) => Promise<Actor | null | undefined>;
+
+/** セッションのトークンから、その人と期限を引く（better-auth の findSession と同じ、session と user の join） */
+const sessionUserRead = cachedRead(['token'], (db, p) =>
+	db
+		.select({
+			id: user.id,
+			name: user.name,
+			email: user.email,
+			role: user.role,
+			disabledAt: user.disabledAt,
+			expiresAt: session.expiresAt
+		})
+		.from(session)
+		.innerJoin(user, eq(user.id, session.userId))
+		.where(eq(session.token, p.token))
+);
+
+/**
+ * 書き込み（GET・HEAD 以外）のセッションを、better-auth の getSession を呼ばずに DB で確かめる。
+ * 無効化・ロールの変更・ログアウトをすぐに効かせるため、書き込みでは Cookie キャッシュを使わない（閲覧は最大 5 分遅れる）。
+ * getSession（disableCookieCache）は DB を 2 往復読み、Cookie キャッシュの書き直しもして 1ms ほどかかる。
+ * ここでは 1 文（1 往復）で読む。
+ *
+ * better-auth 1.7 の getSession が DB から人を返す条件（src/api/routes/session.ts）を確かめる:
+ *  1. session_token Cookie の署名（createSessionCookieReader と同じ）
+ *  2. そのトークンのセッションが DB にあり、その人がいる（findSession）
+ *  3. セッションの期限が切れていない
+ * このほかアプリの条件として、無効化されていない人に限る（hooks が無効化された人のセッションを消す）。
+ * getSession と違い、セッションの期限を延ばさず、Cookie キャッシュも書き直さない（2026-11-27 に決めた）。
+ * 期限の延長は、閲覧で Cookie キャッシュが切れたとき（5 分ごと）の getSession が行う。
+ *
+ * 返り値は createSessionCookieReader と同じ。条件に合わないとき（セッションが消えた・期限切れ・無効化）は
+ * undefined にして getSession に任せ、Cookie を消す・期限切れのセッションを消すといった後始末を better-auth にさせる。
+ * セッションを DB 以外（secondaryStorage）に置く設定では使わない。
+ * better-auth を上げて getSession・findSession の実装が変わると、session-cookie.test.ts の
+ * 「better-auth の実装（…）が変わっていない」が落ちる。そのときは上の 1〜3 に足りないものがないか確かめる
+ */
+export function createWriteSessionChecker(authCtx: AuthContext, db: DB): WriteSessionChecker {
+	// options の型はこのアプリの設定の形に絞られているので、better-auth の設定項目として読む
+	if ((authCtx.options as { secondaryStorage?: unknown }).secondaryStorage) {
+		return async () => undefined;
+	}
+	const tokenName = authCtx.authCookies.sessionToken.name;
+	const key = crypto.subtle.importKey(
+		'raw',
+		new TextEncoder().encode(authCtx.secret),
+		{ name: 'HMAC', hash: 'SHA-256' },
+		false,
+		['verify']
+	);
+
+	return async (headers, readBatch) => {
+		const header = headers.get('cookie');
+		if (!header?.includes(tokenName)) return null;
+		try {
+			const cookies = parseCookies(header);
+			if (!cookies) return undefined;
+			const token = await verifySignedCookie(cookies.get(tokenName), await key);
+			if (token === undefined) return undefined;
+			const [[row]] = await readBatch([sessionUserRead(db, { token })]);
+			if (!row || row.expiresAt.getTime() < Date.now()) return undefined;
+			if (row.disabledAt != null || !ROLES.has(row.role)) return undefined;
+			return { id: row.id, name: row.name, email: row.email, role: row.role as Role };
 		} catch {
 			return undefined;
 		}

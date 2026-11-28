@@ -226,7 +226,12 @@
 						value={view.from}
 						onchange={(e) => setQuery({ from: e.currentTarget.value })}
 					/>
-					<button type="button" class="btn btn-outline" onclick={() => setQuery({ from: '' })}>
+					<!-- 既定の開始日（先週の月曜）ではなく、今日から表示する -->
+					<button
+						type="button"
+						class="btn btn-outline"
+						onclick={() => setQuery({ from: todayJst() })}
+					>
 						今日
 					</button>
 					<button

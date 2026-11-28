@@ -131,6 +131,29 @@ function decodeCompact(value: string) {
 	};
 }
 
+/**
+ * session_token の署名の + と / を base64url の - と _ に変えた Cookie。better-call は署名を atob で読むので受け付けない。
+ * 署名は乱数で決まるので、+ か / を含むまでログインし直す（1 回で含まない確率は 4 分の 1 ほど）
+ */
+async function urlSafeSignature(signIn: () => Promise<Map<string, string>>, tokenName: string) {
+	for (let i = 0; i < 20; i++) {
+		const cookies = await signIn();
+		const v = decodeURIComponent(cookies.get(tokenName)!);
+		const dot = v.lastIndexOf('.');
+		const sig = v.slice(dot + 1);
+		if (!/[+/]/.test(sig)) continue;
+		const urlSafe = sig.replace(/\+/g, '-').replace(/\//g, '_');
+		return cookies.set(tokenName, encodeURIComponent(v.slice(0, dot + 1) + urlSafe));
+	}
+	throw new Error('署名に + も / も含まないログインが続いた');
+}
+
+/** base64url の文字（- _）を 1 つだけ base64 の文字（+ /）に変える。バイト列は同じだが、better-auth は文字の混ざったものを読まない */
+function mixAlphabet(v: string) {
+	if ((v.match(/[-_]/g) ?? []).length < 2) return undefined;
+	return v.replace(/[-_]/, (c) => (c === '-' ? '+' : '/'));
+}
+
 const ADMIN = { name: '管理者', email: 'admin@example.com', role: 'admin' };
 
 afterEach(() => {
@@ -207,6 +230,36 @@ describe('createSessionCookieReader', () => {
 			const { signIn, compare, names } = await setup();
 			const { fast } = await compare(mutate(await signIn(), names));
 			expect(fast).toBeUndefined();
+		});
+
+		it('session_token の署名が base64url の文字（- _）で書かれている', async () => {
+			const { signIn, compare, names } = await setup();
+			const { fast, slow } = await compare(await urlSafeSignature(signIn, names.token));
+			expect(fast).toBeUndefined();
+			expect(slow).not.toMatchObject(ADMIN);
+		});
+
+		it('session_data が base64 と base64url の文字を混ぜている（外側・中の署名）', async () => {
+			const { signIn, compare, names } = await setup();
+			const cookies = await signIn();
+			const outer = mixAlphabet(cookies.get(names.data)!)!;
+			const r = await compare(new Map(cookies).set(names.data, outer));
+			expect(r.fast).toBeUndefined();
+			expect(r.slow).not.toMatchObject(ADMIN);
+
+			// 中の署名は 43 文字なので、- か _ を 2 つ以上含むまでログインし直す
+			for (let i = 0; i < 30; i++) {
+				const c = await signIn();
+				const decoded = JSON.parse(Buffer.from(c.get(names.data)!, 'base64url').toString());
+				const signature = mixAlphabet(decoded.signature);
+				if (!signature) continue;
+				const data = Buffer.from(JSON.stringify({ ...decoded, signature })).toString('base64url');
+				const r = await compare(c.set(names.data, data));
+				expect(r.fast).toBeUndefined();
+				expect(r.slow).not.toMatchObject(ADMIN);
+				return;
+			}
+			throw new Error('署名に - か _ を 2 つ以上含むログインがなかった');
 		});
 
 		it('別のセッションの session_data と組み合わせた', async () => {
@@ -485,6 +538,13 @@ describe('createWriteSessionChecker', () => {
 				(await compareWrite(new Map(cookies).set(names.token, 'x' + cookies.get(names.token)!)))
 					.fast
 			).toBeUndefined();
+		});
+
+		it('session_token の署名が base64url の文字（- _）で書かれている', async () => {
+			const { signIn, compareWrite, names } = await setup();
+			const { fast, slow } = await compareWrite(await urlSafeSignature(signIn, names.token));
+			expect(fast).toBeUndefined();
+			expect(slow).not.toMatchObject(ADMIN);
 		});
 
 		it('別の secret で署名されたトークン', async () => {

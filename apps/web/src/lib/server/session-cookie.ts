@@ -170,10 +170,11 @@ async function verifySignedCookie(raw: string | undefined, key: CryptoKey) {
 	const token = value.slice(0, dot);
 	const signature = value.slice(dot + 1);
 	if (signature.length !== 44 || !signature.endsWith('=')) return undefined;
+	// better-call と同じく atob で読む（base64url の - _ は不正な文字。base64ToBytes は受け付けてしまう）
 	const ok = await crypto.subtle.verify(
 		'HMAC',
 		key,
-		base64ToBytes(signature),
+		binaryToBytes(atob(signature)),
 		new TextEncoder().encode(token)
 	);
 	return ok ? token : undefined;
@@ -220,11 +221,19 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
-/** base64 と base64url（パディングの有無を問わない）を読む。不正な文字は atob が投げる */
+/**
+ * base64 か base64url（パディングの有無を問わない）を読む。不正な文字は投げる。
+ * better-auth（@better-auth/utils の base64.decode）と同じく、2 つの文字（+ / と - _）が混ざったものは読まない。
+ * atob が読み飛ばす空白も読まない（受け付けるのは better-auth が受け付けるものの一部に限る）
+ */
 function base64ToBytes(s: string) {
+	if (!/^(?:[A-Za-z0-9+/]*|[A-Za-z0-9_-]*)={0,2}$/.test(s)) throw new Error('invalid base64');
 	let b64 = s.replace(/-/g, '+').replace(/_/g, '/');
 	b64 += '='.repeat((4 - (b64.length % 4)) % 4);
-	const bin = atob(b64);
+	return binaryToBytes(atob(b64));
+}
+
+function binaryToBytes(bin: string) {
 	const bytes = new Uint8Array(bin.length);
 	for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
 	return bytes;

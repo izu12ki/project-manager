@@ -319,6 +319,12 @@ export const issue = sqliteTable(
 	(t) => [
 		uniqueIndex('issue_project_number_uq').on(t.projectId, t.number),
 		index('issue_board_idx').on(t.projectId, t.status, t.position),
+		// タイムライン: 未完了の課題と、表示の開始日以降に終わる完了した課題だけを読む（services/issues.ts の timelineQueries）
+		index('issue_timeline_idx').on(
+			t.projectId,
+			t.status,
+			sql`coalesce(${t.dueDate}, ${t.startDate})`
+		),
 		index('issue_parent_idx').on(t.parentId),
 		uniqueIndex('issue_project_backlog_key_uq').on(t.projectId, t.backlogKey)
 	]

@@ -13,7 +13,7 @@ import {
 	type SQLWrapper
 } from 'drizzle-orm';
 import { inList } from '../db/limits';
-import { alias, type SQLiteColumn } from 'drizzle-orm/sqlite-core';
+import { alias, type SQLiteColumn, type SubqueryWithSelection } from 'drizzle-orm/sqlite-core';
 import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
@@ -575,30 +575,20 @@ export async function listTimeline(
 		filtered || view.from === undefined
 			? timelineQueries(db, filterConds(key, ofProject(db, key), filters), view.from)
 			: {
+					counts: unfilteredTimeline.counts(db, { key, from: view.from }),
 					scheduled: unfilteredTimeline.scheduled(db, { key, from: view.from }),
-					scheduledTotal: unfilteredTimeline.scheduledTotal(db, { key, from: view.from }),
-					unscheduled: unfilteredTimeline.unscheduled(db, { key }),
-					unscheduledTotal: unfilteredTimeline.unscheduledTotal(db, { key })
+					unscheduled: unfilteredTimeline.unscheduled(db, { key })
 				};
-	const [
-		access,
-		scheduledRows,
-		[{ scheduledTotal }],
-		unscheduledRows,
-		[{ unscheduledTotal }],
-		milestones,
-		categories,
-		assignees
-	] = await ctx.readBatch([
-		projectAccessRead(ctx, key),
-		q.scheduled,
-		q.scheduledTotal,
-		q.unscheduled,
-		q.unscheduledTotal,
-		cachedByKey(milestonesQuery)(db, key),
-		cachedByKey(categoriesQuery)(db, key),
-		cachedByKey(assignableUsersQuery)(db, key)
-	]);
+	const [access, [counts], scheduledRows, unscheduledRows, milestones, categories, assignees] =
+		await ctx.readBatch([
+			projectAccessRead(ctx, key),
+			q.counts,
+			q.scheduled,
+			q.unscheduled,
+			cachedByKey(milestonesQuery)(db, key),
+			cachedByKey(categoriesQuery)(db, key),
+			cachedByKey(assignableUsersQuery)(db, key)
+		]);
 	const p = checkProjectAccess(ctx, access);
 	const toItems = (rows: TimelineRow[]): TimelineItem[] =>
 		rows.map(({ assigneesJson, reporterId, ...r }) => ({
@@ -607,10 +597,11 @@ export async function listTimeline(
 			canEdit: !p.archivedAt && can(ctx.actor, 'issue:edit', { reporterId })
 		}));
 	return {
-		scheduled: toItems(scheduledRows),
-		scheduledTotal,
-		unscheduled: toItems(unscheduledRows),
-		unscheduledTotal,
+		// 行の順は決めずに引くので、ここで並べる（日付のある課題は番号順、ない課題は新しい順）
+		scheduled: toItems(scheduledRows.sort((a, b) => a.number - b.number)),
+		scheduledTotal: counts?.scheduled ?? 0,
+		unscheduled: toItems(unscheduledRows.sort((a, b) => b.number - a.number)),
+		unscheduledTotal: counts?.unscheduled ?? 0,
 		milestones,
 		categories,
 		assignees
@@ -619,57 +610,92 @@ export async function listTimeline(
 
 /**
  * タイムラインの文（日付のある課題とその数、日付のない未完了の課題とその数）。from は表示の開始日
- * （cachedRead のプレースホルダーでもよい）。省略すると完了した課題もすべて対象にし、番号順に上限まで
+ * （cachedRead のプレースホルダーでもよい）。省略すると完了した課題もすべて対象にし、番号順に上限まで。
+ *
+ * D1 の読み取り行数を抑えるため、プロジェクトの課題を全部は読まない。対象になりうる「未完了の課題」と
+ * 「from 以降に終わる完了した課題」を、索引 issue_timeline_idx（プロジェクト・状態・終わる日）の範囲で別々に読んで
+ * UNION ALL でつなぐ（OR で 1 つの条件に書くと SQLite は索引を使わずプロジェクトの全課題を読む）。
+ * 古い課題の多い（ほとんどが完了した）プロジェクトほど読む行が減る
  */
 function timelineQueries(db: DB, where: SQL | undefined, from: string | Placeholder | undefined) {
-	const scheduledWhere = and(
-		where,
-		or(isNotNull(issue.startDate), isNotNull(issue.dueDate)),
-		from === undefined
-			? undefined
-			: or(
-					ne(issue.status, DONE_STATUS),
-					sql`coalesce(${issue.dueDate}, ${issue.startDate}) >= ${from}`
-				)
+	const hasDates = or(isNotNull(issue.startDate), isNotNull(issue.dueDate));
+	const noDates = and(isNull(issue.startDate), isNull(issue.dueDate));
+	// 未完了の課題。<> では索引の範囲にならないので、完了の前と後の 2 つに分ける
+	const openRanges = [
+		sql`${issue.status} < ${DONE_STATUS}`,
+		sql`${issue.status} > ${DONE_STATUS}`
+	] as const;
+	// 完了した課題は from 以降に終わる（期限、なければ開始日）ものだけ。式は issue_timeline_idx と同じにする
+	const doneShown = and(
+		eq(issue.status, DONE_STATUS),
+		from === undefined ? undefined : sql`coalesce(${issue.dueDate}, ${issue.startDate}) >= ${from}`
 	);
+	const countFields = { startDate: issue.startDate, dueDate: issue.dueDate, status: issue.status };
+	const countOf = (cond: SQL | undefined) =>
+		db.select(countFields).from(issue).where(and(where, cond));
+	const counts = countOf(openRanges[0])
+		.unionAll(countOf(openRanges[1]))
+		.unionAll(countOf(doneShown))
+		.as('candidates');
 	// 開始日から期限までの間と from との隔たり（日数）。間に from を含めば 0。from がなければ番号順
 	const distance =
 		from === undefined
-			? sql`${issue.number}`
-			: sql`max(0, julianday(coalesce(${issue.startDate}, ${issue.dueDate})) - julianday(${from}),
+			? sql<number>`${issue.number}`
+			: sql<number>`max(0, julianday(coalesce(${issue.startDate}, ${issue.dueDate})) - julianday(${from}),
 			julianday(${from}) - julianday(coalesce(${issue.dueDate}, ${issue.startDate})))`;
-	const scheduledShown = sql`${issue.id} in (
-		select ${issue.id} from ${issue} where ${scheduledWhere ?? sql`1 = 1`}
-		order by ${distance}, ${issue.number} limit ${SCHEDULED_LIMIT}
-	)`;
-	const unscheduledWhere = and(
-		where,
-		isNull(issue.startDate),
-		isNull(issue.dueDate),
-		ne(issue.status, DONE_STATUS)
-	);
+	const scheduledOf = (cond: SQL | undefined) =>
+		db
+			.select({ id: issue.id, number: issue.number, distance: distance.as('distance') })
+			.from(issue)
+			.where(and(where, cond, hasDates));
+	const scheduledCandidates = scheduledOf(openRanges[0])
+		.unionAll(scheduledOf(openRanges[1]))
+		.unionAll(scheduledOf(doneShown))
+		.as('scheduled_candidates');
+	const scheduledIds = db
+		.select({ id: scheduledCandidates.id })
+		.from(scheduledCandidates)
+		.orderBy(scheduledCandidates.distance, scheduledCandidates.number)
+		.limit(SCHEDULED_LIMIT)
+		.as('shown');
+	const unscheduledOf = (cond: SQL) =>
+		db
+			.select({ id: issue.id, number: issue.number })
+			.from(issue)
+			.where(and(where, cond, noDates));
+	const unscheduledCandidates = unscheduledOf(openRanges[0])
+		.unionAll(unscheduledOf(openRanges[1]))
+		.as('unscheduled_candidates');
+	const unscheduledIds = db
+		.select({ id: unscheduledCandidates.id })
+		.from(unscheduledCandidates)
+		.orderBy(desc(unscheduledCandidates.number))
+		.limit(UNSCHEDULED_LIMIT)
+		.as('shown');
 	return {
-		// 外側は副問い合わせの ID だけで絞る（scheduledWhere も重ねると、SQLite がプロジェクトの全課題を読んで ID を照らす形を選ぶ）
-		scheduled: timelineRowsQuery(db, scheduledShown).orderBy(asc(issue.number)),
-		scheduledTotal: db
-			.select({ scheduledTotal: sql<number>`count(*)`.as('scheduled_total') })
-			.from(issue)
-			.where(scheduledWhere),
-		unscheduled: timelineRowsQuery(db, unscheduledWhere)
-			.orderBy(desc(issue.number))
-			.limit(UNSCHEDULED_LIMIT),
-		unscheduledTotal: db
-			.select({ unscheduledTotal: sql<number>`count(*)`.as('unscheduled_total') })
-			.from(issue)
-			.where(unscheduledWhere)
+		counts: db
+			.select({
+				scheduled:
+					sql<number>`sum(${counts.startDate} is not null or ${counts.dueDate} is not null)`.as(
+						'scheduled'
+					),
+				unscheduled:
+					sql<number>`sum(${counts.startDate} is null and ${counts.dueDate} is null and ${counts.status} <> ${DONE_STATUS})`.as(
+						'unscheduled'
+					)
+			})
+			.from(counts),
+		scheduled: timelineRowsQuery(db, scheduledIds),
+		unscheduled: timelineRowsQuery(db, unscheduledIds)
 	};
 }
 
 /**
- * タイムラインの行の列。行に出すものと、グループ分け（担当者・マイルストーン）・編集の可否に使うものだけを読む。
- * 行の数（数百）だけ、D1 の結果の解釈・画面へ渡すデータの書き出しが増えるため
+ * タイムラインの行（ids で選んだ課題）。行に出すものと、グループ分け（担当者・マイルストーン）・編集の可否に使うものだけを読む。
+ * 行の数（数百）だけ、D1 の結果の解釈・画面へ渡すデータの書き出しが増えるため。
+ * 選んだ ID から課題を引く形にする（課題を読みながら選ぶと、担当者・マイルストーンの名前も上限で切る前の全件で引く）
  */
-function timelineRowsQuery(db: DB, where: SQL | undefined) {
+function timelineRowsQuery(db: DB, ids: SubqueryWithSelection<{ id: typeof issue.id }, 'shown'>) {
 	return db
 		.select({
 			id: issue.id,
@@ -683,10 +709,9 @@ function timelineRowsQuery(db: DB, where: SQL | undefined) {
 			assigneesJson: assigneesJson.as('assignees_json'),
 			reporterId: issue.reporterId
 		})
-		.from(issue)
-		.leftJoin(milestone, eq(issue.milestoneId, milestone.id))
-		.where(where)
-		.$dynamic();
+		.from(ids)
+		.innerJoin(issue, eq(issue.id, ids.id))
+		.leftJoin(milestone, eq(issue.milestoneId, milestone.id));
 }
 
 type TimelineRow = Awaited<ReturnType<typeof timelineRowsQuery>>[number];
@@ -700,16 +725,9 @@ export type TimelineItem = Omit<TimelineRow, 'assigneesJson' | 'reporterId'> & {
 const unfilteredTimelineQueries = (db: DB, p: { key: Placeholder; from?: Placeholder }) =>
 	timelineQueries(db, filterConds('', ofProject(db, p.key), {}), p.from);
 const unfilteredTimeline = {
+	counts: cachedRead(['key', 'from'], (db, p) => unfilteredTimelineQueries(db, p).counts),
 	scheduled: cachedRead(['key', 'from'], (db, p) => unfilteredTimelineQueries(db, p).scheduled),
-	scheduledTotal: cachedRead(
-		['key', 'from'],
-		(db, p) => unfilteredTimelineQueries(db, p).scheduledTotal
-	),
-	unscheduled: cachedRead(['key'], (db, p) => unfilteredTimelineQueries(db, p).unscheduled),
-	unscheduledTotal: cachedRead(
-		['key'],
-		(db, p) => unfilteredTimelineQueries(db, p).unscheduledTotal
-	)
+	unscheduled: cachedRead(['key'], (db, p) => unfilteredTimelineQueries(db, p).unscheduled)
 };
 
 export async function getIssue(ctx: AppContext, key: string, number: number) {

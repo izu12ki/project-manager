@@ -224,7 +224,8 @@
 			<div class="card-head">
 				<h2 class="card-title">API キー</h2>
 				<p class="card-desc">
-					外部のツールから REST API を使うためのキーです。キーは作成した管理者本人として動作します。
+					外部のツールから REST API
+					を使うためのキーです。キーはあなた本人として、あなたの権限の範囲で動作します。
 				</p>
 			</div>
 			{#if form && 'apiKey' in form && form.message}<FormAlert message={form.message} />{/if}

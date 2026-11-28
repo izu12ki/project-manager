@@ -62,10 +62,10 @@ describe('apiHandler', () => {
 		}
 	});
 
-	it('member のキーは 401', async () => {
+	it('閲覧者に変わった人のキーは 401', async () => {
 		const admin = await seedUser(db, 'admin');
 		const { token } = await createApiKey(ctxOf(base, admin), { name: 'x' });
-		await db.update(user).set({ role: 'member' }).where(eq(user.id, admin.id));
+		await db.update(user).set({ role: 'viewer' }).where(eq(user.id, admin.id));
 		const res = await apiHandler(eventOf({ Authorization: `Bearer ${token}` }), async () => ({}));
 		expect(res.status).toBe(401);
 	});
@@ -91,6 +91,23 @@ describe('apiHandler', () => {
 		const res = await apiHandler(eventOf(headers), async () => ({}));
 		expect(res.status).toBe(429);
 		expect(((await res.json()) as ErrBody).error.code).toBe('rate_limited');
+	});
+
+	it('レート制限は人ごと。同じ人の別のキーでも 121 回目は 429、ほかの人は通る', async () => {
+		const admin = await seedUser(db, 'admin');
+		const other = await seedUser(db, 'member', 'other');
+		const a = (await createApiKey(ctxOf(base, admin), { name: 'a' })).token;
+		const b = (await createApiKey(ctxOf(base, admin), { name: 'b' })).token;
+		const c = (await createApiKey(ctxOf(base, other), { name: 'c' })).token;
+		for (let i = 0; i < 120; i++) {
+			const token = i % 2 === 0 ? a : b;
+			const res = await apiHandler(eventOf({ Authorization: `Bearer ${token}` }), async () => ({}));
+			expect(res.status).toBe(200);
+		}
+		const res = await apiHandler(eventOf({ Authorization: `Bearer ${b}` }), async () => ({}));
+		expect(res.status).toBe(429);
+		const others = await apiHandler(eventOf({ Authorization: `Bearer ${c}` }), async () => ({}));
+		expect(others.status).toBe(200);
 	});
 
 	it('AppError(not_found) は 404 で { error: { code, message } }', async () => {

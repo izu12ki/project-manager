@@ -183,7 +183,7 @@ export const invitationProject = sqliteTable(
 	]
 );
 
-/** 管理者の個人 API キー。平文は保存せず sha256 のみ持つ */
+/** 個人の API キー（閲覧者以外が作れる）。平文は保存せず sha256 のみ持つ */
 export const apiKey = sqliteTable(
 	'api_key',
 	{

@@ -44,13 +44,11 @@ describe('api keys', () => {
 		expect(await listApiKeys(ctx)).toHaveLength(0);
 	});
 
-	it('持ち主が member に降格すると null、admin に戻ると再び認証できる', async () => {
-		const admin = await seedUser(db, 'admin');
-		const { token } = await createApiKey(ctxOf(base, admin), { name: 'CLI' });
-		await db.update(user).set({ role: 'member' }).where(eq(user.id, admin.id));
+	it('認証のたびに役割を確かめ、持ち主が閲覧者なら null（DB を直接変えた場合も）', async () => {
+		const owner = await seedUser(db, 'member');
+		const { token } = await createApiKey(ctxOf(base, owner), { name: 'CLI' });
+		await db.update(user).set({ role: 'viewer' }).where(eq(user.id, owner.id));
 		expect(await authenticateApiKey(base, token)).toBeNull();
-		await db.update(user).set({ role: 'admin' }).where(eq(user.id, admin.id));
-		expect((await authenticateApiKey(base, token))?.actor.id).toBe(admin.id);
 	});
 
 	it('持ち主が無効化されると null', async () => {
@@ -60,11 +58,37 @@ describe('api keys', () => {
 		expect(await authenticateApiKey(base, token)).toBeNull();
 	});
 
-	it('member は createApiKey できない（forbidden）', async () => {
-		const member = await seedUser(db, 'member');
-		await expect(createApiKey(ctxOf(base, member), { name: 'CLI' })).rejects.toMatchObject({
+	it.each(['member', 'guest'] as const)('%s も作れて、キーは持ち主の役割で動く', async (role) => {
+		const owner = await seedUser(db, role);
+		const { token } = await createApiKey(ctxOf(base, owner), { name: 'CLI' });
+		expect((await authenticateApiKey(base, token))?.actor).toMatchObject({
+			id: owner.id,
+			role
+		});
+	});
+
+	it('閲覧者は createApiKey できない（forbidden）', async () => {
+		const viewer = await seedUser(db, 'viewer');
+		await expect(createApiKey(ctxOf(base, viewer), { name: 'CLI' })).rejects.toMatchObject({
 			code: 'forbidden'
 		});
+	});
+
+	it('有効なキーは 1 人 10 本まで。無効化すると、また作れる', async () => {
+		const owner = await seedUser(db, 'member');
+		const other = await seedUser(db, 'member', 'other');
+		const ctx = ctxOf(base, owner);
+		for (let i = 0; i < 10; i++) await createApiKey(ctx, { name: `k${i}` });
+		await expect(createApiKey(ctx, { name: 'k10' })).rejects.toMatchObject({
+			code: 'validation',
+			message: 'API キーは 1 人 10 本までです。使っていないキーを無効化してください'
+		});
+		// 他の人の本数には数えない
+		await createApiKey(ctxOf(base, other), { name: 'theirs' });
+		const [newest] = await listApiKeys(ctx);
+		await revokeApiKey(ctx, newest.id);
+		await createApiKey(ctx, { name: 'k10' });
+		expect(await listApiKeys(ctx)).toHaveLength(10);
 	});
 
 	it('名前は 1〜50 文字', async () => {
@@ -88,6 +112,15 @@ describe('api keys', () => {
 		await expect(revokeApiKey(ctxOf(base, a), 'unknown')).rejects.toMatchObject({
 			code: 'not_found'
 		});
+	});
+
+	it('閲覧者は自分のキーも無効化できない（forbidden。閲覧者にした時点で失効している）', async () => {
+		const owner = await seedUser(db, 'member');
+		await createApiKey(ctxOf(base, owner), { name: 'CLI' });
+		const [k] = await listApiKeys(ctxOf(base, owner));
+		await db.update(user).set({ role: 'viewer' }).where(eq(user.id, owner.id));
+		const asViewer = ctxOf(base, { ...owner, role: 'viewer' });
+		await expect(revokeApiKey(asViewer, k.id)).rejects.toMatchObject({ code: 'forbidden' });
 	});
 
 	it('lastUsedAt は前回から 60 秒以上空いたときだけ更新する', async () => {

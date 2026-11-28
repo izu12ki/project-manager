@@ -23,14 +23,18 @@ import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	const ctx = appContext(locals);
-	const [slack, email] = await Promise.all([getSlackStatus(ctx), getEmailNotificationStatus(ctx)]);
+	const [slack, email, apiKeys] = await Promise.all([
+		getSlackStatus(ctx),
+		getEmailNotificationStatus(ctx),
+		// API キーは閲覧者には欄ごと出さない
+		can(ctx.actor, 'api:use') ? listApiKeys(ctx) : null
+	]);
 	return {
 		slack,
 		email,
 		// 閲覧者（公開デモの共用アカウントなど）は表示名・パスワード・通知を変えられない
 		canModifyAccount: can(ctx.actor, 'account:modify'),
-		// API キーは管理者だけが使う。それ以外には欄ごと出さない
-		apiKeys: can(ctx.actor, 'api:use') ? await listApiKeys(ctx) : null
+		apiKeys
 	};
 };
 

@@ -6,6 +6,7 @@ import type { DB } from '../db';
 import { session, user } from '../db/schema';
 import { AppError } from '../errors';
 import { parse } from '../validation';
+import { revokeAllApiKeysQuery } from './api-keys';
 
 /**
  * Backlog の取り込みで、登録者・コメントの投稿者に対応する人がいないときに使う専用のユーザー。
@@ -89,7 +90,10 @@ export async function disableUser(ctx: AppContext, userId: string): Promise<void
 	if (updated.length === 0) {
 		await rejectUpdate(ctx.db, userId, '管理者が 1 人もいなくなるため無効化できません');
 	}
-	await ctx.db.delete(session).where(eq(session.userId, userId));
+	await ctx.db.batch([
+		ctx.db.delete(session).where(eq(session.userId, userId)),
+		revokeAllApiKeysQuery(ctx.db, userId)
+	]);
 }
 
 const RoleInput = v.picklist(['admin', 'member', 'guest', 'viewer'], 'ロールを選択してください');
@@ -113,8 +117,13 @@ export async function changeUserRole(
 	if (updated.length === 0) {
 		await rejectUpdate(ctx.db, userId, '管理者が 1 人もいなくなるため変更できません');
 	}
-	// 古い権限のままのセッションを残さない
-	await ctx.db.delete(session).where(eq(session.userId, userId));
+	// 古い権限のままのセッションを残さない。閲覧者にしたときは API キーも無効化する
+	const clearSessions = ctx.db.delete(session).where(eq(session.userId, userId));
+	if (newRole === 'viewer') {
+		await ctx.db.batch([clearSessions, revokeAllApiKeysQuery(ctx.db, userId)]);
+	} else {
+		await clearSessions;
+	}
 }
 
 export async function enableUser(ctx: AppContext, userId: string): Promise<void> {

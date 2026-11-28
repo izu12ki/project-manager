@@ -44,7 +44,7 @@ export async function apiHandler(
 		const token = bearerToken(event.request);
 		const auth = token ? await authenticateApiKey(base, token) : null;
 		if (!auth) throw new AppError('unauthorized', 'APIキーが無効です');
-		if (!(await consumeRateLimit(base.db, `app:api:${auth.apiKeyId}`, API_RATE_LIMIT))) {
+		if (!(await consumeRateLimit(base.db, `app:api-user:${auth.actor.id}`, API_RATE_LIMIT))) {
 			throw new AppError(
 				'rate_limited',
 				'リクエストが多すぎます。しばらくしてから再度お試しください'

@@ -37,6 +37,7 @@ import {
 	category,
 	comment,
 	issue,
+	issueAssignee,
 	issueChange,
 	issueStatus,
 	issueType,
@@ -344,13 +345,61 @@ export function filterConds(
 	of: ProjectCond,
 	filters: IssueFilters
 ): SQL | undefined {
+	return issueConds(projectKey, filters, {
+		project: of(issue.projectId),
+		status: statusCond(filters.status),
+		assignee: idsCond(issue.assigneeIds, filters.assigneeId)
+	});
+}
+
+/**
+ * 課題一覧の画面と API の一覧の絞り込み。filterConds と同じ課題に当たり、D1 が読む行を減らす形にする
+ * （1 ページ分を番号などの順に読んで止める一覧より、件数を数える文で効く）。
+ * - 完了以外: status <> 'done' は索引の範囲にならず、完了した課題も読む。プロジェクトの完了以外のステータスの IN にして、
+ *   issue_board_idx（プロジェクト・ステータス）の範囲だけを読む（課題のステータスは必ずプロジェクトのステータスにある）
+ * - 担当者: その人の課題を issue_assignee から読む。プロジェクトの条件は +project_id にして、SQLite にプロジェクトの索引を
+ *   使わせない（使うとプロジェクトの課題をすべて読み、担当者を 1 件ずつ確かめる）。
+ *   カンバン・タイムラインはプロジェクトの索引で並べて読むので、こちらは使わない
+ */
+export function listFilterConds(
+	projectKey: string,
+	of: ProjectCond,
+	filters: IssueFilters
+): SQL | undefined {
+	const assigneeId =
+		filters.assigneeId && filters.assigneeId !== 'none' ? filters.assigneeId : undefined;
+	const status = filters.status;
+	// 担当者の索引の「完了か」。ステータスで絞るときは、その側だけを読む
+	const done = status === undefined ? undefined : status === DONE_STATUS;
+	return issueConds(projectKey, filters, {
+		project: assigneeId ? of(sql`+${issue.projectId}`) : of(issue.projectId),
+		status:
+			status === 'open'
+				? sql`${issue.status} in (select ${issueStatus.key} from ${issueStatus}
+					where ${and(of(issueStatus.projectId), ne(issueStatus.key, DONE_STATUS))})`
+				: statusCond(status),
+		assignee: assigneeId
+			? sql`${issue.id} in (select ${issueAssignee.issueId} from ${issueAssignee}
+				where ${and(
+					eq(issueAssignee.userId, assigneeId),
+					done === undefined ? undefined : eq(issueAssignee.done, done)
+				)})`
+			: idsCond(issue.assigneeIds, filters.assigneeId)
+	});
+}
+
+function issueConds(
+	projectKey: string,
+	filters: IssueFilters,
+	c: { project: SQL; status: SQL | undefined; assignee: SQL | undefined }
+): SQL | undefined {
 	return and(
-		of(issue.projectId),
+		c.project,
 		isNull(issue.deletedAt),
-		statusCond(filters.status),
+		c.status,
 		filters.unscheduled ? and(isNull(issue.startDate), isNull(issue.dueDate)) : undefined,
 		filters.priority ? eq(issue.priority, filters.priority) : undefined,
-		idsCond(issue.assigneeIds, filters.assigneeId),
+		c.assignee,
 		idsCond(issue.categoryIds, filters.categoryId),
 		optionCond(issue.typeId, filters.typeId),
 		optionCond(issue.milestoneId, filters.milestoneId),

@@ -7,7 +7,7 @@ import type { AppContext } from '../context';
 import { getCommentRows } from './comments';
 import { DEFAULT_ISSUE_SORT } from '#lib/issue-sort.ts';
 import {
-	filterConds,
+	listFilterConds,
 	getIssue,
 	issueListQuery,
 	sortOrder,
@@ -144,7 +144,7 @@ export async function listApiIssues(ctx: AppContext, key: string, query: URLSear
 		q: query.get('q') || undefined
 	};
 	const { db } = ctx;
-	const where = filterConds(key, ofProject(db, key), filters);
+	const where = listFilterConds(key, ofProject(db, key), filters);
 	const [access, rows, [{ total }]] = await ctx.readBatch([
 		projectAccessRead(ctx, key),
 		issueListQuery(db, where, sortOrder(DEFAULT_ISSUE_SORT)).limit(limit).offset(offset),

@@ -328,6 +328,10 @@ export const issue = sqliteTable(
 		index('issue_parent_idx').on(t.parentId),
 		// 自分の課題の「登録した課題」（services/my-issues.ts）
 		index('issue_reporter_idx').on(t.reporterId),
+		// 課題一覧の「削除した課題」（services/issues.ts の deletedIssuesQuery）。削除した課題だけの索引なので、ふだんの書き込みでは増えない
+		index('issue_deleted_idx')
+			.on(t.projectId, t.deletedAt)
+			.where(sql`${t.deletedAt} is not null`),
 		uniqueIndex('issue_project_backlog_key_uq').on(t.projectId, t.backlogKey)
 	]
 );

@@ -1,16 +1,17 @@
 // 課題一覧・起票の画面に要る行を 1 回の batch（D1 への 1 往復）で引く。方式は project-access.ts の先頭を参照
-import { sql, type SQL } from 'drizzle-orm';
+import { sql, type Placeholder, type SQL } from 'drizzle-orm';
 import { DEFAULT_ISSUE_SORT, type IssueSort } from '#lib/issue-sort.ts';
 import { ISSUE_PAGE_SIZE } from '#lib/pagination.ts';
 import { authorize } from '../authz';
 import type { AppContext } from '../context';
 import type { DB } from '../db';
 import { cachedRead } from '../db/cached-read';
+import { inList } from '../db/limits';
 import { issue } from '../db/schema';
 import { categoriesQuery, milestonesQuery } from './issue-fields';
 import {
 	deletedIssuesQuery,
-	filterConds,
+	listFilterConds,
 	issueListViewQuery,
 	parentByNumberQuery,
 	parentCandidatesQuery,
@@ -28,8 +29,30 @@ const milestonesOf = cachedByKey(milestonesQuery);
 const deletedIssuesOf = cachedByKey(deletedIssuesQuery);
 const parentCandidatesOf = cachedByKey((db, of) => parentCandidatesQuery(db, of));
 
-function listPageQuery(db: DB, where: SQL | undefined, sort: IssueSort) {
-	return issueListViewQuery(db, where, sortOrder(sort));
+/**
+ * 一覧の 1 ページ。番号の順は索引（プロジェクト・番号）の順に読み、1 ページ分で止まるので、そのまま引く。
+ * ほかの並び順と担当者での絞り込み（issue_assignee から読む）では、SQLite は条件に合うすべての課題で画面に出す列
+ * （担当者・カテゴリーの名前など）を作ってから並べるので、1 ページ分の ID を先に選んでから列を引く（D1 の読み取りが減る）
+ */
+function listPageQuery(
+	db: DB,
+	where: SQL | undefined,
+	sort: IssueSort,
+	page: { limit: number | Placeholder; offset: number | Placeholder },
+	filters: IssueFilters
+) {
+	const order = sortOrder(sort);
+	const byAssignee = !!filters.assigneeId && filters.assigneeId !== 'none';
+	if (sort.key === 'number' && !byAssignee)
+		return issueListViewQuery(db, where, order).limit(page.limit).offset(page.offset);
+	const ids = db
+		.select({ id: issue.id })
+		.from(issue)
+		.where(where)
+		.orderBy(...order)
+		.limit(page.limit)
+		.offset(page.offset);
+	return issueListViewQuery(db, inList(issue.id, ids), order);
 }
 
 /** 条件に合う課題の数（課題一覧と API の一覧で使う） */
@@ -48,16 +71,20 @@ const isDefaultFilters = (filters: IssueFilters) =>
 
 // 既定の絞り込みの一覧（一覧を開いたとき）の 1 ページと件数は、並び順ごとに組み立てを使い回す。
 // ほかの絞り込みでは値によって文の形が変わる（'none' など）ので、そのときは毎回組み立てる。
-// filterConds のキーはキーワード検索にだけ使うので、既定の絞り込みでは使われない
+// listFilterConds のキーはキーワード検索にだけ使うので、既定の絞り込みでは使われない
 const defaultCount = cachedRead(['key'], (db, p) =>
-	countQuery(db, filterConds('', ofProject(db, p.key), DEFAULT_LIST_FILTERS))
+	countQuery(db, listFilterConds('', ofProject(db, p.key), DEFAULT_LIST_FILTERS))
 );
 const defaultPages = new Map<string, ReturnType<typeof defaultPageRead>>();
 function defaultPageRead(sort: IssueSort) {
 	return cachedRead(['key', 'limit', 'offset'], (db, p) =>
-		listPageQuery(db, filterConds('', ofProject(db, p.key), DEFAULT_LIST_FILTERS), sort)
-			.limit(p.limit)
-			.offset(p.offset)
+		listPageQuery(
+			db,
+			listFilterConds('', ofProject(db, p.key), DEFAULT_LIST_FILTERS),
+			sort,
+			p,
+			DEFAULT_LIST_FILTERS
+		)
 	);
 }
 function defaultPage(sort: IssueSort) {
@@ -83,12 +110,12 @@ export async function getIssueListRows(
 	const { db } = ctx;
 	const offset = (page - 1) * ISSUE_PAGE_SIZE;
 	const filtered = !isDefaultFilters(filters);
-	const where = filtered ? filterConds(key, ofProject(db, key), filters) : undefined;
+	const where = filtered ? listFilterConds(key, ofProject(db, key), filters) : undefined;
 	const [access, issues, [{ total }], assignees, categories, milestones, deletedIssues] =
 		await ctx.readBatch([
 			projectAccessRead(ctx, key),
 			filtered
-				? listPageQuery(db, where, sort).limit(ISSUE_PAGE_SIZE).offset(offset)
+				? listPageQuery(db, where, sort, { limit: ISSUE_PAGE_SIZE, offset }, filters)
 				: defaultPage(sort)(db, { key, limit: ISSUE_PAGE_SIZE, offset }),
 			filtered ? countQuery(db, where) : defaultCount(db, { key }),
 			assignableOf(db, key),

@@ -12,6 +12,7 @@
 	} from '@lucide/svelte';
 	import { page } from '$app/state';
 	import IssueTypeTag from '#lib/components/IssueTypeTag.svelte';
+	import MeFilterButton from '#lib/components/MeFilterButton.svelte';
 	import Pager from '#lib/components/Pager.svelte';
 	import PriorityPill from '#lib/components/PriorityPill.svelte';
 	import StatusPill from '#lib/components/StatusPill.svelte';
@@ -40,6 +41,18 @@
 		Object.entries(data.filters).some(([k, v]) => (k === 'status' ? v !== 'open' : Boolean(v)))
 	);
 	const selectedStatus = $derived(data.filters.status ?? 'all');
+	// 「自分」のボタンは、自分が担当者の候補にいるときだけ出す
+	const me = $derived(
+		data.assignees.some((u) => u.id === data.user?.id) ? data.user?.id : undefined
+	);
+	/** 担当者を自分にして（もう一度押すと外して）絞り込み直す */
+	function toggleMe(button: HTMLButtonElement) {
+		const form = button.form;
+		const select = form?.elements.namedItem('assignee');
+		if (!form || !(select instanceof HTMLSelectElement) || !me) return;
+		select.value = select.value === me ? '' : me;
+		form.requestSubmit();
+	}
 	const statusOptions = $derived<[string, string][]>([
 		['all', 'すべて'],
 		...data.statuses.map((s): [string, string] => [s.key, s.name]),
@@ -153,15 +166,23 @@
 					</select>
 				</div>
 			{/if}
-			<div class="field w-36 gap-1.5">
+			<div class="field gap-1.5">
 				<label class="label text-[0.8125rem]" for="filter-assignee">担当者</label>
-				<select class="select" id="filter-assignee" name="assignee">
-					<option value="">すべて</option>
-					<option value="none" selected={data.filters.assigneeId === 'none'}>未割当</option>
-					{#each data.assignees as u (u.id)}
-						<option value={u.id} selected={data.filters.assigneeId === u.id}>{u.name}</option>
-					{/each}
-				</select>
+				<div class="flex items-center gap-1.5">
+					<select class="select w-36" id="filter-assignee" name="assignee">
+						<option value="">すべて</option>
+						<option value="none" selected={data.filters.assigneeId === 'none'}>未割当</option>
+						{#each data.assignees as u (u.id)}
+							<option value={u.id} selected={data.filters.assigneeId === u.id}>{u.name}</option>
+						{/each}
+					</select>
+					{#if me}
+						<MeFilterButton
+							pressed={data.filters.assigneeId === me}
+							onclick={(e) => toggleMe(e.currentTarget)}
+						/>
+					{/if}
+				</div>
 			</div>
 			<div class="field w-28 gap-1.5">
 				<label class="label text-[0.8125rem]" for="filter-priority">優先度</label>
@@ -172,7 +193,7 @@
 					{/each}
 				</select>
 			</div>
-			<div class="field min-w-48 flex-1 basis-48 gap-1.5 sm:max-w-80">
+			<div class="field min-w-40 flex-1 basis-40 gap-1.5 sm:max-w-80">
 				<label class="label text-[0.8125rem]" for="filter-q">キーワード</label>
 				<div class="search">
 					<Search size={16} class="search-icon" />

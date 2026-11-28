@@ -686,20 +686,26 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page).toHaveURL(/\/projects\/ACME\/timeline$/);
 	// 日付のない ACME-1 はタイムラインに出さず、案内から課題一覧（日付なしの絞り込み）へ行ける
 	await expect(page.getByTestId('bar-1')).toBeHidden();
-	const unscheduledHint = page.getByText('開始日と期限日が未設定の課題が 1 件あります');
+	const unscheduledHint = page.getByText('開始日と期限日が未設定の課題があります');
 	await expect(unscheduledHint).toBeVisible();
-	await page.getByRole('link', { name: '未設定の課題を一覧で見る' }).click();
-	await expect(page).toHaveURL(/\/projects\/ACME\?dates=none$/);
-	await expect(page.getByRole('link', { name: 'トップページ改修' })).toBeHidden();
+	// 一覧は新しいタブで開く
+	const [listTab] = await Promise.all([
+		page.context().waitForEvent('page'),
+		page.getByRole('link', { name: '未設定の課題を一覧で見る' }).click()
+	]);
+	await expect(listTab).toHaveURL(/\/projects\/ACME\?dates=none$/);
+	await expect(page).toHaveURL(/\/projects\/ACME\/timeline$/);
+	await expect(listTab.getByRole('link', { name: 'トップページ改修' })).toBeHidden();
 	// 課題を開いて日付を入れると、タイムラインに出る
-	const issue1Ready = page.waitForResponse((r) => r.url().includes('/readIssueNotifications'));
-	await page.getByRole('link', { name: 'ログインできない' }).click();
+	const issue1Ready = listTab.waitForResponse((r) => r.url().includes('/readIssueNotifications'));
+	await listTab.getByRole('link', { name: 'ログインできない' }).click();
 	await issue1Ready;
-	await page.getByLabel('開始日').fill(jstDay(1));
-	await page.getByLabel('期限日').fill(jstDay(1));
-	await page.getByRole('button', { name: '保存' }).click();
-	await expect(page.getByText('保存しました')).toBeVisible();
-	await page.goto('/projects/ACME/timeline');
+	await listTab.getByLabel('開始日').fill(jstDay(1));
+	await listTab.getByLabel('期限日').fill(jstDay(1));
+	await listTab.getByRole('button', { name: '保存' }).click();
+	await expect(listTab.getByText('保存しました')).toBeVisible();
+	await listTab.close();
+	await page.reload();
 	await expect(page.getByTestId('bar-1')).toHaveAttribute('data-start', jstDay(1));
 	await expect(page.getByTestId('bar-1')).toHaveAttribute('data-due', jstDay(1));
 	await expect(unscheduledHint).toBeHidden();
@@ -1024,6 +1030,14 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await page.locator('label.status-chip', { hasText: 'すべて' }).click();
 	await expect(page).toHaveURL(/[?&]status=all(&|$)/);
 	await expect(page.getByRole('radio', { name: 'すべて' })).toBeChecked();
+	// 担当者の横の「自分」で、自分が担当の課題に絞る。もう一度押すと外す
+	const meButton = page.getByRole('button', { name: '自分が担当の課題だけ表示' });
+	await meButton.click();
+	await expect(page).toHaveURL(/[?&]assignee=[0-9a-f-]{36}(&|$)/);
+	await expect(meButton).toHaveAttribute('aria-pressed', 'true');
+	await meButton.click();
+	await expect(page).toHaveURL(/[?&]assignee=(&|$)/);
+	await expect(meButton).toHaveAttribute('aria-pressed', 'false');
 
 	// 列見出しで並べ替える。開始日が空の課題は末尾。並べ替えと絞り込みは、どちらを変えても他方が残る
 	await page.goto('/projects/ACME');

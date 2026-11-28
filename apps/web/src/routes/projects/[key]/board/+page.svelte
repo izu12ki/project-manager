@@ -4,12 +4,7 @@
 	import { page } from '$app/state';
 	import { dndzone, type DndEvent } from 'svelte-dnd-action';
 	import type { Attachment } from 'svelte/attachments';
-	import {
-		BOARD_COLUMN_MAX,
-		BOARD_COUNT_LIMIT,
-		BOARD_PAGE_SIZE,
-		type BoardLimits
-	} from '#lib/board-limits.ts';
+	import { BOARD_COLUMN_MAX, BOARD_PAGE_SIZE, type BoardLimits } from '#lib/board-limits.ts';
 	import IssueTypeTag from '#lib/components/IssueTypeTag.svelte';
 	import {
 		DONE_STATUS,
@@ -49,14 +44,8 @@
 	/** 列の課題の数。上限で出していない分も含め、ドラッグ中の出入りも反映する */
 	const total = (status: Status) =>
 		board.totals[status] - board.columns[status].length + columns[status].length;
-	/**
-	 * まだ読み込んでいない課題の数（0 より大きければ続きがある）。
-	 * サーバーは BOARD_COUNT_LIMIT を超える列を数え切らないので、counted でないときは正確な数ではない
-	 */
+	/** まだ読み込んでいない課題の数 */
 	const hidden = (status: Status) => board.totals[status] - board.columns[status].length;
-	/** 列の課題の数が正確か（BOARD_COUNT_LIMIT 以下か、すべて読み込んだ） */
-	const counted = (status: Status) =>
-		board.totals[status] <= BOARD_COUNT_LIMIT || hidden(status) <= 0;
 	/** その列のステータス（とマイルストーン）で絞り込んだ課題一覧 */
 	const listHref = (status: Status) =>
 		`/projects/${data.project.key}?status=${encodeURIComponent(status)}` +
@@ -239,7 +228,7 @@
 			>
 				<h2 class="column-head">
 					{name}
-					<span class="count">{counted(status) ? total(status) : `${BOARD_COUNT_LIMIT}+`}</span>
+					<span class="count">{total(status)}</span>
 				</h2>
 				<div class="cards">
 					<ul
@@ -337,23 +326,13 @@
 								loading === null && !pending && !dragging
 							)}
 						>
-							{loading === status
-								? '読み込み中…'
-								: counted(status)
-									? `さらに表示（残り ${hidden(status)} 件）`
-									: 'さらに表示'}
+							{loading === status ? '読み込み中…' : `さらに表示（残り ${hidden(status)} 件）`}
 						</button>
 					{:else if hidden(status) > 0}
 						<a class="more" href={listHref(status)}>
-							{#if status === DONE_STATUS}
-								{counted(status)
-									? `以前に完了した ${hidden(status)} 件を一覧で見る`
-									: '以前に完了した課題を一覧で見る'}
-							{:else}
-								{counted(status)
-									? `ほか ${hidden(status)} 件を一覧で見る`
-									: 'ほかの課題を一覧で見る'}
-							{/if}
+							{status === DONE_STATUS
+								? `以前に完了した ${hidden(status)} 件を一覧で見る`
+								: `ほか ${hidden(status)} 件を一覧で見る`}
 						</a>
 					{/if}
 				</div>

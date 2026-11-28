@@ -16,7 +16,6 @@ import {
 } from '../test-utils';
 import {
 	BOARD_COLUMN_MAX,
-	BOARD_COUNT_LIMIT,
 	BOARD_PAGE_SIZE,
 	createIssue,
 	deleteIssue,
@@ -297,25 +296,32 @@ describe('issues', () => {
 			expect(capped.columns.todo).toHaveLength(BOARD_PAGE_SIZE * 2 + 5);
 		});
 
-		it('数は列ごとに max(読み込む数, BOARD_COUNT_LIMIT) + 1 件で数えるのをやめる（続きがあるかは分かる）', async () => {
-			await insertMany(range(1, BOARD_COUNT_LIMIT + 30), 'todo');
-			await insertMany(range(1001, 1000 + BOARD_COUNT_LIMIT), 'done');
-			const first = await listBoard(as(member), 'ACME');
-			// 超えた列は BOARD_COUNT_LIMIT + 1（「100+」）。ちょうど BOARD_COUNT_LIMIT の列は正確な数
-			expect(first.totals).toMatchObject({
-				todo: BOARD_COUNT_LIMIT + 1,
-				done: BOARD_COUNT_LIMIT,
-				in_progress: 0
-			});
-			// 上限を超えて読み込むと、その数 + 1 まで数える。読み込んだ数より多ければ続きがある
-			const more = await listBoard(as(member), 'ACME', {}, { todo: BOARD_COUNT_LIMIT + 25 });
-			expect(more.columns.todo).toHaveLength(BOARD_COUNT_LIMIT + 25);
-			expect(more.totals.todo).toBe(BOARD_COUNT_LIMIT + 26);
-			// 全部読み込むと、数は読み込んだ数と同じ（続きはない）
-			const all = await listBoard(as(member), 'ACME', {}, { todo: BOARD_COUNT_LIMIT + 50 });
-			expect(all.columns.todo).toHaveLength(BOARD_COUNT_LIMIT + 30);
-			expect(all.totals.todo).toBe(BOARD_COUNT_LIMIT + 30);
-			expect(all.totals.done).toBe(BOARD_COUNT_LIMIT);
+		it('数は正確（読み込む数を変えても、マイルストーンで絞っても、未設定で絞っても）', async () => {
+			await insertMany(range(1, 130), 'todo');
+			await insertMany(range(1001, 1040), 'done');
+			await createMilestone(as(admin), 'ACME', { name: 'v1' });
+			await createMilestone(as(admin), 'ACME', { name: 'v2' });
+			const [v1, v2] = await listMilestones(as(admin), 'ACME');
+			for (const n of [3, 40, 120]) await updateIssue(as(admin), 'ACME', n, { milestoneId: v1.id });
+			await updateIssue(as(admin), 'ACME', 1001, { milestoneId: v2.id });
+			// 別のプロジェクトのマイルストーンの課題は数えない
+			await seedProject(db, { key: 'OTHER' });
+			await createMilestone(as(admin), 'OTHER', { name: 'v1' });
+			const [o1] = await listMilestones(as(admin), 'OTHER');
+			await createIssue(as(admin), 'OTHER', { title: 'o', milestoneId: o1.id });
+
+			const all = await listBoard(as(member), 'ACME');
+			expect(all.totals).toMatchObject({ todo: 130, done: 40, in_progress: 0 });
+			expect((await listBoard(as(member), 'ACME', {}, { todo: 50 })).totals.todo).toBe(130);
+			const byV1 = await listBoard(as(member), 'ACME', { milestoneId: v1.id });
+			expect(byV1.totals).toMatchObject({ todo: 3, done: 0 });
+			expect(byV1.columns.todo.map((i) => i.number)).toEqual([3, 40, 120]);
+			const none = await listBoard(as(member), 'ACME', { milestoneId: 'none' });
+			expect(none.totals).toMatchObject({ todo: 127, done: 39, in_progress: 0 });
+			// 削除した課題は数えない
+			await deleteIssue(as(admin), 'ACME', 40);
+			expect((await listBoard(as(member), 'ACME', { milestoneId: v1.id })).totals.todo).toBe(2);
+			expect((await listBoard(as(member), 'ACME')).totals.todo).toBe(129);
 		});
 
 		it('総数は絞り込んだ後の数。削除した課題は数えない', async () => {

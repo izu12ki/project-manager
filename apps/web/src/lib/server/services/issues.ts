@@ -25,12 +25,7 @@ import {
 	type Status,
 	type StatusDef
 } from '#lib/labels.ts';
-import {
-	BOARD_COLUMN_MAX,
-	BOARD_COUNT_LIMIT,
-	BOARD_PAGE_SIZE,
-	type BoardLimits
-} from '#lib/board-limits.ts';
+import { BOARD_COLUMN_MAX, BOARD_PAGE_SIZE, type BoardLimits } from '#lib/board-limits.ts';
 import { DEFAULT_ISSUE_SORT, type IssueSort } from '#lib/issue-sort.ts';
 import { cachedRead } from '../db/cached-read';
 import { authorize, can } from '../authz';
@@ -47,6 +42,7 @@ import {
 	issueType,
 	milestone,
 	project,
+	projectIssueCount,
 	user
 } from '../db/schema';
 import { AppError } from '../errors';
@@ -442,16 +438,14 @@ export async function listIssues(
 	return selectIssues(ctx.db, filterConds(p.key, byProjectId(p.id), filters), sortOrder(sort));
 }
 
-export { BOARD_COLUMN_MAX, BOARD_COUNT_LIMIT, BOARD_PAGE_SIZE, type BoardLimits };
+export { BOARD_COLUMN_MAX, BOARD_PAGE_SIZE, type BoardLimits };
 
 /**
  * カンバン（remote query の getBoard）に要るもの。1 回の batch（D1 への 1 往復）で引く。
  * 列はプロジェクトのステータス順。完了の列は position の大きい順（最近完了にしたものが上）、それ以外は小さい順。
  * 各列は limits の数まで（既定は BOARD_PAGE_SIZE）を読み、totals に列ごとの課題の数（絞り込んだ後、上限で切る前）を返す。
- * totals は列ごとに max(読み込む数, BOARD_COUNT_LIMIT) + 1 件で数えるのをやめる。BOARD_COUNT_LIMIT を超えた列の数は
- * 正確ではないが、読み込んだ数より多ければ続きがある（ちょうどその数なら続きはない）。
- * カードも数も (project_id, status, position) のインデックスで列ごとに読んで上限で止めるので、D1 が読む行は
- * 出すカードの数に比例する（課題の数には比例しない）
+ * カードは (project_id, status, position) のインデックスで列ごとに読んで上限で止める。数は課題を数えずに引く（boardCountsQuery）。
+ * D1 が読む行は出すカードの数に比例する（課題の数には比例しない）
  */
 export async function listBoard(
 	ctx: AppContext,
@@ -478,9 +472,7 @@ export async function listBoard(
 		filtered || custom.length > 0
 			? boardCardsQuery(db, of, where, custom)
 			: unfilteredBoardCards(db, key),
-		filtered || custom.length > 0
-			? boardCountsQuery(db, of, where, custom)
-			: unfilteredBoardCounts(db, key),
+		filtered ? boardCountsQuery(db, of, filters, where) : unfilteredBoardCounts(db, key),
 		cachedByKey(milestonesQuery)(db, key)
 	]);
 	checkProjectAccess(ctx, access);
@@ -567,34 +559,50 @@ function boardCardsQuery(
 }
 
 /**
- * 列ごとの課題の数（絞り込んだ後、上限で切る前）。列ごとに max(読み込む数, BOARD_COUNT_LIMIT) + 1 件で数えるのをやめる。
- * group by で数えるとプロジェクトのすべての課題を読むので、ステータスの定義ごとに相関副問い合わせで、
- * (project_id, status, position) のインデックスの範囲を上限まで読む。読み込む数を変えた列（custom）は上限が違うので別の行にする
+ * 列ごとの課題の数（絞り込んだ後、上限で切る前）。課題をすべて数えると D1 の読み取りがプロジェクトの課題の数だけ増えるので:
+ * - 絞り込みなし: トリガーが保つプロジェクト・ステータスごとの数（project_issue_count）
+ * - マイルストーン: その課題だけを issue_milestone_idx で数える（+project_id で、SQLite にプロジェクトの索引を選ばせない）
+ * - マイルストーン未設定: 絞り込みなしの数から、プロジェクトのマイルストーンのある課題の数を引く
+ * - ほかの絞り込み（画面からは来ない）: 課題を数える
  */
 function boardCountsQuery(
 	db: DB,
 	of: ProjectCond,
-	where: SQL | undefined,
-	custom: [Status, number][]
+	filters: Omit<IssueFilters, 'status'>,
+	where: SQL | undefined
 ) {
-	const counted = (limit: number) =>
-		sql<number>`(select count(*) from (select 1 from ${issue}
-			where ${and(where, sql`${issue.status} = ${issueStatus.key}`)}
-			limit ${Math.max(limit, BOARD_COUNT_LIMIT) + 1}))`.as('board_count');
-	const row = (limit: number, which: SQL | undefined) =>
-		db
-			.select({ status: issueStatus.key, n: counted(limit) })
-			.from(issueStatus)
-			.where(and(of(issueStatus.projectId), which));
-	const separate = custom.map(([s]) => s);
-	const byDefinition = row(
-		BOARD_PAGE_SIZE,
-		separate.length > 0 ? sql`not ${inList(issueStatus.key, separate)}` : undefined
+	const onlyMilestone = Object.entries(filters).every(
+		([k, v]) => k === 'milestoneId' || v === undefined
 	);
-	return custom.reduce<ReturnType<typeof row>>(
-		(q, [s, limit]) => q.unionAll(row(limit, eq(issueStatus.key, s))) as ReturnType<typeof row>,
-		byDefinition
-	);
+	const milestoneId = filters.milestoneId;
+	if (!onlyMilestone || milestoneId === undefined)
+		return db
+			.select({ status: issue.status, n: sql<number>`count(*)`.as('board_count') })
+			.from(issue)
+			.where(where)
+			.groupBy(issue.status);
+	if (milestoneId !== 'none')
+		return db
+			.select({ status: issue.status, n: sql<number>`count(*)`.as('board_count') })
+			.from(issue)
+			.where(
+				and(
+					of(sql`+${issue.projectId}`),
+					isNull(issue.deletedAt),
+					eq(issue.milestoneId, milestoneId)
+				)
+			)
+			.groupBy(issue.status);
+	const withMilestone = sql<number>`(select count(*) from ${issue}
+		where ${issue.milestoneId} in (select ${milestone.id} from ${milestone} where ${of(milestone.projectId)})
+			and ${issue.status} = ${projectIssueCount.status} and ${issue.deletedAt} is null)`;
+	return db
+		.select({
+			status: projectIssueCount.status,
+			n: sql<number>`${projectIssueCount.n} - ${withMilestone}`.as('board_count')
+		})
+		.from(projectIssueCount)
+		.where(of(projectIssueCount.projectId));
 }
 
 // 絞り込みのないカンバン（開いたとき）は、組み立てを使い回す（db/cached-read.ts）。絞り込むと値によって文の形が変わる
@@ -602,7 +610,10 @@ const unfilteredBoardCards = cachedByKey((db, of) =>
 	boardCardsQuery(db, of, filterConds('', of, {}), [])
 );
 const unfilteredBoardCounts = cachedByKey((db, of) =>
-	boardCountsQuery(db, of, filterConds('', of, {}), [])
+	db
+		.select({ status: projectIssueCount.status, n: projectIssueCount.n })
+		.from(projectIssueCount)
+		.where(of(projectIssueCount.projectId))
 );
 
 type BoardCardRow = Awaited<ReturnType<typeof boardCardsQuery>>[number];

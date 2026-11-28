@@ -6,7 +6,7 @@ import * as v from 'valibot';
 import { authorize } from '../authz';
 import type { AppContext } from '../context';
 import type { DB } from '../db';
-import { COLORS, DONE_STATUS } from '#lib/labels.ts';
+import { COLORS } from '#lib/labels.ts';
 import { PROJECT_KEY_PATTERN, PROJECT_KEY_RULE } from '#lib/project-key.ts';
 import { issue, project, projectMember, user } from '../db/schema';
 import { AppError } from '../errors';
@@ -78,35 +78,6 @@ export async function listProjects(ctx: AppContext): Promise<ProjectRow[]> {
  */
 export async function visibleProjectKeys(ctx: AppContext): Promise<Set<string>> {
 	return new Set((await listProjects(ctx)).map((p) => p.key));
-}
-
-/**
- * ホーム用。見られるプロジェクトと、進行中のものには未完了（完了以外）の課題数を付けて返す。
- * 課題数は相関副問い合わせで同じ文に入れる（D1 への 1 往復）
- */
-export async function listProjectsWithOpenCounts(ctx: AppContext): Promise<{
-	active: (ProjectRow & { openCount: number })[];
-	archived: ProjectRow[];
-}> {
-	const openCount = sql<number>`(select count(*) from ${issue}
-		where ${issue.projectId} = ${project.id} and ${issue.status} != ${DONE_STATUS} and ${issue.deletedAt} is null)`.as(
-		'open_count'
-	);
-	const query = ctx.db.select({ project, openCount }).from(project).$dynamic();
-	const [rows] = await ctx.readBatch([
-		(ctx.actor.role === 'admin'
-			? query
-			: query
-					.innerJoin(projectMember, eq(projectMember.projectId, project.id))
-					.where(eq(projectMember.userId, ctx.actor.id))
-		).orderBy(asc(project.name))
-	]);
-	return {
-		active: rows
-			.filter((r) => !r.project.archivedAt)
-			.map((r) => ({ ...r.project, openCount: r.openCount })),
-		archived: rows.filter((r) => r.project.archivedAt).map((r) => r.project)
-	};
 }
 
 export function requireProject(ctx: AppContext, key: string): Promise<ProjectRow> {

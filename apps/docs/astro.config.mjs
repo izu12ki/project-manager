@@ -19,6 +19,7 @@ export default defineConfig({
 					items: [
 						{ label: 'デモ', slug: 'guides/demo' },
 						{ label: '必要なもの', slug: 'guides/requirements' },
+						{ label: 'Workers のプランと上限', slug: 'guides/workers-plan' },
 						{ label: 'デプロイ手順', slug: 'guides/deploy' },
 						{ label: 'アップデート', slug: 'guides/update' }
 					]

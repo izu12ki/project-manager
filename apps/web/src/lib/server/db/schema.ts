@@ -326,7 +326,33 @@ export const issue = sqliteTable(
 			sql`coalesce(${t.dueDate}, ${t.startDate})`
 		),
 		index('issue_parent_idx').on(t.parentId),
+		// 自分の課題の「登録した課題」（services/my-issues.ts）
+		index('issue_reporter_idx').on(t.reporterId),
 		uniqueIndex('issue_project_backlog_key_uq').on(t.projectId, t.backlogKey)
+	]
+);
+
+/**
+ * 課題の担当者（issue.assignee_ids を 1 人 1 行に開いたもの）。自分の課題（services/my-issues.ts）を、
+ * プロジェクトの課題をすべて読まずに引くための索引で、アプリからは書かない。
+ * issue の INSERT・UPDATE のトリガー（drizzle/20261128*_issue_assignee/migration.sql）が assignee_ids と
+ * 完了かどうかに合わせて書き直す。issue テーブルを作り直すとトリガーが消えるので、作り直すマイグレーションでは
+ * トリガーも作り直すこと（db/issue-assignee.test.ts が確かめる）。
+ * user_id には外部キーを付けない（assignee_ids には消えたユーザーの ID が残りうる）
+ */
+export const issueAssignee = sqliteTable(
+	'issue_assignee',
+	{
+		userId: text('user_id').notNull(),
+		issueId: text('issue_id')
+			.notNull()
+			.references(() => issue.id, { onDelete: 'cascade' }),
+		/** 課題が完了か（status = 'done'）。完了以外だけを読めるよう主キーに入れる */
+		done: integer({ mode: 'boolean' }).notNull()
+	},
+	(t) => [
+		primaryKey({ columns: [t.userId, t.done, t.issueId] }),
+		index('issue_assignee_issue_idx').on(t.issueId)
 	]
 );
 

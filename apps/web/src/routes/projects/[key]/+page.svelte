@@ -12,6 +12,7 @@
 	} from '@lucide/svelte';
 	import { page } from '$app/state';
 	import IssueTypeTag from '#lib/components/IssueTypeTag.svelte';
+	import MeFilterButton from '#lib/components/MeFilterButton.svelte';
 	import Pager from '#lib/components/Pager.svelte';
 	import PriorityPill from '#lib/components/PriorityPill.svelte';
 	import StatusPill from '#lib/components/StatusPill.svelte';
@@ -35,7 +36,33 @@
 
 	let { data }: PageProps = $props();
 	const base = $derived(`/projects/${data.project.key}`);
-	const filtering = $derived(Object.values(data.filters).some(Boolean));
+	// 既定（完了以外）と違う絞り込みがあるか。ステータスの undefined は「すべて」
+	const filtering = $derived(
+		Object.entries(data.filters).some(([k, v]) => (k === 'status' ? v !== 'open' : Boolean(v)))
+	);
+	const selectedStatus = $derived(data.filters.status ?? 'all');
+	// 「自分」のボタンは、自分が担当者の候補にいるときだけ出す
+	const me = $derived(
+		data.assignees.some((u) => u.id === data.user?.id) ? data.user?.id : undefined
+	);
+	/** 担当者を自分にして（もう一度押すと外して）絞り込み直す */
+	function toggleMe(button: HTMLButtonElement) {
+		const form = button.form;
+		const select = form?.elements.namedItem('assignee');
+		if (!form || !(select instanceof HTMLSelectElement) || !me) return;
+		select.value = select.value === me ? '' : me;
+		form.requestSubmit();
+	}
+	const statusOptions = $derived<[string, string][]>([
+		['all', 'すべて'],
+		...data.statuses.map((s): [string, string] => [s.key, s.name]),
+		['open', '完了以外']
+	]);
+	// 「日付なし」の絞り込みだけを外す（タイムラインから来たとき）
+	const withDatesHref = $derived(
+		base +
+			withPage(new URLSearchParams([...page.url.searchParams].filter(([k]) => k !== 'dates')), 1)
+	);
 	// 並べ替えても絞り込みは残し、絞り込みを変えても並びは残す
 	const sortHref = (key: IssueSortKey) =>
 		base + withIssueSort(page.url.searchParams, nextIssueSort(data.sort, key));
@@ -81,106 +108,124 @@
 {/snippet}
 
 <section class="grid gap-4">
-	<form
-		method="GET"
-		class="flex flex-wrap items-end gap-3"
-		onchange={(e) => e.currentTarget.requestSubmit()}
-	>
-		<div class="field w-72 max-w-full gap-1.5">
-			<label class="label text-[0.8125rem]" for="filter-q">キーワード</label>
-			<div class="search">
-				<Search size={16} class="search-icon" />
-				<input
-					class="input"
-					id="filter-q"
-					name="q"
-					type="search"
-					maxlength={200}
-					placeholder="タイトル・本文・コメント・課題キー"
-					value={data.filters.q ?? ''}
-				/>
-			</div>
-		</div>
-		<div class="field w-40 gap-1.5">
-			<label class="label text-[0.8125rem]" for="filter-status">ステータス</label>
-			<select class="select" id="filter-status" name="status">
-				<option value="">すべて</option>
-				<option value="open" selected={data.filters.status === 'open'}>完了以外</option>
-				{#each data.statuses as s (s.key)}
-					<option value={s.key} selected={data.filters.status === s.key}>{s.name}</option>
+	<form method="GET" class="grid gap-3" onchange={(e) => e.currentTarget.requestSubmit()}>
+		<div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+			<div class="status-chips" role="radiogroup" aria-labelledby="filter-status">
+				<span class="label text-[0.8125rem]" id="filter-status">ステータス</span>
+				{#each statusOptions as [value, label] (value)}
+					<label class="status-chip">
+						<input type="radio" name="status" {value} checked={selectedStatus === value} />
+						{label}
+					</label>
 				{/each}
-			</select>
+			</div>
+			<span class="ml-auto text-[0.8125rem] text-muted-foreground tabular-nums">
+				{#if last > 1}
+					{count(data.total)} 件中 {count(firstShown)}〜{count(firstShown + data.issues.length - 1)} 件
+				{:else}
+					{count(data.total)} 件
+				{/if}
+			</span>
 		</div>
-		{#if data.issueTypes.length > 0}
-			<div class="field w-36 gap-1.5">
-				<label class="label text-[0.8125rem]" for="filter-type">種別</label>
-				<select class="select" id="filter-type" name="type">
+		<div class="flex flex-wrap items-end gap-3">
+			{#if data.issueTypes.length > 0}
+				<div class="field w-36 gap-1.5">
+					<label class="label text-[0.8125rem]" for="filter-type">種別</label>
+					<select class="select" id="filter-type" name="type">
+						<option value="">すべて</option>
+						<option value="none" selected={data.filters.typeId === 'none'}>未設定</option>
+						{#each data.issueTypes as t (t.id)}
+							<option value={t.id} selected={data.filters.typeId === t.id}>{t.name}</option>
+						{/each}
+					</select>
+				</div>
+			{/if}
+			{#if data.categories.length > 0}
+				<div class="field w-36 gap-1.5">
+					<label class="label text-[0.8125rem]" for="filter-category">カテゴリー</label>
+					<select class="select" id="filter-category" name="category">
+						<option value="">すべて</option>
+						<option value="none" selected={data.filters.categoryId === 'none'}>未設定</option>
+						{#each data.categories as c (c.id)}
+							<option value={c.id} selected={data.filters.categoryId === c.id}>{c.name}</option>
+						{/each}
+					</select>
+				</div>
+			{/if}
+			{#if data.milestones.length > 0}
+				<div class="field w-44 gap-1.5">
+					<label class="label text-[0.8125rem]" for="filter-milestone">マイルストーン</label>
+					<select class="select" id="filter-milestone" name="milestone">
+						<option value="">すべて</option>
+						<option value="none" selected={data.filters.milestoneId === 'none'}>未設定</option>
+						{#each data.milestones as m (m.id)}
+							<option value={m.id} selected={data.filters.milestoneId === m.id}>
+								{milestoneLabel(m)}{m.completedAt ? '（完了）' : ''}
+							</option>
+						{/each}
+					</select>
+				</div>
+			{/if}
+			<div class="field gap-1.5">
+				<label class="label text-[0.8125rem]" for="filter-assignee">担当者</label>
+				<div class="flex items-center gap-1.5">
+					<select class="select w-36" id="filter-assignee" name="assignee">
+						<option value="">すべて</option>
+						<option value="none" selected={data.filters.assigneeId === 'none'}>未割当</option>
+						{#each data.assignees as u (u.id)}
+							<option value={u.id} selected={data.filters.assigneeId === u.id}>{u.name}</option>
+						{/each}
+					</select>
+					{#if me}
+						<MeFilterButton
+							pressed={data.filters.assigneeId === me}
+							onclick={(e) => toggleMe(e.currentTarget)}
+						/>
+					{/if}
+				</div>
+			</div>
+			<div class="field w-28 gap-1.5">
+				<label class="label text-[0.8125rem]" for="filter-priority">優先度</label>
+				<select class="select" id="filter-priority" name="priority">
 					<option value="">すべて</option>
-					<option value="none" selected={data.filters.typeId === 'none'}>未設定</option>
-					{#each data.issueTypes as t (t.id)}
-						<option value={t.id} selected={data.filters.typeId === t.id}>{t.name}</option>
+					{#each PRIORITIES as p (p)}
+						<option value={p} selected={data.filters.priority === p}>{PRIORITY_LABEL[p]}</option>
 					{/each}
 				</select>
 			</div>
-		{/if}
-		<div class="field w-36 gap-1.5">
-			<label class="label text-[0.8125rem]" for="filter-priority">優先度</label>
-			<select class="select" id="filter-priority" name="priority">
-				<option value="">すべて</option>
-				{#each PRIORITIES as p (p)}
-					<option value={p} selected={data.filters.priority === p}>{PRIORITY_LABEL[p]}</option>
-				{/each}
-			</select>
-		</div>
-		<div class="field w-40 gap-1.5">
-			<label class="label text-[0.8125rem]" for="filter-assignee">担当者</label>
-			<select class="select" id="filter-assignee" name="assignee">
-				<option value="">すべて</option>
-				<option value="none" selected={data.filters.assigneeId === 'none'}>未割当</option>
-				{#each data.assignees as u (u.id)}
-					<option value={u.id} selected={data.filters.assigneeId === u.id}>{u.name}</option>
-				{/each}
-			</select>
-		</div>
-		{#if data.categories.length > 0}
-			<div class="field w-40 gap-1.5">
-				<label class="label text-[0.8125rem]" for="filter-category">カテゴリー</label>
-				<select class="select" id="filter-category" name="category">
-					<option value="">すべて</option>
-					<option value="none" selected={data.filters.categoryId === 'none'}>未設定</option>
-					{#each data.categories as c (c.id)}
-						<option value={c.id} selected={data.filters.categoryId === c.id}>{c.name}</option>
-					{/each}
-				</select>
+			<div class="field min-w-40 flex-1 basis-40 gap-1.5 sm:max-w-80">
+				<label class="label text-[0.8125rem]" for="filter-q">キーワード</label>
+				<div class="search">
+					<Search size={16} class="search-icon" />
+					<input
+						class="input"
+						id="filter-q"
+						name="q"
+						type="search"
+						maxlength={200}
+						placeholder="キーワードを入力"
+						title="タイトル・本文・コメント・課題キーから探します"
+						value={data.filters.q ?? ''}
+					/>
+				</div>
 			</div>
-		{/if}
-		{#if data.milestones.length > 0}
-			<div class="field w-48 gap-1.5">
-				<label class="label text-[0.8125rem]" for="filter-milestone">マイルストーン</label>
-				<select class="select" id="filter-milestone" name="milestone">
-					<option value="">すべて</option>
-					<option value="none" selected={data.filters.milestoneId === 'none'}>未設定</option>
-					{#each data.milestones as m (m.id)}
-						<option value={m.id} selected={data.filters.milestoneId === m.id}>
-							{milestoneLabel(m)}{m.completedAt ? '（完了）' : ''}
-						</option>
-					{/each}
-				</select>
-			</div>
+		</div>
+		{#if data.filters.unscheduled}
+			<input type="hidden" name="dates" value="none" />
 		{/if}
 		{#if !isDefaultIssueSort(data.sort)}
 			<input type="hidden" name="sort" value={data.sort.key} />
 			<input type="hidden" name="order" value={data.sort.order} />
 		{/if}
-		<noscript><button type="submit" class="btn btn-outline">絞り込む</button></noscript>
-		<span class="ml-auto pb-2 text-[0.8125rem] text-muted-foreground tabular-nums">
-			{#if last > 1}
-				{count(data.total)} 件中 {count(firstShown)}〜{count(firstShown + data.issues.length - 1)} 件
-			{:else}
-				{count(data.total)} 件
-			{/if}
-		</span>
+		<noscript><button type="submit" class="btn btn-outline w-fit">絞り込む</button></noscript>
 	</form>
+
+	{#if data.filters.unscheduled}
+		<p class="hint">
+			開始日と期限日が未設定の課題（タイムラインに表示されない課題）だけを表示しています。
+			<a href={withDatesHref} class="link">日付の絞り込みを解除</a>
+		</p>
+	{/if}
 
 	{#if data.issues.length === 0}
 		<div class="empty">
@@ -189,14 +234,14 @@
 			</span>
 			<div class="grid gap-1">
 				<div class="empty-title">
-					{filtering ? '条件に一致する課題はありません' : '課題はまだありません'}
+					{filtering ? '条件に一致する課題はありません' : '完了以外の課題はありません'}
 				</div>
 				<div class="text-muted-foreground">
 					{filtering
 						? '絞り込み条件を変更してください'
 						: data.project.archivedAt
 							? 'このプロジェクトはアーカイブ済みです'
-							: '右上の「新規課題」から起票できます'}
+							: '完了した課題は「すべて」で表示できます。新しい課題は右上の「新規課題」から起票できます'}
 				</div>
 			</div>
 			{#if filtering}<a href={clearFiltersHref} class="btn btn-outline">絞り込みを解除</a>{/if}
@@ -338,6 +383,46 @@
 	}
 	.sort:hover :global(.sort-icon) {
 		opacity: 1;
+	}
+	.status-chips {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 4px;
+	}
+	.status-chips .label {
+		margin-right: 8px;
+	}
+	.status-chip {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		height: 1.75rem;
+		padding: 0 12px;
+		border-radius: var(--radius-pill);
+		font-size: 0.8125rem;
+		white-space: nowrap;
+		cursor: pointer;
+	}
+	.status-chip:hover {
+		background: var(--accent);
+	}
+	.status-chip:has(input:checked) {
+		background: var(--primary);
+		color: var(--primary-foreground);
+		font-weight: 600;
+	}
+	.status-chip:has(input:focus-visible) {
+		outline: 2px solid var(--ring);
+		outline-offset: 2px;
+	}
+	/* 丸いボタンだけを見せる。ラジオは矢印キーで選べるよう、消さずに見えなくする */
+	.status-chip input {
+		position: absolute;
+		inset: 0;
+		margin: 0;
+		opacity: 0;
+		pointer-events: none;
 	}
 	.search {
 		position: relative;

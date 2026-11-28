@@ -684,15 +684,31 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(bar2).toHaveAttribute('data-start', jstDay(2));
 	await expect(bar2).toHaveAttribute('data-due', jstDay(4));
 	await expect(page).toHaveURL(/\/projects\/ACME\/timeline$/);
-	// 未スケジュールの ACME-1 を明日の列へ置く
-	const chip1 = page.getByTestId('chip-1');
-	const tomorrow = page.locator(`[data-date="${jstDay(1)}"]`);
-	const saved1 = savedResponse(page);
-	await dragTo(page, chip1, tomorrow);
-	await saved1;
+	// 日付のない ACME-1 はタイムラインに出さず、案内から課題一覧（日付なしの絞り込み）へ行ける
+	await expect(page.getByTestId('bar-1')).toBeHidden();
+	const unscheduledHint = page.getByText('開始日と期限日が未設定の課題があります');
+	await expect(unscheduledHint).toBeVisible();
+	// 一覧は新しいタブで開く
+	const [listTab] = await Promise.all([
+		page.context().waitForEvent('page'),
+		page.getByRole('link', { name: '未設定の課題を一覧で見る' }).click()
+	]);
+	await expect(listTab).toHaveURL(/\/projects\/ACME\?dates=none$/);
+	await expect(page).toHaveURL(/\/projects\/ACME\/timeline$/);
+	await expect(listTab.getByRole('link', { name: 'トップページ改修' })).toBeHidden();
+	// 課題を開いて日付を入れると、タイムラインに出る
+	const issue1Ready = listTab.waitForResponse((r) => r.url().includes('/readIssueNotifications'));
+	await listTab.getByRole('link', { name: 'ログインできない' }).click();
+	await issue1Ready;
+	await listTab.getByLabel('開始日').fill(jstDay(1));
+	await listTab.getByLabel('期限日').fill(jstDay(1));
+	await listTab.getByRole('button', { name: '保存' }).click();
+	await expect(listTab.getByText('保存しました')).toBeVisible();
+	await listTab.close();
+	await page.reload();
 	await expect(page.getByTestId('bar-1')).toHaveAttribute('data-start', jstDay(1));
 	await expect(page.getByTestId('bar-1')).toHaveAttribute('data-due', jstDay(1));
-	await expect(chip1).toBeHidden();
+	await expect(unscheduledHint).toBeHidden();
 	// 保存されている
 	await page.reload();
 	await expect(page.getByTestId('bar-2')).toHaveAttribute('data-start', jstDay(2));
@@ -703,9 +719,9 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page).toHaveURL(/group=none/);
 	await expect(page.getByTestId('bar-2')).toBeVisible();
 	// 絞り込み: 未完了の ACME-1 は「完了」で消え、「すべて」で戻る
-	await page.getByLabel('状態').selectOption('done');
+	await page.getByLabel('ステータス').selectOption('done');
 	await expect(page.getByTestId('bar-1')).toBeHidden();
-	await page.getByLabel('状態').selectOption('');
+	await page.getByLabel('ステータス').selectOption('');
 	await expect(page.getByTestId('bar-1')).toBeVisible();
 	// 開始日を選ぶと、その日から表示する
 	await page.getByLabel('開始日').fill(jstDay(1));
@@ -1008,6 +1024,21 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(page).toHaveURL(/milestone=none/);
 	await expect(page.getByText('条件に一致する課題はありません')).toBeVisible();
 
+	// 一覧を開いたときは「完了以外」で絞る。「すべて」を選ぶと URL に残る
+	await page.goto('/projects/ACME');
+	await expect(page.getByRole('radio', { name: '完了以外' })).toBeChecked();
+	await page.locator('label.status-chip', { hasText: 'すべて' }).click();
+	await expect(page).toHaveURL(/[?&]status=all(&|$)/);
+	await expect(page.getByRole('radio', { name: 'すべて' })).toBeChecked();
+	// 担当者の横の「自分」で、自分が担当の課題に絞る。もう一度押すと外す
+	const meButton = page.getByRole('button', { name: '自分が担当の課題だけ表示' });
+	await meButton.click();
+	await expect(page).toHaveURL(/[?&]assignee=[0-9a-f-]{36}(&|$)/);
+	await expect(meButton).toHaveAttribute('aria-pressed', 'true');
+	await meButton.click();
+	await expect(page).toHaveURL(/[?&]assignee=(&|$)/);
+	await expect(meButton).toHaveAttribute('aria-pressed', 'false');
+
 	// 列見出しで並べ替える。開始日が空の課題は末尾。並べ替えと絞り込みは、どちらを変えても他方が残る
 	await page.goto('/projects/ACME');
 	const sortHeader = (name: string) => page.getByRole('columnheader', { name, exact: true });
@@ -1033,10 +1064,15 @@ test('招待 → ゲスト起票 → 担当割り当て → カンバン移動 �
 	await expect(sortHeader('開始日')).toHaveAttribute('aria-sort', 'descending');
 	await page.getByLabel('キーワード').fill('acme-1');
 	await page.getByLabel('キーワード').press('Enter');
-	await expect(page).toHaveURL(/\?q=acme-1&.*&sort=start&order=desc$/);
+	await expect(page).toHaveURL(
+		(url) => url.searchParams.get('q') === 'acme-1' && url.search.endsWith('&sort=start&order=desc')
+	);
 	await expect(issueRow).toBeVisible();
 	await sortLink('更新日').click();
-	await expect(page).toHaveURL(/\?q=acme-1&.*&sort=updated&order=desc$/);
+	await expect(page).toHaveURL(
+		(url) =>
+			url.searchParams.get('q') === 'acme-1' && url.search.endsWith('&sort=updated&order=desc')
+	);
 	await expect(sortHeader('更新日')).toHaveAttribute('aria-sort', 'descending');
 	await expect(issueRow).toBeVisible();
 	// キーの降順（既定の並び）に戻すと、URL から並びが消える

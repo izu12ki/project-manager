@@ -40,28 +40,34 @@ export function countQuery(db: DB, where: SQL | undefined) {
 		.where(where);
 }
 
-// 絞り込みのない一覧（一覧を開いたとき）の 1 ページと件数は、並び順ごとに組み立てを使い回す。
-// 絞り込むと値によって文の形が変わる（'none' や 'open' など）ので、そのときは毎回組み立てる。
-// filterConds のキーはキーワード検索にだけ使うので、絞り込みがなければ使われない
-const unfilteredCount = cachedRead(['key'], (db, p) =>
-	countQuery(db, filterConds('', ofProject(db, p.key), {}))
+/** 一覧を開いたときの絞り込み（完了以外）。画面の既定と同じにする（routes/projects/[key]/+page.server.ts） */
+const DEFAULT_LIST_FILTERS: IssueFilters = { status: 'open' };
+const isDefaultFilters = (filters: IssueFilters) =>
+	filters.status === DEFAULT_LIST_FILTERS.status &&
+	Object.entries(filters).every(([k, v]) => k === 'status' || v === undefined);
+
+// 既定の絞り込みの一覧（一覧を開いたとき）の 1 ページと件数は、並び順ごとに組み立てを使い回す。
+// ほかの絞り込みでは値によって文の形が変わる（'none' など）ので、そのときは毎回組み立てる。
+// filterConds のキーはキーワード検索にだけ使うので、既定の絞り込みでは使われない
+const defaultCount = cachedRead(['key'], (db, p) =>
+	countQuery(db, filterConds('', ofProject(db, p.key), DEFAULT_LIST_FILTERS))
 );
-const unfilteredPages = new Map<string, ReturnType<typeof unfilteredPageRead>>();
-function unfilteredPageRead(sort: IssueSort) {
+const defaultPages = new Map<string, ReturnType<typeof defaultPageRead>>();
+function defaultPageRead(sort: IssueSort) {
 	return cachedRead(['key', 'limit', 'offset'], (db, p) =>
-		listPageQuery(db, filterConds('', ofProject(db, p.key), {}), sort)
+		listPageQuery(db, filterConds('', ofProject(db, p.key), DEFAULT_LIST_FILTERS), sort)
 			.limit(p.limit)
 			.offset(p.offset)
 	);
 }
-function unfilteredPage(sort: IssueSort) {
+function defaultPage(sort: IssueSort) {
 	const id = `${sort.key} ${sort.order}`;
-	let read = unfilteredPages.get(id);
-	if (!read) unfilteredPages.set(id, (read = unfilteredPageRead(sort)));
+	let read = defaultPages.get(id);
+	if (!read) defaultPages.set(id, (read = defaultPageRead(sort)));
 	return read;
 }
 // 既定の並び順（一覧を開いたとき）の分は、起動時に組み立てられるよう先に作っておく（buildCachedReads）
-unfilteredPage(DEFAULT_ISSUE_SORT);
+defaultPage(DEFAULT_ISSUE_SORT);
 
 /**
  * 課題一覧の 1 ページ分（ISSUE_PAGE_SIZE 件）と、条件に合う課題の総数。
@@ -76,15 +82,15 @@ export async function getIssueListRows(
 ) {
 	const { db } = ctx;
 	const offset = (page - 1) * ISSUE_PAGE_SIZE;
-	const filtered = Object.values(filters).some((v) => v !== undefined);
+	const filtered = !isDefaultFilters(filters);
 	const where = filtered ? filterConds(key, ofProject(db, key), filters) : undefined;
 	const [access, issues, [{ total }], assignees, categories, milestones, deletedIssues] =
 		await ctx.readBatch([
 			projectAccessRead(ctx, key),
 			filtered
 				? listPageQuery(db, where, sort).limit(ISSUE_PAGE_SIZE).offset(offset)
-				: unfilteredPage(sort)(db, { key, limit: ISSUE_PAGE_SIZE, offset }),
-			filtered ? countQuery(db, where) : unfilteredCount(db, { key }),
+				: defaultPage(sort)(db, { key, limit: ISSUE_PAGE_SIZE, offset }),
+			filtered ? countQuery(db, where) : defaultCount(db, { key }),
 			assignableOf(db, key),
 			categoriesOf(db, key),
 			milestonesOf(db, key),

@@ -87,6 +87,7 @@ const isValidDate = (s: string | null): s is string =>
 
 /** '' は絞り込みなし。status の 'open' は完了以外、それ以外の 'none' は未設定 */
 export interface TimelineFilters {
+	type: string;
 	status: '' | 'open' | Status;
 	assignee: string;
 	category: string;
@@ -115,6 +116,7 @@ export function parseView(q: URLSearchParams, today: string): ViewParams {
 		scale: pick(q.get('scale'), SCALES, 'day'),
 		from: isValidDate(from) ? from : defaultFrom(today),
 		filters: {
+			type: q.get('type') ?? '',
 			status: q.get('status') ?? '',
 			assignee: q.get('assignee') ?? '',
 			category: q.get('category') ?? '',

@@ -2,7 +2,6 @@
 	import { page } from '$app/state';
 	import { DONE_STATUS, statusColor, statusName } from '#lib/labels.ts';
 	import {
-		addDays,
 		applyDrag,
 		barSpan,
 		dayCells,
@@ -22,14 +21,11 @@
 	interface Props {
 		projectKey: string;
 		groups: IssueGroup<T>[];
-		unscheduled: T[];
-		/** 未スケジュールのうち、上限で出していない課題の数 */
-		unscheduledHidden?: number;
 		range: ViewRange;
 		today: string;
 		onjump: (from: string) => void;
 		onsave?: (item: T, next: Dated) => void;
-		/** 課題名・バー・未スケジュールのチップのクリックで詳細をシート表示する。未指定なら詳細ページへ遷移する */
+		/** 課題名・バーのクリックで詳細をシート表示する。未指定なら詳細ページへ遷移する */
 		onopen?: (item: T) => void;
 		/** シートで開いている課題の番号（行を強調する） */
 		selected?: number | null;
@@ -37,8 +33,6 @@
 	let {
 		projectKey,
 		groups,
-		unscheduled,
-		unscheduledHidden = 0,
 		range,
 		today,
 		onjump,
@@ -133,14 +127,11 @@
 		].join('\n');
 	const href = (item: T) => `/projects/${projectKey}/issues/${item.number}`;
 
-	/** 'place' は未スケジュール欄からタイムラインへの配置 */
 	type Drag = {
 		item: T;
-		mode: DragMode | 'place';
+		mode: DragMode;
 		startX: number;
 		startY: number;
-		x: number;
-		y: number;
 		dayPx: number;
 		delta: number;
 		moved: boolean;
@@ -160,8 +151,6 @@
 			mode,
 			startX: e.clientX,
 			startY: e.clientY,
-			x: e.clientX,
-			y: e.clientY,
 			dayPx: measureDayPx(),
 			delta: 0,
 			moved: false
@@ -178,17 +167,6 @@
 		const dy = e.clientY - drag.startY;
 		drag.moved ||= Math.hypot(dx, dy) >= CLICK_SLOP;
 		drag.delta = dragDelta(dx, drag.dayPx);
-		drag.x = e.clientX;
-		drag.y = e.clientY;
-	}
-
-	/** ポインタ位置の日付。タイムライン（見出しを含む）の外なら null */
-	function dateAt(x: number, y: number, dayPx: number): string | null {
-		if (!canvas) return null;
-		const r = canvas.getBoundingClientRect();
-		if (y < r.top || y > r.bottom) return null;
-		const col = Math.floor((x - r.left - labelW) / dayPx);
-		return col >= 0 && col < range.days ? addDays(range.from, col) : null;
 	}
 
 	function end() {
@@ -207,12 +185,7 @@
 		if (!d.moved || !onsave) return;
 		suppressClick = true;
 		setTimeout(() => (suppressClick = false));
-		if (d.mode === 'place') {
-			const date = dateAt(d.x, d.y, d.dayPx);
-			if (date) onsave(d.item, { startDate: date, dueDate: date });
-		} else if (d.delta !== 0) {
-			onsave(d.item, applyDrag(d.item, d.mode, d.delta));
-		}
+		if (d.delta !== 0) onsave(d.item, applyDrag(d.item, d.mode, d.delta));
 	}
 
 	/** 修飾キー付き・中クリックはブラウザの既定（新しいタブなど）に任せる。ドラッグ直後のクリックは無視する */
@@ -228,10 +201,7 @@
 
 	/** ドラッグ中のバーは移動後の日付で描く */
 	const shown = (item: T): Dated =>
-		drag?.moved && drag.item.id === item.id && drag.mode !== 'place'
-			? applyDrag(item, drag.mode, drag.delta)
-			: item;
-	const canPlace = $derived(!!onsave && unscheduled.some((i) => i.canEdit));
+		drag?.moved && drag.item.id === item.id ? applyDrag(item, drag.mode, drag.delta) : item;
 </script>
 
 <svelte:window
@@ -442,46 +412,6 @@
 	</div>
 </div>
 
-{#if unscheduled.length > 0}
-	<section class="unscheduled" aria-label="未スケジュール">
-		<h2>未スケジュール <span class="count">{unscheduled.length + unscheduledHidden}</span></h2>
-		{#if canPlace}
-			<p class="hint">タイムラインへドラッグすると、その日を開始日と期限に設定します。</p>
-		{/if}
-		<ul>
-			{#each unscheduled as item (item.id)}
-				<li>
-					<a
-						href={href(item)}
-						class="chip"
-						class:editable={item.canEdit && !!onsave}
-						data-testid={`chip-${item.number}`}
-						title={item.title}
-						draggable="false"
-						onpointerdown={(e) => begin(e, item, 'place')}
-						onclick={(e) => openSheet(e, item)}
-					>
-						<span class="mono">{projectKey}-{item.number}</span>
-						<span class="truncate">{item.title}</span>
-					</a>
-				</li>
-			{/each}
-		</ul>
-		{#if unscheduledHidden > 0}
-			<p class="hint">
-				新しい {unscheduled.length} 件を表示しています（ほか {unscheduledHidden} 件）。
-			</p>
-		{/if}
-	</section>
-{/if}
-
-{#if drag?.mode === 'place' && drag.moved}
-	{@const target = dateAt(drag.x, drag.y, drag.dayPx)}
-	<div class="ghost" style:left="{drag.x + 12}px" style:top="{drag.y + 12}px">
-		{projectKey}-{drag.item.number}{target ? ` → ${shortDate(target)}` : ''}
-	</div>
-{/if}
-
 <!--
 	行ごとのアイコンは、@lucide/svelte と同じ図形を 1 回だけ symbol に置き、<use> で参照する。lucide のコンポーネントや
 	SVG を行ごとに書くと、行が数百あるときにサーバーでの描画と HTML が大きくなるため
@@ -668,61 +598,6 @@
 		font-size: calc(0.75 * var(--timeline-unit));
 		font-weight: 400;
 		color: var(--muted-foreground);
-	}
-	.unscheduled {
-		display: grid;
-		gap: 8px;
-	}
-	.unscheduled h2 {
-		margin: 0;
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		font-size: calc(0.875 * var(--timeline-unit));
-		font-weight: 700;
-	}
-	.unscheduled ul {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
-		margin: 0;
-		padding: 0;
-		list-style: none;
-	}
-	.chip {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		max-width: 280px;
-		height: calc(1.75 * var(--timeline-unit));
-		padding: 0 10px;
-		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
-		background: var(--card);
-		font-size: calc(0.8125 * var(--timeline-unit));
-		user-select: none;
-	}
-	.chip .mono {
-		flex-shrink: 0;
-		font-size: calc(0.75 * var(--timeline-unit));
-		color: var(--muted-foreground);
-	}
-	.chip.editable {
-		cursor: grab;
-		touch-action: none;
-	}
-	.ghost {
-		position: fixed;
-		z-index: 50;
-		padding: 2px 8px;
-		border: 1px solid var(--primary);
-		border-radius: var(--radius-sm);
-		background: var(--card);
-		font-size: calc(0.75 * var(--timeline-unit));
-		pointer-events: none;
-	}
-	.unscheduled h2 .count {
-		margin-left: 0;
 	}
 	/*
 	 * 行の中の要素（数百行になる）は、svelte のスコープのクラスを付けない（.grid-wrap の下の :global）。
@@ -921,12 +796,6 @@
 			white-space: nowrap;
 			pointer-events: none;
 		}
-	}
-	.chip .truncate {
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 	}
 	.sprite {
 		display: none;

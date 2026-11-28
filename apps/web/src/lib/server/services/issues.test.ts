@@ -27,7 +27,6 @@ import {
 	listTimeline,
 	moveIssue,
 	SCHEDULED_LIMIT,
-	UNSCHEDULED_LIMIT,
 	updateIssue,
 	type TimelineView
 } from './issues';
@@ -35,6 +34,7 @@ import { addComment, deleteComment, listComments } from './comments';
 import { getIssueDetailRows } from './issue-detail';
 import {
 	createCategory,
+	createIssueType,
 	createMilestone,
 	listCategories,
 	listIssueTypes,
@@ -875,7 +875,7 @@ describe('issues', () => {
 	});
 
 	describe('listTimeline', () => {
-		it('日付のある課題と、日付がなく未完了の課題に分ける', async () => {
+		it('日付のある課題を返し、日付がなく未完了の課題はあるかどうかだけ返す', async () => {
 			await createIssue(as(member), 'ACME', {
 				title: 'A',
 				startDate: '2026-10-06',
@@ -888,7 +888,11 @@ describe('issues', () => {
 			const t = await listTimeline(as(member), 'ACME');
 			expect(t.scheduled.map((i) => i.number)).toEqual([1, 2, 5]);
 			expect(t.scheduled[0]).toMatchObject({ startDate: '2026-10-06', dueDate: '2026-10-08' });
-			expect(t.unscheduled.map((i) => i.number)).toEqual([3]);
+			expect(t.hasUnscheduled).toBe(true);
+			expect(t.scheduledMore).toBe(false);
+			// 日付のない課題が完了だけなら、ない
+			await updateIssue(as(member), 'ACME', 3, { status: 'done' });
+			expect((await listTimeline(as(member), 'ACME')).hasUnscheduled).toBe(false);
 		});
 
 		it('完了した課題は表示の開始日より前に終わったものを除く。未完了の課題は残す', async () => {
@@ -924,7 +928,7 @@ describe('issues', () => {
 			]);
 		});
 
-		it('絞り込みはサーバーで行い、未スケジュールにも効く', async () => {
+		it('絞り込みはサーバーで行い、日付のない課題があるかどうかにも効く', async () => {
 			await createCategory(as(admin), 'ACME', { name: 'X' });
 			const [x] = await listCategories(as(admin), 'ACME');
 			await createIssue(as(member), 'ACME', {
@@ -943,21 +947,36 @@ describe('issues', () => {
 			});
 			const numbers = async (filters: TimelineView['filters']) => {
 				const t = await listTimeline(as(member), 'ACME', { filters });
-				return [
-					t.scheduled.map((i) => i.number),
-					t.unscheduled.map((i) => i.number),
-					t.unscheduledTotal
-				];
+				return [t.scheduled.map((i) => i.number), t.hasUnscheduled];
 			};
-			expect(await numbers({})).toEqual([[1, 2, 5], [4, 3], 2]);
-			expect(await numbers({ assigneeId: guest.id })).toEqual([[1], [3], 1]);
-			expect(await numbers({ assigneeId: 'none' })).toEqual([[2, 5], [4], 1]);
-			expect(await numbers({ categoryId: x.id })).toEqual([[1], [], 0]);
-			expect(await numbers({ status: 'in_progress' })).toEqual([[5], [], 0]);
-			expect(await numbers({ status: 'open' })).toEqual([[1, 2, 5], [4, 3], 2]);
+			expect(await numbers({})).toEqual([[1, 2, 5], true]);
+			expect(await numbers({ assigneeId: guest.id })).toEqual([[1], true]);
+			expect(await numbers({ assigneeId: 'none' })).toEqual([[2, 5], true]);
+			expect(await numbers({ categoryId: x.id })).toEqual([[1], false]);
+			expect(await numbers({ status: 'in_progress' })).toEqual([[5], false]);
+			expect(await numbers({ status: 'open' })).toEqual([[1, 2, 5], true]);
+			expect(await numbers({ status: 'todo' })).toEqual([[1, 2], true]);
+			expect(await numbers({ status: 'done' })).toEqual([[], false]);
 		});
 
-		it(`日付のある課題は表示の開始日に近い順に ${SCHEDULED_LIMIT} 件まで。総数は別に返す`, async () => {
+		it('種別で絞る。完了で絞ると、開始日より前に終わったものは除く', async () => {
+			await createIssueType(as(admin), 'ACME', { name: '調査', color: 'amber' });
+			const bug = (await listIssueTypes(as(admin), 'ACME')).find((t) => t.name === '調査')!;
+			await createIssue(as(member), 'ACME', { title: 'A', typeId: bug.id, dueDate: '2026-10-10' });
+			await createIssue(as(member), 'ACME', { title: 'B', dueDate: '2026-10-10' });
+			await createIssue(as(member), 'ACME', { title: 'C', typeId: bug.id });
+			await createIssue(as(member), 'ACME', { title: 'D', status: 'done', dueDate: '2026-10-01' });
+			await createIssue(as(member), 'ACME', { title: 'E', status: 'done', dueDate: '2026-10-09' });
+			const t = await listTimeline(as(member), 'ACME', { filters: { typeId: bug.id } });
+			expect([t.scheduled.map((i) => i.number), t.hasUnscheduled]).toEqual([[1], true]);
+			const done = await listTimeline(as(member), 'ACME', {
+				from: '2026-10-05',
+				filters: { status: 'done' }
+			});
+			expect(done.scheduled.map((i) => i.number)).toEqual([5]);
+		});
+
+		it(`日付のある課題は表示の開始日に近い順に ${SCHEDULED_LIMIT} 件まで。超えるかどうかを返す`, async () => {
 			const p = await requireProject(as(admin), 'ACME');
 			const from = '2026-10-05';
 			// #1〜#(上限+2) は from から番号の日数だけ前に期限があり、#(上限+3) は from をまたぐ
@@ -979,33 +998,12 @@ describe('issues', () => {
 			for (let i = 0; i < rows.length; i += 5)
 				await db.insert(issueTable).values(rows.slice(i, i + 5));
 			const t = await listTimeline(as(member), 'ACME', { from });
-			expect(t.scheduledTotal).toBe(n);
+			expect(t.scheduledMore).toBe(true);
 			// from をまたぐ #n と、期限の近い #1〜#(上限-1)。遠い 3 件は出さない。並びは番号順
 			expect(t.scheduled.map((i) => i.number)).toEqual([
 				...Array.from({ length: SCHEDULED_LIMIT - 1 }, (_, i) => i + 1),
 				n
 			]);
-		});
-
-		it(`未スケジュールは新しい順に ${UNSCHEDULED_LIMIT} 件まで。総数は別に返す`, async () => {
-			const p = await requireProject(as(admin), 'ACME');
-			const n = UNSCHEDULED_LIMIT + 3;
-			const rows = Array.from({ length: n }, (_, i) => ({
-				id: `u-${i + 1}`,
-				projectId: p.id,
-				number: i + 1,
-				title: `日付なし ${i + 1}`,
-				reporterId: admin.id,
-				position: `a${i + 1}`
-			}));
-			// D1 の 1 文の変数は 100 個まで
-			for (let i = 0; i < rows.length; i += 5)
-				await db.insert(issueTable).values(rows.slice(i, i + 5));
-			const t = await listTimeline(as(member), 'ACME');
-			expect(t.unscheduledTotal).toBe(n);
-			expect(t.unscheduled.map((i) => i.number)).toEqual(
-				Array.from({ length: UNSCHEDULED_LIMIT }, (_, i) => n - i)
-			);
 		});
 
 		it('canEdit: ゲストも全課題 true、アーカイブ済みは全員 false', async () => {

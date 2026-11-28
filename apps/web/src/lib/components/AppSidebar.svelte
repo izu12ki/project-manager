@@ -46,10 +46,12 @@
 
 	const unread = getUnreadCount();
 	// 遷移ごとと、表示中は 60 秒ごとに取り直す。
+	// 最初の表示（type 'enter'）では取り直さない。件数はサーバーでの描画でページに入っている（+layout.server.ts）。
 	// 課題詳細へ移ったときは、IssueView の既読コマンドが既読にした後の件数を返すので取り直さない。
 	// 同時に取り直すと、既読にする前の件数が後から届いてバッジを上書きすることがある
-	afterNavigate(({ to }) => {
+	afterNavigate(({ type, to }) => {
 		menuOpen = false;
+		if (type === 'enter') return;
 		if (to?.route.id === '/projects/[key]/issues/[number=int]') return;
 		void unread.refresh();
 	});

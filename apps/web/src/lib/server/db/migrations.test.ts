@@ -39,4 +39,26 @@ describe('migrations', () => {
 			{ id: 'i2', category_ids: '[]', category_id: null }
 		]);
 	});
+
+	it('issue_assignee: 既存の課題の担当者を、完了かどうかと一緒に移す', async () => {
+		const client = createClient({ url: ':memory:' });
+		const sql = await applyBefore(client, '_issue_assignee');
+		await client.executeMultiple(`
+			INSERT INTO user (id, name, email) VALUES ('u1', 'u1', 'u1@example.com');
+			INSERT INTO project (id, key, name) VALUES ('p1', 'ACME', 'ACME');
+			INSERT INTO issue (id, project_id, number, title, reporter_id, position, status, assignee_ids)
+				VALUES ('i1', 'p1', 1, 'a', 'u1', 'a0', 'todo', '["u1","u2"]'),
+					('i2', 'p1', 2, 'b', 'u1', 'a1', 'done', '["u2"]'),
+					('i3', 'p1', 3, 'c', 'u1', 'a2', 'todo', '[]');
+		`);
+		await client.executeMultiple(sql);
+		const { rows } = await client.execute(
+			'SELECT user_id, issue_id, done FROM issue_assignee ORDER BY issue_id, user_id'
+		);
+		expect(rows.map((r) => ({ ...r }))).toEqual([
+			{ user_id: 'u1', issue_id: 'i1', done: 0 },
+			{ user_id: 'u2', issue_id: 'i1', done: 0 },
+			{ user_id: 'u2', issue_id: 'i2', done: 1 }
+		]);
+	});
 });

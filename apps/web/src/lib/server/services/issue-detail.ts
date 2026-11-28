@@ -42,7 +42,11 @@ function issueRowQuery(db: DB, of: ProjectCond, number: number | Placeholder) {
 		.where(and(of(issue.projectId), eq(issue.number, number)));
 }
 
-/** 子課題（番号順）。削除したものは除く */
+/**
+ * 子課題（番号順）。削除したものは除く。
+ * 親課題は同じプロジェクトの番号で選ぶので、子課題のプロジェクトでは絞らない（絞ると SQLite はプロジェクトの索引を選び、
+ * 親課題の索引 issue_parent_idx を使わずにプロジェクトの全課題を読む）
+ */
 function childrenQuery(db: DB, of: ProjectCond, number: number | Placeholder) {
 	return db
 		.select({
@@ -55,7 +59,6 @@ function childrenQuery(db: DB, of: ProjectCond, number: number | Placeholder) {
 		.from(issue)
 		.where(
 			and(
-				of(issue.projectId),
 				inList(
 					issue.parentId,
 					db
@@ -69,17 +72,25 @@ function childrenQuery(db: DB, of: ProjectCond, number: number | Placeholder) {
 		.orderBy(asc(issue.number));
 }
 
-/** 課題と子課題（削除したものも含めてよい。名前を引くだけ）の担当者。無効化・脱退した人も含む */
+/**
+ * 課題と子課題（削除したものも含めてよい。名前を引くだけ）の担当者。無効化・脱退した人も含む。
+ * この課題（番号の索引）と子課題（issue_parent_idx）を別々に引いて UNION ALL でつなぐ
+ * （OR で 1 つの条件にすると、SQLite はプロジェクトの全課題を読む）
+ */
 function peopleQuery(db: DB, of: ProjectCond, number: number | Placeholder) {
+	const selfId = db
+		.select({ id: self.id })
+		.from(self)
+		.where(and(of(self.projectId), eq(self.number, number)));
 	return db
 		.select({ id: user.id, name: user.name, role: user.role })
 		.from(user)
 		.where(
 			sql`${user.id} in (select j.value from ${issue} as ${assigned}, json_each(${assigned.assigneeIds}) as j
-					where ${of(assigned.projectId)} and (${assigned.number} = ${number} or ${assigned.parentId} in ${db
-						.select({ id: self.id })
-						.from(self)
-						.where(and(of(self.projectId), eq(self.number, number)))}))`
+					where ${of(assigned.projectId)} and ${assigned.number} = ${number}
+				union all
+				select j.value from ${issue} as ${assigned}, json_each(${assigned.assigneeIds}) as j
+					where ${assigned.parentId} in ${selfId})`
 		);
 }
 

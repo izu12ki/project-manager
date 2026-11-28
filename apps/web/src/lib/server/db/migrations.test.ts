@@ -61,4 +61,28 @@ describe('migrations', () => {
 			{ user_id: 'u2', issue_id: 'i2', done: 1 }
 		]);
 	});
+
+	it('project_issue_count: 既存の課題を、削除したものを除いてプロジェクト・ステータスごとに数える', async () => {
+		const client = createClient({ url: ':memory:' });
+		const sql = await applyBefore(client, '_project_issue_count');
+		await client.executeMultiple(`
+			INSERT INTO user (id, name, email) VALUES ('u1', 'u1', 'u1@example.com');
+			INSERT INTO project (id, key, name) VALUES ('p1', 'ACME', 'ACME'), ('p2', 'BETA', 'BETA');
+			INSERT INTO issue (id, project_id, number, title, reporter_id, position, status, deleted_at)
+				VALUES ('i1', 'p1', 1, 'a', 'u1', 'a0', 'todo', NULL),
+					('i2', 'p1', 2, 'b', 'u1', 'a1', 'todo', NULL),
+					('i3', 'p1', 3, 'c', 'u1', 'a2', 'done', NULL),
+					('i4', 'p1', 4, 'd', 'u1', 'a3', 'done', 1795706994347),
+					('i5', 'p2', 1, 'e', 'u1', 'a0', 'todo', NULL);
+		`);
+		await client.executeMultiple(sql);
+		const { rows } = await client.execute(
+			'SELECT project_id, status, n FROM project_issue_count ORDER BY project_id, status'
+		);
+		expect(rows.map((r) => ({ ...r }))).toEqual([
+			{ project_id: 'p1', status: 'done', n: 1 },
+			{ project_id: 'p1', status: 'todo', n: 2 },
+			{ project_id: 'p2', status: 'todo', n: 1 }
+		]);
+	});
 });

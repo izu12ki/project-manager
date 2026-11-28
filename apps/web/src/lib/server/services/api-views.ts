@@ -14,7 +14,7 @@ import {
 	toIssueListItems,
 	type IssueFilters
 } from './issues';
-import { countQuery } from './issue-list';
+import { countQuery, onlyStatusFilter, statusCountQuery } from './issue-list';
 import { checkProjectAccess, ofProject, projectAccessRead } from './project-access';
 import { listIssueTypes, listMilestones, listCategories, listStatuses } from './issue-fields';
 import { listAssignableUsers, listProjects, requireProject, type ProjectRow } from './projects';
@@ -148,7 +148,9 @@ export async function listApiIssues(ctx: AppContext, key: string, query: URLSear
 	const [access, rows, [{ total }]] = await ctx.readBatch([
 		projectAccessRead(ctx, key),
 		issueListQuery(db, where, sortOrder(DEFAULT_ISSUE_SORT)).limit(limit).offset(offset),
-		countQuery(db, where)
+		onlyStatusFilter(filters)
+			? statusCountQuery(db, ofProject(db, key), filters.status)
+			: countQuery(db, where)
 	]);
 	const p = checkProjectAccess(ctx, access);
 	return {

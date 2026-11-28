@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { DB } from '../db';
 import { category, milestone } from '../db/schema';
-import { createTestBase, createTestDb, ctxOf, seedProject, seedUser } from '../test-utils';
+import {
+	createTestBase,
+	createTestDb,
+	ctxOf,
+	roundTrips,
+	seedProject,
+	seedUser
+} from '../test-utils';
 import {
 	getApiIssue,
 	getProjectDetail,
@@ -70,6 +77,34 @@ describe('api issues', () => {
 		expect(filtered.total).toBe(1);
 		expect(filtered.items[0].url).toBe('http://localhost:5173/projects/ACME/issues/4');
 		expect(JSON.stringify(page)).not.toContain('@');
+	});
+
+	it('ページの分と件数を、プロジェクトの確認と合わせて D1 への 1 往復で読む', async () => {
+		const member = await seedUser(db, 'member');
+		await seedProject(db, { members: [member] });
+		const ctx = ctxOf(base, member);
+		for (const title of ['a', 'b', 'c', 'd']) await createIssue(ctx, 'ACME', { title });
+		const before = roundTrips(db);
+		const page = await listApiIssues(
+			ctx,
+			'ACME',
+			new URLSearchParams('status=todo&limit=2&offset=2')
+		);
+		expect(roundTrips(db) - before).toBe(1);
+		expect(page.items.map((i) => i.number)).toEqual([2, 1]);
+		expect(page.total).toBe(4);
+	});
+
+	it('offset が件数を超えると items は空で total はそのまま。参加していないプロジェクトは not_found', async () => {
+		const admin = await seedUser(db, 'admin');
+		const member = await seedUser(db, 'member');
+		await seedProject(db);
+		await createIssue(ctxOf(base, admin), 'ACME', { title: 'a' });
+		const page = await listApiIssues(ctxOf(base, admin), 'ACME', new URLSearchParams('offset=5'));
+		expect(page).toMatchObject({ items: [], total: 1, offset: 5 });
+		await expect(
+			listApiIssues(ctxOf(base, member), 'ACME', new URLSearchParams())
+		).rejects.toMatchObject({ code: 'not_found' });
 	});
 
 	it('limit=1000 は validation', async () => {

@@ -5,7 +5,17 @@ import { parse } from '../validation';
 import { apiUser } from '../api';
 import type { AppContext } from '../context';
 import { getCommentRows } from './comments';
-import { getIssue, listIssues } from './issues';
+import { DEFAULT_ISSUE_SORT } from '#lib/issue-sort.ts';
+import {
+	filterConds,
+	getIssue,
+	issueListQuery,
+	sortOrder,
+	toIssueListItems,
+	type IssueFilters
+} from './issues';
+import { countQuery } from './issue-list';
+import { checkProjectAccess, ofProject, projectAccessRead } from './project-access';
 import { listIssueTypes, listMilestones, listCategories, listStatuses } from './issue-fields';
 import { listAssignableUsers, listProjects, requireProject, type ProjectRow } from './projects';
 
@@ -116,23 +126,34 @@ const ListQuery = v.object({
 	offset: intParam(0, Number.MAX_SAFE_INTEGER, 'offset は 0 以上の整数で指定してください')
 });
 
+/**
+ * API の課題一覧。そのページの分と件数だけを、プロジェクトの確認と合わせて 1 回の batch（D1 への 1 往復）で読む。
+ * 全件を読んでから切り出すと、課題の多いプロジェクトで 1 回ごとの D1 の読み取りと CPU 時間が課題の数だけ増えるため
+ */
 export async function listApiIssues(ctx: AppContext, key: string, query: URLSearchParams) {
 	const { limit = 100, offset = 0 } = parse(ListQuery, {
 		limit: query.get('limit') ?? undefined,
 		offset: query.get('offset') ?? undefined
 	});
-	const p = await requireProject(ctx, key);
-	const rows = await listIssues(ctx, key, {
+	const filters: IssueFilters = {
 		status: (query.get('status') || undefined) as Status | undefined,
 		assigneeId: query.get('assigneeId') || undefined,
 		typeId: query.get('typeId') || undefined,
 		categoryId: query.get('categoryId') || undefined,
 		milestoneId: query.get('milestoneId') || undefined,
 		q: query.get('q') || undefined
-	});
+	};
+	const { db } = ctx;
+	const where = filterConds(key, ofProject(db, key), filters);
+	const [access, rows, [{ total }]] = await ctx.readBatch([
+		projectAccessRead(ctx, key),
+		issueListQuery(db, where, sortOrder(DEFAULT_ISSUE_SORT)).limit(limit).offset(offset),
+		countQuery(db, where)
+	]);
+	const p = checkProjectAccess(ctx, access);
 	return {
-		items: rows.slice(offset, offset + limit).map((r) => apiIssue(ctx, p.key, r)),
-		total: rows.length,
+		items: toIssueListItems(rows).map((r) => apiIssue(ctx, p.key, r)),
+		total,
 		limit,
 		offset
 	};

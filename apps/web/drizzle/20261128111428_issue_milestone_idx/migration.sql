@@ -1,0 +1,1 @@
+CREATE INDEX `issue_milestone_idx` ON `issue` (`milestone_id`,`status`,`position`) WHERE "issue"."milestone_id" is not null;

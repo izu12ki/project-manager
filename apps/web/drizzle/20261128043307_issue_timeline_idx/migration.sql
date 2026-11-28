@@ -1,0 +1,1 @@
+CREATE INDEX `issue_timeline_idx` ON `issue` (`project_id`,`status`,coalesce("due_date", "start_date"));

@@ -4,16 +4,15 @@
 // batch（1 往復）に入り、描画中の呼び出しは、同じリクエストで同じ引数の query の結果を使う（remote query のキャッシュ）。
 // 引数は描画中の呼び出しと同じにすること。違うと結果を使えず、1 往復ずつ増える
 import { browser } from '$app/env';
-import { getUnreadCount } from '#lib/notifications.remote.ts';
 
 type Started = { catch(onrejected: () => void): unknown };
 
 /**
- * サーバーでの描画のときだけ、queries を始める。サイドバーの未読数も、描画を待つ画面では描画中に引かれるので一緒に始める。
+ * サーバーでの描画のときだけ、queries を始める。サイドバーの未読数はルートのレイアウトの load（+layout.server.ts）が始める。
  * ブラウザ（ハイドレーションと遷移）では何もしない。遷移では各 query をそれぞれ取りにいく。
  * 失敗は描画中の呼び出しが扱う（同じ結果を受け取る）ので、ここでは捨てる
  */
 export function startOnServer(...queries: (() => Started)[]): void {
 	if (browser) return;
-	for (const start of [getUnreadCount, ...queries]) start().catch(() => {});
+	for (const start of queries) start().catch(() => {});
 }

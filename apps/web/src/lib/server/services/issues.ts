@@ -26,6 +26,7 @@ import {
 	type Status,
 	type StatusDef
 } from '#lib/labels.ts';
+import { BOARD_COLUMN_MAX, BOARD_PAGE_SIZE, type BoardLimits } from '#lib/board-limits.ts';
 import { DEFAULT_ISSUE_SORT, type IssueSort } from '#lib/issue-sort.ts';
 import { cachedRead } from '../db/cached-read';
 import { authorize, can } from '../authz';
@@ -37,6 +38,7 @@ import {
 	comment,
 	issue,
 	issueChange,
+	issueStatus,
 	issueType,
 	milestone,
 	project,
@@ -384,21 +386,20 @@ export async function listIssues(
 	return selectIssues(ctx.db, filterConds(p.key, byProjectId(p.id), filters), sortOrder(sort));
 }
 
-/**
- * カンバンの列に出すカードの上限。完了の列は最近更新したもの、それ以外の列は上（position の小さい方）から。
- * Backlog から移した数千件のプロジェクトでも、1 回の表示の CPU 時間が増え続けないようにする
- */
-export const BOARD_LIMIT = { done: 30, other: 50 } as const;
+export { BOARD_COLUMN_MAX, BOARD_PAGE_SIZE, type BoardLimits };
 
 /**
  * カンバン（remote query の getBoard）に要るもの。1 回の batch（D1 への 1 往復）で引く。
- * 列はプロジェクトのステータス順。絞り込んだ場合も、カード間の並び順は全体の position を保つ。
- * 各列は BOARD_LIMIT までに絞り、totals に列ごとの課題の数（絞り込んだ後、上限で切る前）を返す
+ * 列はプロジェクトのステータス順。完了の列は position の大きい順（最近完了にしたものが上）、それ以外は小さい順。
+ * 各列は limits の数まで（既定は BOARD_PAGE_SIZE）を読み、totals に列ごとの課題の数（絞り込んだ後、上限で切る前）を返す。
+ * 列ごとに (project_id, status, position) のインデックスの順に読んで上限で止めるので、D1 が読む行は出すカードの数に比例する
+ * （課題の数には比例しない。列ごとの数を数える totals だけは列のすべての課題を読む）
  */
 export async function listBoard(
 	ctx: AppContext,
 	key: string,
-	filters: Omit<IssueFilters, 'status'> = {}
+	filters: Omit<IssueFilters, 'status'> = {},
+	limits: BoardLimits = {}
 ): Promise<{
 	statuses: StatusDef[];
 	columns: Record<Status, BoardCard[]>;
@@ -407,14 +408,18 @@ export async function listBoard(
 }> {
 	const { db } = ctx;
 	const filtered = Object.values(filters).some((v) => v !== undefined);
+	const custom = customLimits(limits);
+	const of = ofProject(db, key);
 	const where = filtered
-		? filterConds(key, ofProject(db, key), { ...filters, status: undefined })
-		: undefined;
+		? filterConds(key, of, { ...filters, status: undefined })
+		: filterConds('', of, {});
 	const [access, statuses, rows, counts, milestones] = await ctx.readBatch([
 		// アクセスとステータスはレイアウトも引く（同じ文は 1 回だけ送る。db/read-batch.ts）
 		projectAccessRead(ctx, key),
 		cachedByKey(statusesQuery)(db, key),
-		filtered ? boardCardsQuery(db, where) : unfilteredBoardCards(db, key),
+		filtered || custom.length > 0
+			? boardCardsQuery(db, of, where, custom)
+			: unfilteredBoardCards(db, key),
 		filtered ? boardCountsQuery(db, where) : unfilteredBoardCounts(db, key),
 		cachedByKey(milestonesQuery)(db, key)
 	]);
@@ -423,38 +428,64 @@ export async function listBoard(
 		statuses.map((s) => [s.key, [] as BoardCard[]])
 	);
 	const totals: Record<Status, number> = Object.fromEntries(statuses.map((s) => [s.key, 0]));
-	// 定義が消えたステータスの課題は初期ステータスの列に出す
-	const columnOf = (status: Status) => (status in columns ? status : INITIAL_STATUS);
+	// 行は position の小さい順。完了の列だけ逆にする
 	for (const { status, assigneesJson, categoriesJson, ...card } of rows) {
-		columns[columnOf(status)]?.push({
+		columns[status]?.push({
 			...card,
 			assigneeNames: JSON.parse(assigneesJson) as string[],
 			categoryNames: JSON.parse(categoriesJson) as string[]
 		});
 	}
+	columns[DONE_STATUS]?.reverse();
+	// ステータスを削除するとその課題は初期ステータスに移るので（deleteStatus）、定義のないステータスの課題は無い。
+	// 念のため数は初期ステータスの列に足す（カードは読まない）
 	for (const { status, n } of counts) {
-		const c = columnOf(status);
+		const c = status in totals ? status : INITIAL_STATUS;
 		if (c in totals) totals[c] += n;
 	}
 	return { statuses, columns, totals, milestones };
 }
 
+/** 既定（BOARD_PAGE_SIZE）と違う列の上限を、ステータスの順に並べる（文の形を決めるので順を固定する） */
+function customLimits(limits: BoardLimits): [Status, number][] {
+	return Object.entries(limits)
+		.filter((e): e is [Status, number] => typeof e[1] === 'number' && e[1] !== BOARD_PAGE_SIZE)
+		.map(([s, n]): [Status, number] => [s, Math.min(BOARD_COLUMN_MAX, Math.max(1, Math.floor(n)))])
+		.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+}
+
 /**
- * カンバンのカード（列ごとに BOARD_LIMIT まで）。カードに出すものと、列に分けるステータス・移動に使う ID だけを読む。
- * カードの数（数百）だけ、D1 の結果の解釈・画面へ渡すデータの書き出しが増えるため（担当者・カテゴリーも名前だけ）
+ * カンバンのカード（列ごとに上限まで）。カードに出すものと、列に分けるステータス・移動に使う ID だけを読む。
+ * カードの数（数百）だけ、D1 の結果の解釈・画面へ渡すデータの書き出しが増えるため（担当者・カテゴリーも名前だけ）。
+ *
+ * 出すカードの ID は列ごとの副問い合わせで選ぶ。各列は status で絞って position の順に上限まで読むので、
+ * (project_id, status, position) のインデックスの順に読み、上限に達したら止まる（列の全課題は読まない）。
+ * - 既定の上限の列: ステータスの定義ごとに相関副問い合わせで選ぶ（ステータスを先に引かずに 1 文で済む）
+ * - 上限を変えた列（custom）と完了の列: 1 列ずつの副問い合わせ（SQLite の LIMIT は外側の値を参照できない）
+ * 副問い合わせの "issue" は内側の from を指す（where は "issue" の列で書いてある）
  */
-function boardCardsQuery(db: DB, where: SQL | undefined) {
-	// 列ごとに順位を付けて上限までを残す。副問い合わせの "issue" は内側の from を指す
-	const shown = sql`${issue.id} in (
-		select id from (
-			select ${issue.id} as id, ${issue.status} as status, row_number() over (
-				partition by ${issue.status}
-				order by case when ${issue.status} = ${DONE_STATUS} then -${issue.updatedAt} else 0 end,
-					${issue.position}, ${issue.number}
-			) as rn
-			from ${issue} where ${where ?? sql`1 = 1`}
-		) where rn <= case when status = ${DONE_STATUS} then ${BOARD_LIMIT.done} else ${BOARD_LIMIT.other} end
-	)`;
+function boardCardsQuery(
+	db: DB,
+	of: ProjectCond,
+	where: SQL | undefined,
+	custom: [Status, number][]
+) {
+	const limitOf = new Map(custom);
+	const column = (status: Status, limit: number) => {
+		const dir = status === DONE_STATUS ? sql`desc` : sql`asc`;
+		return sql`select * from (select ${issue.id} from ${issue} where ${and(where, eq(issue.status, status))}
+			order by ${issue.position} ${dir}, ${issue.number} ${dir} limit ${limit})`;
+	};
+	const separate = [...new Set<Status>([...limitOf.keys(), DONE_STATUS])];
+	const byDefinition = sql`select "x"."id" from ${issueStatus}
+		join ${issue} as "x" on "x"."id" in (
+			select ${issue.id} from ${issue} where ${and(where, sql`${issue.status} = ${issueStatus.key}`)}
+			order by ${issue.position}, ${issue.number} limit ${BOARD_PAGE_SIZE}
+		)
+		where ${and(of(issueStatus.projectId), sql`not ${inList(issueStatus.key, separate)}`)}`;
+	const ids = [byDefinition, ...separate.map((s) => column(s, limitOf.get(s) ?? BOARD_PAGE_SIZE))];
+	// 外側は ID だけで絞る（where も重ねると、SQLite がプロジェクトの全課題を読んで ID を照らす形を選ぶ）
+	const shown = sql`${issue.id} in (${sql.join(ids, sql` union all `)})`;
 	return db
 		.select({
 			id: issue.id,
@@ -474,11 +505,11 @@ function boardCardsQuery(db: DB, where: SQL | undefined) {
 		.leftJoin(parent, eq(issue.parentId, parent.id))
 		.leftJoin(issueType, eq(issue.typeId, issueType.id))
 		.leftJoin(milestone, eq(issue.milestoneId, milestone.id))
-		.where(and(where, shown))
+		.where(shown)
 		.orderBy(asc(issue.position), asc(issue.number));
 }
 
-/** 列ごとの課題の数（絞り込んだ後、BOARD_LIMIT で切る前） */
+/** 列ごとの課題の数（絞り込んだ後、上限で切る前） */
 function boardCountsQuery(db: DB, where: SQL | undefined) {
 	return db
 		.select({ status: issue.status, n: sql<number>`count(*)`.as('board_count') })
@@ -488,7 +519,9 @@ function boardCountsQuery(db: DB, where: SQL | undefined) {
 }
 
 // 絞り込みのないカンバン（開いたとき）は、組み立てを使い回す（db/cached-read.ts）。絞り込むと値によって文の形が変わる
-const unfilteredBoardCards = cachedByKey((db, of) => boardCardsQuery(db, filterConds('', of, {})));
+const unfilteredBoardCards = cachedByKey((db, of) =>
+	boardCardsQuery(db, of, filterConds('', of, {}), [])
+);
 const unfilteredBoardCounts = cachedByKey((db, of) =>
 	boardCountsQuery(db, filterConds('', of, {}))
 );
@@ -616,9 +649,8 @@ function timelineQueries(db: DB, where: SQL | undefined, from: string | Placehol
 		ne(issue.status, DONE_STATUS)
 	);
 	return {
-		scheduled: timelineRowsQuery(db, and(scheduledWhere, scheduledShown)).orderBy(
-			asc(issue.number)
-		),
+		// 外側は副問い合わせの ID だけで絞る（scheduledWhere も重ねると、SQLite がプロジェクトの全課題を読んで ID を照らす形を選ぶ）
+		scheduled: timelineRowsQuery(db, scheduledShown).orderBy(asc(issue.number)),
 		scheduledTotal: db
 			.select({ scheduledTotal: sql<number>`count(*)`.as('scheduled_total') })
 			.from(issue)
@@ -1004,21 +1036,30 @@ export async function moveIssue(ctx: AppContext, key: string, input: unknown): P
 	const afterId = emptyToNull(data.afterId);
 	let lo = await neighbor(beforeId);
 	let hi = await neighbor(afterId);
+	// 片側だけ指定されたときは、列のすべての課題（画面に読み込んでいないものも含む）のうち、指定された課題の
+	// 隣の課題との間に入れる。カンバンは列の一部しか読み込んでいないことがあり（BOARD_PAGE_SIZE ずつ・絞り込み）、
+	// 見えている課題の隣に置かないと、落とした所から離れた位置に入る。どちらも無ければ（空の列）列の末尾
+	const inColumn = and(
+		eq(issue.projectId, p.id),
+		eq(issue.status, data.status),
+		ne(issue.id, cur.id),
+		isNull(issue.deletedAt)
+	);
 	if (!afterId) {
-		// 後ろの課題がなければ列の末尾へ。カンバンは列の一部しか出さないことがある（BOARD_LIMIT・絞り込み）ので、
-		// 見えている最後の課題の直後ではなく、列のすべての課題の後に置く
-		const [last] = await ctx.db
-			.select({ max: sql<string | null>`max(${issue.position})` })
+		const [next] = await ctx.db
+			.select({
+				position: sql<string | null>`${lo === null ? sql`max` : sql`min`}(${issue.position})`
+			})
 			.from(issue)
-			.where(
-				and(
-					eq(issue.projectId, p.id),
-					eq(issue.status, data.status),
-					ne(issue.id, cur.id),
-					isNull(issue.deletedAt)
-				)
-			);
-		if (last?.max != null && (lo === null || last.max > lo)) lo = last.max;
+			.where(lo === null ? inColumn : and(inColumn, sql`${issue.position} > ${lo}`));
+		if (lo === null) lo = next?.position ?? null;
+		else hi = next?.position ?? null;
+	} else if (!beforeId) {
+		const [prev] = await ctx.db
+			.select({ position: sql<string | null>`max(${issue.position})` })
+			.from(issue)
+			.where(and(inColumn, sql`${issue.position} < ${hi}`));
+		lo = prev?.position ?? null;
 	}
 	if (lo !== null && hi !== null) {
 		if (lo > hi) throw new AppError('validation', STALE);

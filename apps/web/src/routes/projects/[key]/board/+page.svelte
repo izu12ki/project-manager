@@ -1,7 +1,10 @@
 <script lang="ts">
 	import { CircleAlert, X } from '@lucide/svelte';
+	import { tick } from 'svelte';
 	import { page } from '$app/state';
 	import { dndzone, type DndEvent } from 'svelte-dnd-action';
+	import type { Attachment } from 'svelte/attachments';
+	import { BOARD_COLUMN_MAX, BOARD_PAGE_SIZE, type BoardLimits } from '#lib/board-limits.ts';
 	import IssueTypeTag from '#lib/components/IssueTypeTag.svelte';
 	import {
 		DONE_STATUS,
@@ -21,7 +24,14 @@
 	import type { PageProps } from './$types';
 
 	let { data, params }: PageProps = $props();
-	const ref = $derived(boardArg(params.key, page.url.searchParams));
+	/**
+	 * 下へスクロールして読み込む数を増やした列。プロジェクトかマイルストーンの絞り込みが変わったら最初（BOARD_PAGE_SIZE）に戻す
+	 */
+	let loaded = $state<{ scope: string; limits: BoardLimits }>({ scope: '', limits: {} });
+	const scope = $derived(`${params.key}\n${page.url.searchParams.get('milestone') ?? ''}`);
+	const limits = $derived(loaded.scope === scope ? loaded.limits : {});
+	const limitOf = (status: Status) => limits[status] ?? BOARD_PAGE_SIZE;
+	const ref = $derived(boardArg(params.key, page.url.searchParams, limits));
 	const board = $derived(await getBoard(ref));
 
 	type Columns = typeof board.columns;
@@ -34,7 +44,7 @@
 	/** 列の課題の数。上限で出していない分も含め、ドラッグ中の出入りも反映する */
 	const total = (status: Status) =>
 		board.totals[status] - board.columns[status].length + columns[status].length;
-	/** 上限で出していない課題の数 */
+	/** まだ読み込んでいない課題の数 */
 	const hidden = (status: Status) => board.totals[status] - board.columns[status].length;
 	/** その列のステータス（とマイルストーン）で絞り込んだ課題一覧 */
 	const listHref = (status: Status) =>
@@ -44,6 +54,52 @@
 	let message = $state<string | null>(null);
 	let pending = $state(false);
 	let opened = $state<number | null>(null);
+	/** 続きを読み込んでいる列 */
+	let loading = $state<Status | null>(null);
+	/** カードをドラッグしている間。列を読み込み直すと、ドラッグ中の列が入れ替わるので続きを読み込まない */
+	let dragging = $state(false);
+
+	/** 列の続きを BOARD_PAGE_SIZE 件読み込む（getBoard の引数の、その列の数を増やす） */
+	async function loadMore(status: Status) {
+		if (loading !== null || pending || dragging || hidden(status) <= 0) return;
+		if (limitOf(status) >= BOARD_COLUMN_MAX) return;
+		loading = status;
+		// 「読み込み中」を先に出す（読み込む数を変えた更新は、取得が終わるまで画面に出ない）
+		await tick();
+		loaded = {
+			scope,
+			limits: { ...limits, [status]: Math.min(BOARD_COLUMN_MAX, limitOf(status) + BOARD_PAGE_SIZE) }
+		};
+	}
+	$effect(() => {
+		void board;
+		loading = null;
+	});
+
+	/**
+	 * 列の一番下（続きを読み込むボタン）が見えたら続きを読み込む。読み込める状態（ready）になるか読み込む数が変わると
+	 * 付け直すので、読み込んだ後・ドラッグを終えた後もまだ見えていれば、もう一度読み込む
+	 */
+	const loadWhenVisible =
+		(status: Status, limit: number, ready: boolean): Attachment<HTMLElement> =>
+		(el) => {
+			void limit;
+			if (!ready) return;
+			const observer = new IntersectionObserver((entries) => {
+				if (entries.some((e) => e.isIntersecting)) void loadMore(status);
+			});
+			observer.observe(el);
+			return () => observer.disconnect();
+		};
+
+	/** 列のカードの欄の高さを、画面の下端までにする（列ごとに縦にスクロールする） */
+	const fitToViewport: Attachment<HTMLElement> = (el) => {
+		const measure = () =>
+			el.style.setProperty('--board-top', `${el.getBoundingClientRect().top + window.scrollY}px`);
+		measure();
+		window.addEventListener('resize', measure);
+		return () => window.removeEventListener('resize', measure);
+	};
 
 	/** 修飾キー付き・中クリックはブラウザの既定（新しいタブなど）に任せる */
 	function openSheet(e: MouseEvent, card: Card) {
@@ -57,12 +113,14 @@
 
 	function consider(status: Status, e: CustomEvent<DndEvent<Card>>) {
 		message = null;
+		dragging = true;
 		snapshot ??= clone(columns);
 		columns = { ...columns, [status]: e.detail.items };
 	}
 
 	async function finalize(status: Status, e: CustomEvent<DndEvent<Card>>) {
 		const items = e.detail.items;
+		dragging = false;
 		columns = { ...columns, [status]: items };
 		const idx = items.findIndex((i) => i.id === e.detail.info.id);
 		if (idx === -1) return; // 移動元の列。移動先の列の finalize で送信する
@@ -77,15 +135,26 @@
 				? body.message
 				: 'この課題は移動できません';
 		};
+		// 隣の課題は position の順で送る。完了の列は position の大きい順に出しているので、画面の上が後ろになる
+		const above = items[idx - 1]?.id ?? '';
+		const below = items[idx + 1]?.id ?? '';
+		const [beforeId, afterId] = status === DONE_STATUS ? [below, above] : [above, below];
+		// 移した先の列は、落とした課題も含めて今見えている数を読み込む（増やさないと、取り直したときに一番下のカードが消える）
+		const nextLimits =
+			items.length > limitOf(status)
+				? { ...limits, [status]: Math.min(BOARD_COLUMN_MAX, items.length) }
+				: limits;
 		try {
-			// 移動と最新の列の再取得を 1 往復で行う（サーバー側で getBoard を refresh）
+			// 移動と最新の列の再取得を 1 往復で行う（サーバー側で、移動した後の引数の getBoard を refresh）
 			await moveCard({
-				...ref,
+				...boardArg(params.key, page.url.searchParams, nextLimits),
 				issueId: String(e.detail.info.id),
 				status,
-				beforeId: items[idx - 1]?.id ?? '',
-				afterId: items[idx + 1]?.id ?? ''
+				beforeId,
+				afterId
 			});
+			// 取り直した結果は受け取り済みなので、引数を切り替えても取得は出ない
+			if (nextLimits !== limits) loaded = { scope, limits: nextLimits };
 			// シートで開いている課題なら、表示中のステータスも取り直す
 			if (items[idx].number === opened) {
 				getIssueDetail({ key: ref.key, number: opened })
@@ -144,7 +213,12 @@
 		</div>
 	{/if}
 
-	<div class="board" class:with-sheet={opened !== null} style:--columns={board.statuses.length}>
+	<div
+		class="board"
+		class:with-sheet={opened !== null}
+		style:--columns={board.statuses.length}
+		{@attach fitToViewport}
+	>
 		{#each board.statuses as { key: status, name, color } (status)}
 			<section
 				class="column"
@@ -156,96 +230,112 @@
 					{name}
 					<span class="count">{total(status)}</span>
 				</h2>
-				<ul
-					use:dndzone={{
-						items: columns[status],
-						flipDurationMs: 150,
-						type: 'issue',
-						dragDisabled: !!data.project.archivedAt || !data.canChangeStatus || pending,
-						dropTargetStyle: { outline: '2px dashed var(--ring)', outlineOffset: '2px' }
-					}}
-					onconsider={(e) => consider(status, e)}
-					onfinalize={(e) => finalize(status, e)}
-				>
-					{#each columns[status] as card (card.id)}
-						<!-- キーボードではタイトルのリンクから開ける -->
-						<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-						<li
-							class="card-item"
-							class:selected={opened === card.number}
-							data-testid={`card-${card.number}`}
-							onclick={(e) => openSheet(e, card)}
-						>
-							<div class="head">
-								<span class="ident">
-									{#if card.typeName}<IssueTypeTag
-											name={card.typeName}
-											color={card.typeColor}
-										/>{/if}
-									<span class="key">{data.project.key}-{card.number}</span>
-									{#if card.parentNumber !== null}
-										<span
-											class="parent"
-											title={`${data.project.key}-${card.parentNumber} の子課題`}
-										>
-											<svg width="12" height="12" aria-hidden="true">
-												<use href="#bi-parent" />
-											</svg>{card.parentNumber}
-										</span>
-									{/if}
-								</span>
-								{#if card.priority !== 'none'}<span class="pill {PRIORITY_CLASS[card.priority]}">
-										{PRIORITY_LABEL[card.priority]}
-									</span>{/if}
-							</div>
-							<a href={`/projects/${data.project.key}/issues/${card.number}`} class="title">
-								{card.title}
-							</a>
-							{#if card.categoryNames.length > 0 || card.milestoneName}
-								<div class="tags">
-									{#each card.categoryNames as name, i (i)}<span class="tag">{name}</span>{/each}
-									{#if card.milestoneName}<span class="ms">
-											<svg width="12" height="12" aria-hidden="true">
-												<use href="#bi-flag" />
-											</svg><span class="truncate">{card.milestoneName}</span>
+				<div class="cards">
+					<ul
+						use:dndzone={{
+							items: columns[status],
+							flipDurationMs: 150,
+							type: 'issue',
+							dragDisabled: !!data.project.archivedAt || !data.canChangeStatus || pending,
+							dropTargetStyle: { outline: '2px dashed var(--ring)', outlineOffset: '2px' }
+						}}
+						onconsider={(e) => consider(status, e)}
+						onfinalize={(e) => finalize(status, e)}
+					>
+						{#each columns[status] as card (card.id)}
+							<!-- キーボードではタイトルのリンクから開ける -->
+							<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+							<li
+								class="card-item"
+								class:selected={opened === card.number}
+								data-testid={`card-${card.number}`}
+								onclick={(e) => openSheet(e, card)}
+							>
+								<div class="head">
+									<span class="ident">
+										{#if card.typeName}<IssueTypeTag
+												name={card.typeName}
+												color={card.typeColor}
+											/>{/if}
+										<span class="key">{data.project.key}-{card.number}</span>
+										{#if card.parentNumber !== null}
+											<span
+												class="parent"
+												title={`${data.project.key}-${card.parentNumber} の子課題`}
+											>
+												<svg width="12" height="12" aria-hidden="true">
+													<use href="#bi-parent" />
+												</svg>{card.parentNumber}
+											</span>
+										{/if}
+									</span>
+									{#if card.priority !== 'none'}<span class="pill {PRIORITY_CLASS[card.priority]}">
+											{PRIORITY_LABEL[card.priority]}
 										</span>{/if}
 								</div>
-							{/if}
-							<div class="foot">
-								<span class="who">
-									{#if card.assigneeNames.length === 0}
-										<span class="avatar">–</span>
-									{:else}
-										<span class="avatars">
-											{#each card.assigneeNames.slice(0, 3) as name, i (i)}
-												<span class="avatar" style:--c={colorFor(name)}>{name[0]}</span>
-											{/each}
+								<a href={`/projects/${data.project.key}/issues/${card.number}`} class="title">
+									{card.title}
+								</a>
+								{#if card.categoryNames.length > 0 || card.milestoneName}
+									<div class="tags">
+										{#each card.categoryNames as name, i (i)}<span class="tag">{name}</span>{/each}
+										{#if card.milestoneName}<span class="ms">
+												<svg width="12" height="12" aria-hidden="true">
+													<use href="#bi-flag" />
+												</svg><span class="truncate">{card.milestoneName}</span>
+											</span>{/if}
+									</div>
+								{/if}
+								<div class="foot">
+									<span class="who">
+										{#if card.assigneeNames.length === 0}
+											<span class="avatar">–</span>
+										{:else}
+											<span class="avatars">
+												{#each card.assigneeNames.slice(0, 3) as name, i (i)}
+													<span class="avatar" style:--c={colorFor(name)}>{name[0]}</span>
+												{/each}
+											</span>
+										{/if}
+										<span class="truncate">
+											{card.assigneeNames.length === 0
+												? '未割当'
+												: card.assigneeNames.length === 1
+													? card.assigneeNames[0]
+													: `${card.assigneeNames[0]} 他${card.assigneeNames.length - 1}名`}
 										</span>
-									{/if}
-									<span class="truncate">
-										{card.assigneeNames.length === 0
-											? '未割当'
-											: card.assigneeNames.length === 1
-												? card.assigneeNames[0]
-												: `${card.assigneeNames[0]} 他${card.assigneeNames.length - 1}名`}
 									</span>
-								</span>
-								<span class="due" class:late={isDueAlert(card.dueDate, status)}>
-									<svg width="12" height="12" aria-hidden="true">
-										<use href="#bi-calendar" />
-									</svg>{formatDue(card.dueDate)}
-								</span>
-							</div>
-						</li>
-					{/each}
-				</ul>
-				{#if hidden(status) > 0}
-					<a class="more" href={listHref(status)}>
-						{status === DONE_STATUS
-							? `以前に完了した ${hidden(status)} 件を一覧で見る`
-							: `ほか ${hidden(status)} 件を一覧で見る`}
-					</a>
-				{/if}
+									<span class="due" class:late={isDueAlert(card.dueDate, status)}>
+										<svg width="12" height="12" aria-hidden="true">
+											<use href="#bi-calendar" />
+										</svg>{formatDue(card.dueDate)}
+									</span>
+								</div>
+							</li>
+						{/each}
+					</ul>
+					{#if hidden(status) > 0 && limitOf(status) < BOARD_COLUMN_MAX}
+						<button
+							type="button"
+							class="more"
+							disabled={loading !== null}
+							onclick={() => loadMore(status)}
+							{@attach loadWhenVisible(
+								status,
+								limitOf(status),
+								loading === null && !pending && !dragging
+							)}
+						>
+							{loading === status ? '読み込み中…' : `さらに表示（残り ${hidden(status)} 件）`}
+						</button>
+					{:else if hidden(status) > 0}
+						<a class="more" href={listHref(status)}>
+							{status === DONE_STATUS
+								? `以前に完了した ${hidden(status)} 件を一覧で見る`
+								: `ほか ${hidden(status)} 件を一覧で見る`}
+						</a>
+					{/if}
+				</div>
 			</section>
 		{/each}
 	</div>
@@ -351,8 +441,22 @@
 		color: color-mix(in oklch, var(--c) 75%, var(--foreground));
 		font-size: 0.75rem;
 	}
-	ul {
+	/* カードの欄は画面の下端まで（列の見出し・余白の分を引く）にして、列ごとに縦にスクロールする。
+	   --board-top は .board の上端の位置（fitToViewport）。測る前（サーバーでの描画）は目安の値 */
+	.cards {
 		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		max-height: max(320px, calc(100dvh - var(--board-top, 220px) - 80px));
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		/* カードの影・フォーカスの枠が切れないよう、スクロールの範囲を少し外へ広げる */
+		margin: -4px;
+		padding: 4px;
+	}
+	ul {
+		flex: 1 0 auto;
 		margin: 0;
 		padding: 0;
 		list-style: none;
@@ -364,13 +468,20 @@
 	}
 	.more {
 		padding: 4px;
+		border: 0;
+		background: none;
 		text-align: center;
+		font: inherit;
 		font-size: 0.8125rem;
 		color: var(--muted-foreground);
+		cursor: pointer;
 	}
-	.more:hover {
+	.more:hover:not(:disabled) {
 		color: var(--foreground);
 		text-decoration: underline;
+	}
+	.more:disabled {
+		cursor: default;
 	}
 	.sprite {
 		display: none;

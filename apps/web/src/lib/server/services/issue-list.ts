@@ -1,5 +1,6 @@
 // 課題一覧・起票の画面に要る行を 1 回の batch（D1 への 1 往復）で引く。方式は project-access.ts の先頭を参照
-import { sql, type Placeholder, type SQL } from 'drizzle-orm';
+import { and, eq, ne, sql, type Placeholder, type SQL } from 'drizzle-orm';
+import { DONE_STATUS } from '#lib/labels.ts';
 import { DEFAULT_ISSUE_SORT, type IssueSort } from '#lib/issue-sort.ts';
 import { ISSUE_PAGE_SIZE } from '#lib/pagination.ts';
 import { authorize } from '../authz';
@@ -7,7 +8,7 @@ import type { AppContext } from '../context';
 import type { DB } from '../db';
 import { cachedRead } from '../db/cached-read';
 import { inList } from '../db/limits';
-import { issue } from '../db/schema';
+import { issue, projectIssueCount } from '../db/schema';
 import { categoriesQuery, milestonesQuery } from './issue-fields';
 import {
 	deletedIssuesQuery,
@@ -19,7 +20,13 @@ import {
 	toIssueListViewItems,
 	type IssueFilters
 } from './issues';
-import { cachedByKey, checkProjectAccess, ofProject, projectAccessRead } from './project-access';
+import {
+	cachedByKey,
+	checkProjectAccess,
+	ofProject,
+	projectAccessRead,
+	type ProjectCond
+} from './project-access';
 import { assignableUsersQuery } from './projects';
 
 // 組み立てを使い回す（db/cached-read.ts）
@@ -63,6 +70,30 @@ export function countQuery(db: DB, where: SQL | undefined) {
 		.where(where);
 }
 
+/** ステータス以外で絞っていないか（キーワード・担当者なども含めて、ステータスのほかに条件がない） */
+export const onlyStatusFilter = (filters: IssueFilters) =>
+	Object.entries(filters).every(([k, v]) => k === 'status' || v === undefined || v === false);
+
+/**
+ * ステータスだけで絞った課題の数（status が undefined ならすべて、'open' なら完了以外）。
+ * 課題を数えずに、トリガーが保つプロジェクト・ステータスごとの数（project_issue_count）を足す（読む行はステータスの数だけ）
+ */
+export function statusCountQuery(db: DB, of: ProjectCond, status: string | undefined) {
+	return db
+		.select({ total: sql<number>`coalesce(sum(${projectIssueCount.n}), 0)`.as('issue_total') })
+		.from(projectIssueCount)
+		.where(
+			and(
+				of(projectIssueCount.projectId),
+				status === undefined
+					? undefined
+					: status === 'open'
+						? ne(projectIssueCount.status, DONE_STATUS)
+						: eq(projectIssueCount.status, status)
+			)
+		);
+}
+
 /** 一覧を開いたときの絞り込み（完了以外）。画面の既定と同じにする（routes/projects/[key]/+page.server.ts） */
 const DEFAULT_LIST_FILTERS: IssueFilters = { status: 'open' };
 const isDefaultFilters = (filters: IssueFilters) =>
@@ -73,7 +104,7 @@ const isDefaultFilters = (filters: IssueFilters) =>
 // ほかの絞り込みでは値によって文の形が変わる（'none' など）ので、そのときは毎回組み立てる。
 // listFilterConds のキーはキーワード検索にだけ使うので、既定の絞り込みでは使われない
 const defaultCount = cachedRead(['key'], (db, p) =>
-	countQuery(db, listFilterConds('', ofProject(db, p.key), DEFAULT_LIST_FILTERS))
+	statusCountQuery(db, ofProject(db, p.key), DEFAULT_LIST_FILTERS.status)
 );
 const defaultPages = new Map<string, ReturnType<typeof defaultPageRead>>();
 function defaultPageRead(sort: IssueSort) {
@@ -117,7 +148,11 @@ export async function getIssueListRows(
 			filtered
 				? listPageQuery(db, where, sort, { limit: ISSUE_PAGE_SIZE, offset }, filters)
 				: defaultPage(sort)(db, { key, limit: ISSUE_PAGE_SIZE, offset }),
-			filtered ? countQuery(db, where) : defaultCount(db, { key }),
+			!filtered
+				? defaultCount(db, { key })
+				: onlyStatusFilter(filters)
+					? statusCountQuery(db, ofProject(db, key), filters.status)
+					: countQuery(db, where),
 			assignableOf(db, key),
 			categoriesOf(db, key),
 			milestonesOf(db, key),

@@ -364,6 +364,25 @@ export const issueAssignee = sqliteTable(
 	]
 );
 
+/**
+ * プロジェクト・ステータスごとの課題の数（削除した課題は数えない）。課題一覧の件数を、課題を数えずに出すために使う
+ * （ステータス以外で絞らないとき。services/issue-list.ts）。アプリからは書かない。
+ * issue の INSERT・UPDATE・DELETE のトリガー（drizzle/20261128*_project_issue_count/migration.sql）が書き直す。
+ * issue テーブルを作り直すとトリガーが消えるので、作り直すマイグレーションではトリガーも作り直すこと
+ * （db/project-issue-count.test.ts が確かめる）
+ */
+export const projectIssueCount = sqliteTable(
+	'project_issue_count',
+	{
+		projectId: text('project_id')
+			.notNull()
+			.references(() => project.id, { onDelete: 'cascade' }),
+		status: text().notNull(),
+		n: integer().notNull()
+	},
+	(t) => [primaryKey({ columns: [t.projectId, t.status] })]
+);
+
 export const comment = sqliteTable(
 	'comment',
 	{

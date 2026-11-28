@@ -148,6 +148,39 @@ describe('getIssueListRows', () => {
 		}
 	});
 
+	it('担当者とステータスを組み合わせても、完了した課題・ほかのプロジェクトの課題が混ざらない', async () => {
+		await createIssue(as(member), 'ACME', {
+			title: '完了した課題',
+			assigneeIds: [member.id],
+			status: 'done'
+		});
+		// 担当者の索引（issue_assignee）から読むので、ほかのプロジェクトで担当している課題も索引には出てくる
+		await db
+			.update(issue)
+			.set({ assigneeIds: [member.id] })
+			.where(eq(issue.title, '別プロジェクトの課題'));
+		const sort: IssueSort = { key: 'number', order: 'desc' };
+		const cases: [IssueFilters, number[]][] = [
+			[{ assigneeId: member.id }, [5, 3, 1]],
+			[{ assigneeId: member.id, status: 'open' }, [3, 1]],
+			[{ assigneeId: member.id, status: 'done' }, [5]],
+			[{ assigneeId: member.id, status: 'todo' }, [3, 1]],
+			[{ assigneeId: member.id, status: 'open', q: 'ログイン' }, [1]],
+			[{ assigneeId: guest.id, status: 'open' }, [1]],
+			[{ assigneeId: 'none', status: 'open' }, [2]],
+			[{ status: 'open' }, [3, 2, 1]],
+			[{ status: 'done' }, [5]]
+		];
+		for (const [filters, numbers] of cases) {
+			const rows = await getIssueListRows(as(member), 'ACME', filters, sort);
+			expect(
+				rows.issues.map((i) => i.number),
+				JSON.stringify(filters)
+			).toEqual(numbers);
+			expect(rows, JSON.stringify(filters)).toEqual(await expected(member, filters, sort));
+		}
+	});
+
 	it('returns the same rows as the single-purpose functions for each sort', async () => {
 		// 登録日・更新日が同じミリ秒に重ならないよう、ずらして入れる
 		const at = (day: number) => new Date(Date.UTC(2026, 0, day));

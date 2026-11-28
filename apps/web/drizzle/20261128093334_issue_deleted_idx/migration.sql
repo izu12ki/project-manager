@@ -1,0 +1,1 @@
+CREATE INDEX `issue_deleted_idx` ON `issue` (`project_id`,`deleted_at`) WHERE "issue"."deleted_at" is not null;

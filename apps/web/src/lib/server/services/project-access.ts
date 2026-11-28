@@ -13,14 +13,17 @@ import type { StatusDef } from '#lib/labels.ts';
 import { issueTypesQuery, statusesQuery, type IssueTypeRow } from './issue-fields';
 import type { ProjectRow } from './projects';
 
-/** プロジェクトで絞る条件。列（project_id など）を受け取り、そのプロジェクトの行に限る SQL を返す */
-export type ProjectCond = (col: SQLiteColumn) => SQL;
+/**
+ * プロジェクトで絞る条件。列（project_id など）を受け取り、そのプロジェクトの行に限る SQL を返す。
+ * 列の代わりに式（索引を使わせない +project_id など）も渡せる
+ */
+export type ProjectCond = (col: SQLiteColumn | SQL) => SQL;
 
 /** プロジェクトの ID で絞る */
 export const byProjectId =
 	(id: string): ProjectCond =>
 	(col) =>
-		eq(col, id);
+		sql`${col} = ${id}`;
 
 /** プロジェクトの ID を引く副問い合わせ。key は cachedRead のプレースホルダーでもよい */
 export function projectIdOf(db: DB, key: string | Placeholder) {

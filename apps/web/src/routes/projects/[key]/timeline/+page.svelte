@@ -38,17 +38,22 @@
 
 	/** 保存中の楽観的な日付（issue id → 日付）。保存が終われば消す */
 	let pending = $state<Record<string, Dated>>({});
-	const all = $derived(
-		[...timeline.scheduled, ...timeline.unscheduled].map((i) =>
-			pending[i.id] ? { ...i, ...pending[i.id] } : i
-		)
+	const scheduled = $derived(
+		timeline.scheduled
+			.map((i) => (pending[i.id] ? { ...i, ...pending[i.id] } : i))
+			.filter((i) => i.startDate || i.dueDate)
 	);
 	const filtering = $derived(Object.values(view.filters).some(Boolean));
-	const scheduled = $derived(all.filter((i) => i.startDate || i.dueDate));
-	const unscheduled = $derived(all.filter((i) => !i.startDate && !i.dueDate));
 	const groups = $derived(groupItems(scheduled, view.group, timeline.milestones));
 	// 最後の期限日の課題まで右に広げる
 	const range = $derived(viewRange(view.from, view.scale, lastDate(scheduled)));
+	// 日付のない課題は課題一覧で見る。タイムラインの絞り込みを引き継ぐ（ステータスが「すべて」なら一覧の既定の完了以外）
+	const unscheduledHref = $derived(
+		`/projects/${params.key}?${new URLSearchParams([
+			['dates', 'none'],
+			...Object.entries(view.filters).filter(([, v]) => v)
+		])}`
+	);
 
 	const GROUP_OPTIONS: [GroupBy, string][] = [
 		['assignee', '担当者'],
@@ -99,7 +104,8 @@
 	}
 
 	/** 値が '' のキーはクエリから消す（既定値に戻る） */
-	type QueryKey = 'group' | 'scale' | 'from' | 'status' | 'assignee' | 'category' | 'milestone';
+	type QueryKey =
+		'group' | 'scale' | 'from' | 'type' | 'status' | 'assignee' | 'category' | 'milestone';
 	function setQuery(patch: Partial<Record<QueryKey, string>>) {
 		const url = new URL(page.url.href);
 		for (const [k, v] of Object.entries(patch)) {
@@ -113,8 +119,25 @@
 <section class="grid gap-4">
 	<div class="grid gap-3">
 		<div class="flex flex-wrap items-end gap-3">
+			{#if data.issueTypes.length > 0}
+				<div class="field w-36 gap-1.5">
+					<label class="label text-[0.8125rem]" for="tl-type">種別</label>
+					<select
+						class="select"
+						id="tl-type"
+						value={view.filters.type}
+						onchange={(e) => setQuery({ type: e.currentTarget.value })}
+					>
+						<option value="">すべて</option>
+						<option value="none">未設定</option>
+						{#each data.issueTypes as t (t.id)}
+							<option value={t.id}>{t.name}</option>
+						{/each}
+					</select>
+				</div>
+			{/if}
 			<div class="field w-40 gap-1.5">
-				<label class="label text-[0.8125rem]" for="tl-status">状態</label>
+				<label class="label text-[0.8125rem]" for="tl-status">ステータス</label>
 				<select
 					class="select"
 					id="tl-status"
@@ -244,7 +267,13 @@
 		</div>
 	</div>
 
-	{#if groups.length === 0 && unscheduled.length === 0}
+	{#if timeline.unscheduledTotal > 0}
+		<p class="hint">
+			開始日と期限日が未設定の課題が {timeline.unscheduledTotal.toLocaleString('ja-JP')} 件あります。未設定の課題はタイムラインに表示されません。
+			<a href={unscheduledHref} class="link">未設定の課題を一覧で見る</a>
+		</p>
+	{/if}
+	{#if groups.length === 0}
 		<div class="empty">
 			{#if filtering}
 				<span class="empty-icon"><SearchX /></span>
@@ -255,7 +284,8 @@
 				<button
 					type="button"
 					class="btn btn-outline"
-					onclick={() => setQuery({ status: '', assignee: '', category: '', milestone: '' })}
+					onclick={() =>
+						setQuery({ type: '', status: '', assignee: '', category: '', milestone: '' })}
 				>
 					絞り込みを解除
 				</button>
@@ -273,8 +303,6 @@
 		<TimelineGrid
 			projectKey={params.key}
 			{groups}
-			{unscheduled}
-			unscheduledHidden={timeline.unscheduledTotal - timeline.unscheduled.length}
 			{range}
 			{today}
 			onjump={(from) => setQuery({ from })}

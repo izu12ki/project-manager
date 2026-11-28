@@ -10,6 +10,7 @@ import { listTimeline, updateIssue } from '#lib/server/services/issues.ts';
 const TimelineRef = v.object({
 	key: v.string(),
 	from: v.pipe(v.string(), v.isoDate()),
+	type: v.string(),
 	status: v.string(),
 	assignee: v.string(),
 	category: v.string(),
@@ -23,6 +24,7 @@ export const getTimeline = query(TimelineRef, ({ key, from, ...f }) => {
 		listTimeline(ctx, key, {
 			from,
 			filters: {
+				typeId: f.type || undefined,
 				status: f.status || undefined,
 				assigneeId: f.assignee || undefined,
 				categoryId: f.category || undefined,

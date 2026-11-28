@@ -83,7 +83,7 @@ describe('表示範囲', () => {
 
 	it('URL クエリの不正値は既定に戻す', () => {
 		const today = '2026-10-15';
-		const none = { status: '', assignee: '', category: '', milestone: '' };
+		const none = { type: '', status: '', assignee: '', category: '', milestone: '' };
 		expect(parseView(new URLSearchParams(''), today)).toEqual({
 			group: 'assignee',
 			scale: 'day',
@@ -93,7 +93,7 @@ describe('表示範囲', () => {
 		expect(
 			parseView(
 				new URLSearchParams(
-					'group=none&scale=week&from=2026-10-08&milestone=m1&status=open&assignee=none&category=c1'
+					'group=none&scale=week&from=2026-10-08&milestone=m1&status=open&assignee=none&category=c1&type=t1'
 				),
 				today
 			)
@@ -101,7 +101,7 @@ describe('表示範囲', () => {
 			group: 'none',
 			scale: 'week',
 			from: '2026-10-08',
-			filters: { status: 'open', assignee: 'none', category: 'c1', milestone: 'm1' }
+			filters: { type: 't1', status: 'open', assignee: 'none', category: 'c1', milestone: 'm1' }
 		});
 		for (const bad of ['from=abc', 'from=2026-02-30', 'from=2026-1-1']) {
 			expect(parseView(new URLSearchParams(bad), today).from).toBe('2026-10-05');

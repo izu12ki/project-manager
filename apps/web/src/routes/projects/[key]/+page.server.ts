@@ -11,8 +11,12 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const ctx = appContext(locals);
 	const q = url.searchParams;
 	const priority = q.get('priority');
+	const status = q.get('status');
 	const filters = {
-		status: q.get('status') || undefined,
+		// 既定は完了以外。'all' はすべて
+		status: status === 'all' ? undefined : status || 'open',
+		// 開始日・期限のどちらもない課題（タイムラインの「未設定の課題を一覧で見る」から来る）
+		unscheduled: q.get('dates') === 'none' || undefined,
 		typeId: q.get('type') || undefined,
 		priority: PRIORITIES.includes(priority as Priority) ? (priority as Priority) : undefined,
 		assigneeId: q.get('assignee') || undefined,

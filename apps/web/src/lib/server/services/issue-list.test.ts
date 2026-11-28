@@ -121,6 +121,8 @@ describe('getIssueListRows', () => {
 		// listIssues も同じ issueListQuery を使うので、課題の番号は期待値を直接書いて確かめる
 		const cases: [IssueFilters, number[]][] = [
 			[{}, [3, 2, 1]],
+			// 一覧を開いたとき（既定の絞り込み）。組み立てを使い回す文で引く
+			[{ status: 'open' }, [3, 2, 1]],
 			[{ status: 'in_progress' }, [2]],
 			[{ priority: 'high' }, [1]],
 			[{ assigneeId: member.id }, [3, 1]],
@@ -130,6 +132,8 @@ describe('getIssueListRows', () => {
 			[{ typeId: bugType.id }, [1]],
 			[{ milestoneId: ms.id }, [1]],
 			[{ milestoneId: 'none' }, [3, 2]],
+			[{ unscheduled: true }, [3]],
+			[{ unscheduled: true, status: 'open' }, [3]],
 			[{ q: '一覧' }, [2]],
 			[{ q: 'ACME-3' }, [3]],
 			[{ q: '#1' }, [1]]

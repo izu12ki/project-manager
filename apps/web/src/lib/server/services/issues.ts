@@ -13,7 +13,7 @@ import {
 	type SQLWrapper
 } from 'drizzle-orm';
 import { inList } from '../db/limits';
-import { alias, type SQLiteColumn, type SubqueryWithSelection } from 'drizzle-orm/sqlite-core';
+import { alias, type SQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
 import { uuidv7 } from 'uuidv7';
 import * as v from 'valibot';
@@ -670,6 +670,17 @@ export async function listTimeline(
 	const shown = rows
 		.sort((a, b) => a.distance - b.distance || a.number - b.number)
 		.slice(0, SCHEDULED_LIMIT);
+	// 担当者の名前は担当者にできる人の一覧から付ける。無効化・脱退した人が担当のままなら、その人だけ引く（ふだんは往復しない）
+	const names = new Map(assignees.map((u) => [u.id, u.name]));
+	const missing = [...new Set(shown.flatMap((r) => r.assigneeIds))].filter((id) => !names.has(id));
+	if (missing.length > 0) {
+		const others = await db
+			.select({ id: user.id, name: user.name })
+			.from(user)
+			.where(inList(user.id, missing));
+		for (const u of others) names.set(u.id, u.name);
+	}
+	const milestoneNames = new Map(milestones.map((m) => [m.id, m.name]));
 	return {
 		// 画面へは番号順で渡す
 		scheduled: shown
@@ -682,8 +693,12 @@ export async function listTimeline(
 				startDate: r.startDate,
 				dueDate: r.dueDate,
 				milestoneId: r.milestoneId,
-				milestoneName: r.milestoneName,
-				assignees: JSON.parse(r.assigneesJson) as AssigneeRef[],
+				milestoneName: r.milestoneId ? (milestoneNames.get(r.milestoneId) ?? null) : null,
+				// assignee_ids の順。名前が引けない人（存在しない ID）は除く
+				assignees: r.assigneeIds.flatMap((id) => {
+					const name = names.get(id);
+					return name === undefined ? [] : [{ id, name }];
+				}),
 				canEdit: !p.archivedAt && can(ctx.actor, 'issue:edit', { reporterId: r.reporterId })
 			})),
 		scheduledMore: rows.length > SCHEDULED_LIMIT,
@@ -732,9 +747,22 @@ function timelineQueries(
 			? sql<number>`${issue.number}`
 			: sql<number>`max(0, julianday(coalesce(${issue.startDate}, ${issue.dueDate})) - julianday(${from}),
 			julianday(${from}) - julianday(coalesce(${issue.dueDate}, ${issue.startDate})))`;
+	// 行に出すものと、グループ分け（担当者・マイルストーン）・編集の可否に使うものだけを読む。
+	// 名前（担当者・マイルストーン）は同じ batch で読む一覧から listTimeline で付ける（行ごとに引くと D1 の読み取りが増える）
 	const scheduledOf = (range: SQL | undefined) =>
 		db
-			.select({ id: issue.id, number: issue.number, distance: distance.as('distance') })
+			.select({
+				id: issue.id,
+				number: issue.number,
+				distance: distance.as('distance'),
+				title: issue.title,
+				status: issue.status,
+				startDate: issue.startDate,
+				dueDate: issue.dueDate,
+				milestoneId: issue.milestoneId,
+				assigneeIds: issue.assigneeIds,
+				reporterId: issue.reporterId
+			})
 			.from(issue)
 			.where(and(where, range, or(isNotNull(issue.startDate), isNotNull(issue.dueDate))))
 			.$dynamic();
@@ -742,12 +770,23 @@ function timelineQueries(
 		.slice(1)
 		.reduce((u, range) => u.unionAll(scheduledOf(range)), scheduledOf(ranges[0]))
 		.as('candidates');
-	const shown = db
-		.select({ id: candidates.id, distance: candidates.distance })
+	// 候補を読むときに行の列も読み、近い順に上限まで切ったものをそのまま返す（選んだ ID から課題を引き直さない）
+	const scheduled = db
+		.select({
+			id: candidates.id,
+			number: candidates.number,
+			distance: candidates.distance,
+			title: candidates.title,
+			status: candidates.status,
+			startDate: candidates.startDate,
+			dueDate: candidates.dueDate,
+			milestoneId: candidates.milestoneId,
+			assigneeIds: candidates.assigneeIds,
+			reporterId: candidates.reporterId
+		})
 		.from(candidates)
 		.orderBy(candidates.distance, candidates.number)
-		.limit(SCHEDULED_LIMIT + 1)
-		.as('shown');
+		.limit(SCHEDULED_LIMIT + 1);
 	// 日付のない未完了の課題が 1 件でもあるか。未完了のステータスごとに索引（ステータス・終わる日が null）を引き、
 	// 見つかったところで止める（未完了の課題を範囲で読むと、1 件もないときに未完了の課題をすべて読む）。
 	// 課題のステータスは必ずプロジェクトのステータスにある（ステータスを消すときは課題を移す）
@@ -766,7 +805,7 @@ function timelineQueries(
 		)
 		.limit(1);
 	return {
-		scheduled: timelineRowsQuery(db, shown),
+		scheduled,
 		unscheduled: db
 			.select({ found: sql<number>`exists ${unscheduled}`.as('found') })
 			.from(project)
@@ -774,37 +813,10 @@ function timelineQueries(
 	};
 }
 
-/**
- * タイムラインの行（shown で選んだ課題）。行に出すものと、グループ分け（担当者・マイルストーン）・編集の可否に使うものだけを読む。
- * 行の数（数百）だけ、D1 の結果の解釈・画面へ渡すデータの書き出しが増えるため。
- * 選んだ ID から課題を引く形にする（課題を読みながら選ぶと、担当者・マイルストーンの名前も上限で切る前の全件で引く）
- */
-function timelineRowsQuery(
-	db: DB,
-	ids: SubqueryWithSelection<{ id: typeof issue.id; distance: SQL.Aliased<number> }, 'shown'>
-) {
-	return db
-		.select({
-			distance: ids.distance,
-			id: issue.id,
-			number: issue.number,
-			title: issue.title,
-			status: issue.status,
-			startDate: issue.startDate,
-			dueDate: issue.dueDate,
-			milestoneId: issue.milestoneId,
-			milestoneName: shownColumns.milestoneName,
-			assigneesJson: assigneesJson.as('assignees_json'),
-			reporterId: issue.reporterId
-		})
-		.from(ids)
-		.innerJoin(issue, eq(issue.id, ids.id))
-		.leftJoin(milestone, eq(issue.milestoneId, milestone.id));
-}
-
-type TimelineRow = Awaited<ReturnType<typeof timelineRowsQuery>>[number];
+type TimelineRow = Awaited<ReturnType<typeof timelineQueries>['scheduled']>[number];
 /** タイムラインの行 1 つ */
-export type TimelineItem = Omit<TimelineRow, 'assigneesJson' | 'reporterId' | 'distance'> & {
+export type TimelineItem = Omit<TimelineRow, 'assigneeIds' | 'reporterId' | 'distance'> & {
+	milestoneName: string | null;
 	assignees: AssigneeRef[];
 	canEdit: boolean;
 };

@@ -285,7 +285,7 @@
 			開始日と期限日が未設定の課題があります。未設定の課題はタイムラインに表示されません。
 			<a
 				href={unscheduledHref}
-				class="link inline-flex items-center gap-1"
+				class="link inline-flex items-center gap-1 font-bold"
 				target="_blank"
 				rel="noopener"
 				title="新しいタブで開きます"

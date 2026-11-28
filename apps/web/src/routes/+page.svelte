@@ -52,9 +52,8 @@
 								<p class="desc">{plain(p.description)}</p>
 							{/if}
 						</div>
-						<div class="mt-auto flex justify-between gap-2 text-[0.8125rem] text-muted-foreground">
-							<span>未完了の課題 {p.openCount} 件</span>
-							<span>更新 {formatDate(p.updatedAt)}</span>
+						<div class="mt-auto text-[0.8125rem] text-muted-foreground">
+							更新 {formatDate(p.updatedAt)}
 						</div>
 					</a>
 				</li>

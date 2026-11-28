@@ -16,6 +16,7 @@ import {
 } from '../test-utils';
 import {
 	BOARD_COLUMN_MAX,
+	BOARD_COUNT_LIMIT,
 	BOARD_PAGE_SIZE,
 	createIssue,
 	deleteIssue,
@@ -294,6 +295,27 @@ describe('issues', () => {
 
 			const capped = await listBoard(as(member), 'ACME', {}, { todo: BOARD_COLUMN_MAX + 100 });
 			expect(capped.columns.todo).toHaveLength(BOARD_PAGE_SIZE * 2 + 5);
+		});
+
+		it('数は列ごとに max(読み込む数, BOARD_COUNT_LIMIT) + 1 件で数えるのをやめる（続きがあるかは分かる）', async () => {
+			await insertMany(range(1, BOARD_COUNT_LIMIT + 30), 'todo');
+			await insertMany(range(1001, 1000 + BOARD_COUNT_LIMIT), 'done');
+			const first = await listBoard(as(member), 'ACME');
+			// 超えた列は BOARD_COUNT_LIMIT + 1（「100+」）。ちょうど BOARD_COUNT_LIMIT の列は正確な数
+			expect(first.totals).toMatchObject({
+				todo: BOARD_COUNT_LIMIT + 1,
+				done: BOARD_COUNT_LIMIT,
+				in_progress: 0
+			});
+			// 上限を超えて読み込むと、その数 + 1 まで数える。読み込んだ数より多ければ続きがある
+			const more = await listBoard(as(member), 'ACME', {}, { todo: BOARD_COUNT_LIMIT + 25 });
+			expect(more.columns.todo).toHaveLength(BOARD_COUNT_LIMIT + 25);
+			expect(more.totals.todo).toBe(BOARD_COUNT_LIMIT + 26);
+			// 全部読み込むと、数は読み込んだ数と同じ（続きはない）
+			const all = await listBoard(as(member), 'ACME', {}, { todo: BOARD_COUNT_LIMIT + 50 });
+			expect(all.columns.todo).toHaveLength(BOARD_COUNT_LIMIT + 30);
+			expect(all.totals.todo).toBe(BOARD_COUNT_LIMIT + 30);
+			expect(all.totals.done).toBe(BOARD_COUNT_LIMIT);
 		});
 
 		it('総数は絞り込んだ後の数。削除した課題は数えない', async () => {

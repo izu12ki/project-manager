@@ -326,6 +326,10 @@ export const issue = sqliteTable(
 			sql`coalesce(${t.dueDate}, ${t.startDate})`
 		),
 		index('issue_parent_idx').on(t.parentId),
+		// マイルストーンで絞ったカンバン（列ごとに position の順に読んで上限で止める）。マイルストーンのある課題だけの索引
+		index('issue_milestone_idx')
+			.on(t.milestoneId, t.status, t.position)
+			.where(sql`${t.milestoneId} is not null`),
 		// 自分の課題の「登録した課題」（services/my-issues.ts）
 		index('issue_reporter_idx').on(t.reporterId),
 		// 課題一覧の「削除した課題」（services/issues.ts の deletedIssuesQuery）。削除した課題だけの索引なので、ふだんの書き込みでは増えない

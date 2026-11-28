@@ -1083,6 +1083,34 @@ describe('issues', () => {
 			expect(byNumber.get(2)).toEqual([{ id: member.id, name: 'member' }]);
 		});
 
+		it('listTimeline も担当者の順と、無効化した人の名前を保ち、存在しない ID は除く。マイルストーンの名前も付ける', async () => {
+			await createMilestone(as(admin), 'ACME', { name: 'v1', releaseDate: '2026-12-01' });
+			const [v1] = await listMilestones(as(admin), 'ACME');
+			await createIssue(as(member), 'ACME', {
+				title: 'A',
+				assigneeIds: [guest.id, member.id],
+				milestoneId: v1.id,
+				dueDate: '2026-12-01'
+			});
+			// 無効化した人は担当者にできる人の一覧にいないので、別に名前を引く
+			await db.update(userTable).set({ disabledAt: new Date() }).where(eq(userTable.id, guest.id));
+			await insertRaw(2, { assigneeIds: [member.id, 'gone'] });
+			await db.update(issueTable).set({ dueDate: '2026-12-02' }).where(eq(issueTable.number, 2));
+			const t = await listTimeline(as(member), 'ACME', { from: '2026-11-01' });
+			const byNumber = new Map(t.scheduled.map((i) => [i.number, i]));
+			expect(byNumber.get(1)).toMatchObject({
+				milestoneName: 'v1',
+				assignees: [
+					{ id: guest.id, name: 'guest' },
+					{ id: member.id, name: 'member' }
+				]
+			});
+			expect(byNumber.get(2)).toMatchObject({
+				milestoneName: null,
+				assignees: [{ id: member.id, name: 'member' }]
+			});
+		});
+
 		it('listIssues lists categories in project order and drops deleted ones', async () => {
 			await createCategory(as(admin), 'ACME', { name: 'X' });
 			await createCategory(as(admin), 'ACME', { name: 'Y' });

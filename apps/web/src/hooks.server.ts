@@ -12,6 +12,7 @@ import { createReadBatcher } from '#lib/server/db/read-batch.ts';
 // 起動時に組み立てる読み取りの文（buildCachedReads）を登録させるため、画面の読み取りのモジュールを読み込んでおく
 import '#lib/server/services/issue-detail.ts';
 import '#lib/server/services/issue-list.ts';
+import '#lib/server/services/notifications.ts';
 import { readEnv } from '#lib/server/env.ts';
 import { createMailer } from '#lib/server/mailer/index.ts';
 import {

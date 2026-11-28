@@ -1,9 +1,11 @@
-import { and, count, desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, isNull, or, sql, type Placeholder, type SQL } from 'drizzle-orm';
+import { cachedRead } from '../db/cached-read';
 import { inList } from '../db/limits';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { statusName } from '#lib/labels.ts';
 import { can } from '../authz';
 import type { AppContext } from '../context';
+import type { DB } from '../db';
 import {
 	comment,
 	issue,
@@ -37,18 +39,23 @@ export interface NotificationItem {
 
 /** 自分宛てで、今もアクセスできるプロジェクトの通知（課題ごとの通知は課題、まとめ通知はプロジェクトで判定） */
 function mine(ctx: AppContext): SQL {
-	const own = eq(notification.userId, ctx.actor.id);
-	if (ctx.actor.role === 'admin') return own;
-	const joined = ctx.db
+	return mineOf(ctx.db, ctx.actor.role === 'admin', ctx.actor.id);
+}
+
+/** mine の条件。actorId は値か、cachedRead のプレースホルダー */
+function mineOf(db: DB, admin: boolean, actorId: string | Placeholder): SQL {
+	const own = eq(notification.userId, actorId);
+	if (admin) return own;
+	const joined = db
 		.select({ id: projectMember.projectId })
 		.from(projectMember)
-		.where(eq(projectMember.userId, ctx.actor.id));
+		.where(eq(projectMember.userId, actorId));
 	return and(
 		own,
 		or(
 			inList(
 				notification.issueId,
-				ctx.db.select({ id: issue.id }).from(issue).where(inList(issue.projectId, joined))
+				db.select({ id: issue.id }).from(issue).where(inList(issue.projectId, joined))
 			),
 			inList(notification.projectId, joined)
 		)
@@ -154,14 +161,21 @@ export async function listNotifications(ctx: AppContext, limit = 50): Promise<No
 	}));
 }
 
-/** 未読の数。全画面のレイアウトで引くので、同時の読み取りとまとめて送る（ctx.readBatch） */
-export async function countUnread(ctx: AppContext): Promise<number> {
-	const [[row]] = await ctx.readBatch([
-		ctx.db
+// 未読の数はどの画面でもサイドバーが引くので、組み立てを使い回す（db/cached-read.ts）。mine の形は管理者とそれ以外の 2 つ
+const unreadOf = (admin: boolean) =>
+	cachedRead(['actorId'], (db, p) =>
+		db
 			.select({ n: count() })
 			.from(notification)
-			.where(and(mine(ctx), isNull(notification.readAt)))
-	]);
+			.where(and(mineOf(db, admin, p.actorId), isNull(notification.readAt)))
+	);
+const unreadAsAdmin = unreadOf(true);
+const unreadAsOther = unreadOf(false);
+
+/** 未読の数。全画面のレイアウトで引くので、同時の読み取りとまとめて送る（ctx.readBatch） */
+export async function countUnread(ctx: AppContext): Promise<number> {
+	const unread = ctx.actor.role === 'admin' ? unreadAsAdmin : unreadAsOther;
+	const [[row]] = await ctx.readBatch([unread(ctx.db, { actorId: ctx.actor.id })]);
 	return row?.n ?? 0;
 }
 

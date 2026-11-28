@@ -43,8 +43,7 @@ export default defineConfig({
 				{
 					label: '開発に参加する',
 					items: [
-						{ label: 'ローカル開発', slug: 'contributing/local-dev' },
-						{ label: 'このドキュメントの公開', slug: 'contributing/docs-hosting' }
+						{ label: 'ローカル開発', slug: 'contributing/local-dev' }
 					]
 				}
 			]
